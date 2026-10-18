@@ -1,0 +1,228 @@
+{
+  "offers": [
+    {
+      "item": 0,
+      "price_amount": 611,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "SWISS",
+          "code": null
+        }
+      ],
+      "stops": 1,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T06:00",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T13:15",
+      "total_duration_min": 735,
+      "layovers": [
+        {
+          "airport": {
+            "name": "Zurich Airport in Zürich",
+            "iata": null
+          },
+          "duration_min": 75
+        }
+      ]
+    },
+    {
+      "item": 1,
+      "price_amount": 611,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "SWISS",
+          "code": null
+        }
+      ],
+      "stops": 1,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T20:05",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-02T13:15",
+      "total_duration_min": 1330,
+      "layovers": [
+        {
+          "airport": {
+            "name": "Zurich Airport in Zürich",
+            "iata": null
+          },
+          "duration_min": 670
+        }
+      ]
+    },
+    {
+      "item": 2,
+      "price_amount": 616,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "Austrian",
+          "code": null
+        }
+      ],
+      "stops": 1,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T06:00",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T14:15",
+      "total_duration_min": 795,
+      "layovers": [
+        {
+          "airport": {
+            "name": "Vienna International Airport in Vienna",
+            "iata": null
+          },
+          "duration_min": 100
+        }
+      ]
+    },
+    {
+      "item": 3,
+      "price_amount": 639,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "Finnair",
+          "code": null
+        }
+      ],
+      "stops": 1,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T10:20",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T19:05",
+      "total_duration_min": 825,
+      "layovers": [
+        {
+          "airport": {
+            "name": "Helsinki Airport in Helsinki",
+            "iata": null
+          },
+          "duration_min": 95
+        }
+      ]
+    },
+    {
+      "item": 4,
+      "price_amount": 661,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "Virgin Atlantic",
+          "code": null
+        }
+      ],
+      "stops": 0,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T15:50",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T19:10",
+      "total_duration_min": 500,
+      "layovers": []
+    },
+    {
+      "item": 5,
+      "price_amount": 661,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "Delta",
+          "code": null
+        }
+      ],
+      "stops": 0,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T16:35",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T20:00",
+      "total_duration_min": 505,
+      "layovers": []
+    },
+    {
+      "item": 6,
+      "price_amount": 665,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "American",
+          "code": null
+        }
+      ],
+      "stops": 0,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T15:35",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T18:40",
+      "total_duration_min": 485,
+      "layovers": []
+    },
+    {
+      "item": 7,
+      "price_amount": 665,
+      "currency": "USD",
+      "airlines": [
+        {
+          "name": "British Airways",
+          "code": null
+        }
+      ],
+      "stops": 0,
+      "depart_airport": {
+        "name": "Heathrow Airport",
+        "iata": null
+      },
+      "depart_at": "2026-12-01T16:40",
+      "arrive_airport": {
+        "name": "John F. Kennedy International Airport",
+        "iata": null
+      },
+      "arrive_at": "2026-12-01T19:50",
+      "total_duration_min": 490,
+      "layovers": []
+    }
+  ]
+}
