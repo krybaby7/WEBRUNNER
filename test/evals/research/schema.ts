@@ -1,17 +1,23 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { DEPTHS } from "../../../src/schemas/deep_research.js";
 
 /**
  * Shared types for the research eval set (PLAN.md WP9).
  *
- * `DeepResearchResultSchema` mirrors the `deep_research` output contract in
- * PLAN.md 3.3. It lives here because WP7/WP8 have not landed; once they do, the
- * engine's own type must stay assignable to `DeepResearchResult`.
+ * The `deep_research` result schema and the depth type are the engine's own
+ * (`src/schemas/deep_research.ts`); they are re-exported here so the runner and
+ * the judge validate against exactly what the tool returns.
  */
+export {
+  DEPTHS,
+  DeepResearchResultSchema,
+  type DeepResearchResult,
+  type Depth,
+  type ResearchStats,
+} from "../../../src/schemas/deep_research.js";
 
-export const DEPTHS = ["quick", "standard", "deep"] as const;
 export const DepthSchema = z.enum(DEPTHS);
-export type Depth = z.infer<typeof DepthSchema>;
 
 export const QUESTION_TYPES = [
   "recent_event",
@@ -91,42 +97,3 @@ export function loadQuestions(path: string | URL = QUESTIONS_PATH): QuestionItem
   }
   return parsed.data;
 }
-
-// ---------------------------------------------------------------------------
-// deep_research output, PLAN.md 3.3
-// ---------------------------------------------------------------------------
-
-export const ResearchStatsSchema = z.object({
-  searches: z.number(),
-  pages_read: z.number(),
-  iterations: z.number(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  cost_usd: z.number(),
-  elapsed_ms: z.number(),
-});
-export type ResearchStats = z.infer<typeof ResearchStatsSchema>;
-
-export const DeepResearchResultSchema = z.object({
-  question: z.string(),
-  report_markdown: z.string(),
-  findings: z.array(
-    z.object({
-      claim: z.string(),
-      confidence: z.enum(["high", "medium", "low"]),
-      source_ids: z.array(z.number().int()),
-    }),
-  ),
-  sources: z.array(
-    z.object({
-      id: z.number().int(),
-      url: z.string(),
-      title: z.string(),
-      accessed_at: z.string(),
-      used_for: z.string(),
-    }),
-  ),
-  gaps: z.array(z.string()),
-  stats: ResearchStatsSchema,
-});
-export type DeepResearchResult = z.infer<typeof DeepResearchResultSchema>;

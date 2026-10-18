@@ -252,6 +252,32 @@ describe("judgeReport", () => {
     }
   });
 
+  it("shows the judge each source's published_at and each finding's quote when present, and says how to use them", async () => {
+    const llm = makeLlm();
+    await judgeReport(llm, ITEM_GOOD, GOOD, { today: "2026-10-18" });
+    const req = llm.complete.mock.calls[0]?.[0] as LlmRequest;
+    const prompt = promptOf(req);
+    const published = GOOD.sources[0]?.published_at;
+    const quote = GOOD.findings[0]?.quote;
+    expect(published).toBeDefined();
+    expect(quote).toBeDefined();
+    expect(prompt).toContain(`published ${published}`);
+    expect(prompt).toContain(`quote: "${quote}"`);
+    // Source 2 and finding 2 carry neither, so nothing is invented for them.
+    expect(prompt.match(/\| published /g)).toHaveLength(1);
+    expect(prompt.match(/quote: "/g)).toHaveLength(1);
+    expect(req.system).toMatch(/quote.*check that the cited source actually supports the claim/is);
+    expect(req.system).toMatch(/published.*date.*recency/is);
+  });
+
+  it("validates the fixtures against the engine's own result schema", () => {
+    for (const r of [GOOD, DANGLING]) {
+      expect(r.depth).toMatch(/^(quick|standard|deep)$/);
+      expect(typeof r.stats.pages_failed).toBe("number");
+      expect(r.stats.stopped_reason).toBeDefined();
+    }
+  });
+
   it("surfaces a dangling citation to the judge prompt and caps citation quality at weak", async () => {
     const llm = makeLlm();
     const j = await judgeReport(llm, ITEM_DANGLING, DANGLING, { today: "2026-10-18" });

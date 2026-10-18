@@ -4,14 +4,13 @@
  *   npm run eval:research -- --depth standard --only recent-nodejs-latest-release --out eval-results/run.json
  *
  * This is a CLI, not the MCP server, so writing the table to stdout is fine.
- * Exit codes: 0 done, 1 refused or bad usage or bad config, 2 research engine not available yet.
+ * Exit codes: 0 done, 1 refused, bad usage, bad config or missing ANTHROPIC_API_KEY.
  */
-import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { loadConfig, ConfigError } from "../../../src/config.js";
-import { createLlmClient } from "../../../src/core/llm/client.js";
-import { log } from "../../../src/log.js";
-import { DEPTHS, DepthSchema, loadQuestions, type Depth, type DeepResearchResult } from "./schema.js";
+import { runResearch } from "../../../src/core/research/index.js";
+import { buildDeps, closeDeps } from "../../../src/deps.js";
+import { DEPTHS, DepthSchema, loadQuestions, type Depth } from "./schema.js";
 import { formatTable, runEvals, writeJsonReport, type ResearchFn } from "./run.js";
 
 const USAGE = `Usage: npm run eval:research -- [options]
@@ -22,7 +21,7 @@ const USAGE = `Usage: npm run eval:research -- [options]
   --concurrency <n>                   Questions in flight at once. Default: 3.
   --help                              Show this message.
 
-Requires RUN_EVALS=1 (the npm script sets it), ANTHROPIC_API_KEY, and the research engine (WP7).
+Requires RUN_EVALS=1 (the npm script sets it), ANTHROPIC_API_KEY and at least one search provider key.
 Each run spends real money: roughly the deep_research cost for the chosen depth, times the number of questions.`;
 
 function out(text: string): void {
@@ -36,42 +35,6 @@ function err(text: string): void {
 function fail(code: number, message: string): never {
   err(message);
   process.exit(code);
-}
-
-const ENGINE_DIR = new URL("../../../src/core/research/", import.meta.url);
-
-/** Names the research engine may export its entry point under. WP7 owns the real one. */
-const ENGINE_EXPORTS = ["runDeepResearch", "deepResearch", "runResearch", "research"] as const;
-
-interface EngineDeps {
-  config: ReturnType<typeof loadConfig>;
-  llm: ReturnType<typeof createLlmClient>;
-  log: typeof log;
-}
-
-type EngineFn = (
-  input: { question: string; depth: Depth; max_cost_usd?: number },
-  deps: EngineDeps,
-) => Promise<DeepResearchResult>;
-
-/**
- * Loads the research engine, or returns undefined when WP7 has not landed.
- * The specifier is built at runtime so this file does not need the module to
- * exist in order to compile.
- */
-async function loadEngine(): Promise<EngineFn | undefined> {
-  const present = ["engine.ts", "engine.js"].some((f) => existsSync(new URL(f, ENGINE_DIR)));
-  if (!present) return undefined;
-  const mod = (await import(new URL("engine.js", ENGINE_DIR).href)) as Record<string, unknown>;
-  for (const name of ENGINE_EXPORTS) {
-    const fn = mod[name];
-    if (typeof fn === "function") return fn as EngineFn;
-  }
-  fail(
-    2,
-    `src/core/research/engine exists but exports none of: ${ENGINE_EXPORTS.join(", ")}.\n` +
-      "Update loadEngine() in test/evals/research/cli.ts to match the engine's real entry point.",
-  );
 }
 
 async function main(): Promise<void> {
@@ -136,16 +99,6 @@ async function main(): Promise<void> {
     items = items.filter((i) => wanted.includes(i.id));
   }
 
-  const engine = await loadEngine();
-  if (engine === undefined) {
-    fail(
-      2,
-      "The research engine is not available yet: src/core/research/engine does not exist.\n" +
-        "It is delivered by WP7 (research engine) and WP8 (deep_research tool). Merge those, then re-run.\n" +
-        "Until then the runner is exercised in CI against a mocked engine (test/unit/evals/run.test.ts).",
-    );
-  }
-
   let config;
   try {
     config = loadConfig();
@@ -157,32 +110,44 @@ async function main(): Promise<void> {
     fail(1, "ANTHROPIC_API_KEY is not set. The research engine and the judge both need the Claude API.");
   }
 
-  const llm = createLlmClient(config);
+  // The same services the MCP server builds. `closeDeps` below releases Chromium.
+  const deps = buildDeps(config);
+  const { search, fetch, llm, log } = deps;
+  if (search === undefined || fetch === undefined || llm === undefined) {
+    fail(1, "Internal error: buildDeps did not return the search, fetch and LLM services.");
+  }
   const research: ResearchFn = (question, d) =>
-    engine({ question, depth: d, max_cost_usd: config.research_max_cost_usd }, { config, llm, log });
+    runResearch(
+      { question, depth: d, max_cost_usd: config.research_max_cost_usd },
+      { search, fetch, llm, log, config },
+    );
 
-  err(
-    `Running ${items.length} question(s) at depth ${depth ?? "per-question hint"}, concurrency ${concurrency}.`,
-  );
-  const result = await runEvals({
-    research,
-    llm,
-    items,
-    ...(depth !== undefined && { depth }),
-    concurrency,
-    onProgress: (e) => {
-      if (e.type === "start") err(`[${e.index + 1}/${e.total}] start  ${e.id} (${e.depth})`);
-      else {
-        const note = e.row.error !== undefined ? `ERROR ${e.row.error}` : `rubric ${(e.row.weighted_score * 100).toFixed(0)}%, overall ${e.row.overall_score.toFixed(1)}`;
-        err(`[${e.index + 1}/${e.total}] done   ${e.id}: ${note}`);
-      }
-    },
-  });
+  try {
+    err(
+      `Running ${items.length} question(s) at depth ${depth ?? "per-question hint"}, concurrency ${concurrency}.`,
+    );
+    const result = await runEvals({
+      research,
+      llm,
+      items,
+      ...(depth !== undefined && { depth }),
+      concurrency,
+      onProgress: (e) => {
+        if (e.type === "start") err(`[${e.index + 1}/${e.total}] start  ${e.id} (${e.depth})`);
+        else {
+          const note = e.row.error !== undefined ? `ERROR ${e.row.error}` : `rubric ${(e.row.weighted_score * 100).toFixed(0)}%, overall ${e.row.overall_score.toFixed(1)}`;
+          err(`[${e.index + 1}/${e.total}] done   ${e.id}: ${note}`);
+        }
+      },
+    });
 
-  out(formatTable(result));
-  if (values.out !== undefined) {
-    writeJsonReport(result, values.out);
-    err(`Wrote JSON report to ${values.out}`);
+    out(formatTable(result));
+    if (values.out !== undefined) {
+      writeJsonReport(result, values.out);
+      err(`Wrote JSON report to ${values.out}`);
+    }
+  } finally {
+    await closeDeps(deps);
   }
 }
 

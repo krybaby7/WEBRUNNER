@@ -5,12 +5,17 @@
     {
       "claim": "Node.js v99.1.0 is the most recent stable release, published 2026-10-06.",
       "confidence": "high",
-      "source_ids": [1]
+      "source_ids": [
+        1
+      ],
+      "quote": "Node.js v99.1.0 (Current) was released on 6 October 2026."
     },
     {
       "claim": "v98 is Active LTS and v96 is in Maintenance.",
       "confidence": "medium",
-      "source_ids": [2]
+      "source_ids": [
+        2
+      ]
     }
   ],
   "sources": [
@@ -19,7 +24,8 @@
       "url": "https://nodejs.org/en/blog/release/v99.1.0",
       "title": "Node.js v99.1.0 (Current)",
       "accessed_at": "2026-10-18T09:00:00.000Z",
-      "used_for": "Version, publication date and headline changes."
+      "used_for": "Version, publication date and headline changes.",
+      "published_at": "2026-10-06T14:30:00.000Z"
     },
     {
       "id": 2,
@@ -29,14 +35,19 @@
       "used_for": "Release line status (Current, Active LTS, Maintenance)."
     }
   ],
-  "gaps": ["Whether a newer patch release has shipped since the access date could not be established."],
+  "gaps": [
+    "Whether a newer patch release has shipped since the access date could not be established."
+  ],
+  "depth": "quick",
   "stats": {
     "searches": 4,
     "pages_read": 6,
+    "pages_failed": 1,
     "iterations": 1,
     "input_tokens": 41000,
     "output_tokens": 3200,
     "cost_usd": 0.21,
-    "elapsed_ms": 38000
+    "elapsed_ms": 38000,
+    "stopped_reason": "converged"
   }
 }
