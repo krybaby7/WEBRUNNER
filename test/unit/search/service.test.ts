@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { createCache } from "../../../src/core/cache/index.js";
 import { createSearchService, SearchError } from "../../../src/core/search/index.js";
 import {
@@ -14,11 +14,11 @@ import {
 import type { Logger } from "../../../src/log.js";
 
 let dir: string;
-let log: Logger & { warn: ReturnType<typeof vi.fn> };
+let log: Logger & { warn: Mock<Logger["warn"]> };
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "webrunner-search-"));
-  log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn<Logger["warn"]>(), error: vi.fn() };
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });

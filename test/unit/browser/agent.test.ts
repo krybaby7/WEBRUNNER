@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { Config } from "../../../src/config.js";
 import {
   ActionSchema,
@@ -155,8 +155,8 @@ async function startSite(): Promise<Site> {
   return site;
 }
 
-function makeLog(): Logger & { warn: ReturnType<typeof vi.fn> } {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+function makeLog(): Logger & { warn: Mock<Logger["warn"]> } {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn<Logger["warn"]>(), error: vi.fn() };
 }
 
 // -- pure pieces (no browser) ---------------------------------------------------------------------------------

@@ -1,0 +1,73 @@
+name: Live integration
+
+# Weekly canary against the real services, so a provider API change or a Google
+# Flights layout change shows up as a red run instead of a surprise. Not part of
+# the pull request checks: it needs repository secrets and the network.
+#
+# Repository secrets (Settings > Secrets and variables > Actions), all optional,
+# each test skips itself when its key is missing:
+#   ANTHROPIC_API_KEY    LLM client, deep research, Google Flights extraction
+#   BRAVE_API_KEY, EXA_API_KEY, TAVILY_API_KEY, PERPLEXITY_API_KEY   search providers
+#   FIRECRAWL_API_KEY    Firecrawl fetcher
+#   DUFFEL_API_KEY       a Duffel sandbox key (duffel_test_...)
+# With none of them set, the job reports that and skips the test steps.
+
+on:
+  schedule:
+    - cron: "0 6 * * 0" # Sundays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+      EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+      DUFFEL_API_KEY: ${{ secrets.DUFFEL_API_KEY }}
+    steps:
+      - name: Check which secrets are set
+        id: gate
+        run: |
+          present=""
+          missing=""
+          for name in ANTHROPIC_API_KEY BRAVE_API_KEY EXA_API_KEY TAVILY_API_KEY PERPLEXITY_API_KEY FIRECRAWL_API_KEY DUFFEL_API_KEY; do
+            if [ -n "${!name}" ]; then present="$present $name"; else missing="$missing $name"; fi
+          done
+          {
+            echo "### Live integration tests"
+            echo
+            echo "- Secrets set:${present:- none}"
+            echo "- Secrets missing (their tests skip):${missing:- none}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$present" ]; then
+            echo "::notice title=Live tests skipped::No API-key secrets are configured for this repository, so there is nothing to test. Add ANTHROPIC_API_KEY and at least one search key under Settings > Secrets and variables > Actions."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.gate.outputs.run == 'true'
+      # The browser and Google Flights canaries drive a real Chromium.
+      - run: npx playwright install --with-deps chromium
+        if: steps.gate.outputs.run == 'true'
+      - name: Integration tests
+        if: steps.gate.outputs.run == 'true'
+        run: npx vitest run test/integration
+        env:
+          RUN_INTEGRATION: "1"

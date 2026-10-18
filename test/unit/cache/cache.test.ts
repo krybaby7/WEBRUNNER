@@ -1,14 +1,14 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { canonicalJson, createCache } from "../../../src/core/cache/index.js";
 import type { Logger } from "../../../src/log.js";
 
 let dir: string;
 
-function spyLog(): Logger & { warn: ReturnType<typeof vi.fn> } {
-  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+function spyLog(): Logger & { warn: Mock<Logger["warn"]> } {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn<Logger["warn"]>(), error: vi.fn() };
 }
 
 /** All entry files under dir, as paths relative to dir. */
