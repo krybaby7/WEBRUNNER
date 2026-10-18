@@ -320,6 +320,7 @@ Input:
   max_steps?: number;           // default 15, max 40
   extract_schema?: object;      // JSON Schema; if present, output.extracted conforms to it
   allow_navigation_off_domain?: boolean;  // default false
+  max_cost_usd?: number;        // hard cap on LLM spend for this run; default 1.00
 }
 ```
 
@@ -566,7 +567,7 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | WEBRUNNER_CACHE_DIR  | no       | default ~/.cache/webrunner            |
 | WEBRUNNER_LOG_LEVEL  | no       | default info                             |
 
-\* Optional at startup by decision (Section 1). Config-file keys are the lowercase variable names (`brave_api_key`, `model_planner`, ...); unknown keys are rejected; the environment overrides the file; empty env vars count as unset. All keys above already exist in `src/config.ts`; work packages read them from `deps.config` and do not edit `config.ts` unless their brief says so.
+\* Optional at startup by decision (Section 1). Config-file keys are the lowercase variable names with the `WEBRUNNER_` prefix dropped (`brave_api_key`, `cache_dir`, `currency`, `model_planner`, `browser_profile_dir`, `save_screenshots`, ...); unknown keys are rejected; the environment overrides the file; empty env vars count as unset. All keys above already exist in `src/config.ts`; work packages read them from `deps.config` and do not edit `config.ts` unless their brief says so.
 
 ---
 
@@ -800,6 +801,7 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP13**: README, CLAUDE.md and install scripts merged; Claude Code registration verified against the real CLI, Codex block written per the Codex docs but not run against a live Codex. Plan corrected to match code: config-file keys drop the `WEBRUNNER_` prefix; `browse_task` takes `max_cost_usd` (default 1.00). Two clients sharing one profile directory cannot both launch Chromium; a clearer error is a follow-up.
 - **2026-10-18, after WP8**: all six tools are on main. WP14 split into WP14a (quality gates) and WP14b (resilience) and started in parallel with WP13, since the three touch disjoint files. Two config keys are added by WP14b: `WEBRUNNER_RESEARCH_MAX_MS` and `WEBRUNNER_DAILY_COST_CAP_USD`.
 - **2026-10-18, after WP11**: recorded the live Google Flights findings (rate limiting, query-text cabin and passenger clauses, code-side resolution and cross-checks) in 3.5 and the risk table. WP13 started in parallel with WP8 since the README only needs the 3.3 contract for `deep_research`.
 - **2026-10-18, after WP7/WP10**: recorded the browse agent's implemented semantics (3.4, 4.4) and the research engine's stop precedence, writer reserve and search-failure handling (section 5). WP8 adds `error` to `stopped_reason` and `invalid_input` to `ResearchError`, switches the evals to the shared schema, and makes the judge print `published_at` and `quote`.

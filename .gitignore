@@ -11,3 +11,5 @@ profile/
 .DS_Store
 # agent worktrees created by Claude Code sessions
 .claude/worktrees/
+# local eval output
+eval-results/
