@@ -11,7 +11,8 @@ The server calls the Claude API itself for research and extraction, so the clien
 | `deep_research` | Plans, searches, reads, reflects and writes a cited Markdown report, with depth chosen by the caller. | `ANTHROPIC_API_KEY` and at least one search key |
 | `browse_task` | A Claude-driven agent that clicks and reads through a live page toward a goal; read and extract only. | `ANTHROPIC_API_KEY`, plus Chromium |
 | `search_flights` | Exact fares and schedules from Google Flights (read through the browser) and, optionally, Duffel. | Google Flights: `ANTHROPIC_API_KEY` plus Chromium. Duffel: `DUFFEL_API_KEY` |
-| `ping` | Health check: returns `ok`, the server version and the time. | None |
+| `ping` | Liveness check: returns `ok`, the server version and the time. | None |
+| `health` | Reports what is configured (providers, fetchers, flight sources, models, browser mode, cache size, registered tools) without starting a browser or calling any network service. Never includes key values. | None |
 
 ## Status and terms of service
 
@@ -372,6 +373,10 @@ Caveats worth knowing:
 
 `ping` takes no arguments and returns `{ "ok": true, "version": "0.1.0", "time": "..." }`. It is the quickest way to confirm the client can reach the server.
 
+### health
+
+`health` takes no arguments. It returns the server version and uptime, which search providers, fast fetchers and flight sources are configured, the model per role, the browser mode (persistent profile or CDP attach, with `cdp_url` reduced to scheme and host) and whether a browser is currently open, cache directory statistics, and the list of registered tools. It makes no network calls and never starts Chromium. When any tool returns a `config` error, call `health` first to see which key is missing.
+
 ### Errors
 
 Failures return `isError: true` with `{ "error": { "code", "message", "retryable", "details?" } }`. The codes are `config` (a key is missing or a value is invalid), `provider` (an upstream service failed), `timeout`, `blocked` (a bot wall, CAPTCHA, login wall or rate limit), `budget_exceeded`, `invalid_input` and `internal`. Malformed arguments are rejected by the MCP layer before the tool runs, with a plain validation message instead of this envelope.
@@ -441,7 +446,9 @@ npm ci
 npm run lint && npm run typecheck && npm test
 ```
 
-`npm test` builds first (`pretest`), then runs the offline unit tests, including a stdout-purity test that starts the server and checks that only protocol frames reach stdout. Integration tests hit real services (search providers, a live browser, Google Flights, Duffel) and are excluded by default: run them with `RUN_INTEGRATION=1 npm test`. Each integration test also skips itself when the keys it needs are missing; the browser ones need Chromium installed. Evals are separate (see Evals).
+`npm test` builds first (`pretest`), then runs the offline unit tests, including a stdout-purity test that starts the server and checks that only protocol frames reach stdout. `npm run typecheck` covers both `src/` and `test/`. The browser-backed suites (`test/unit/browser`, the Google Flights recipe tests) run only when Chromium is launchable and skip with a visible notice otherwise.
+
+CI has three workflows. `check` runs lint, typecheck and the unit tests with the browser suites skipped. `browser-tests` installs Chromium and runs the browser suites. `live.yml` runs the gated integration tests every Sunday at 06:00 UTC and on demand, using whichever of these repository secrets are set: `ANTHROPIC_API_KEY`, `BRAVE_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `PERPLEXITY_API_KEY`, `FIRECRAWL_API_KEY`, `DUFFEL_API_KEY` (a sandbox key). With none set the live job skips and says so. A new tool must be added to `TOOL_NAMES` in `src/tools/index.ts` and given a case in `test/unit/tools/envelope.test.ts`, otherwise two tests fail. `docs/mcp-sdk-v2-migration.md` records the evaluation of moving to MCP SDK v2 and recommends doing it in one dedicated change before v1 support ends. Integration tests hit real services (search providers, a live browser, Google Flights, Duffel) and are excluded by default: run them with `RUN_INTEGRATION=1 npm test`. Each integration test also skips itself when the keys it needs are missing; the browser ones need Chromium installed. Evals are separate (see Evals).
 
 `PLAN.md` is the design document and the source of truth for the tool contracts, internal interfaces, configuration and cost model; its decision log records why things are the way they are. The project was built as numbered work packages (WP0 to WP14), each implemented by an agent session on its own branch against the contracts in `PLAN.md`, reviewed and merged in dependency order. A change to a contract starts with an edit to `PLAN.md` in its own pull request. `CLAUDE.md` holds the short rules for agents working in this repository.
 
