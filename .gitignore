@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+*.log
+# browser profile dirs (tool-owned persistent Chromium profiles)
+browser-profile/
+.browser-profile/
+profile/
+.DS_Store
