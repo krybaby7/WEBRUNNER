@@ -235,6 +235,9 @@ Behavior:
 - `fast`: try configured fast fetchers in order (Firecrawl, Jina, then direct HTTP + Readability + Turndown). Stop at the first that returns more than 500 chars of body text.
 - `browser`: open in the browser engine, wait for network idle or `wait_for`, extract main content, convert to Markdown.
 - `auto`: `fast`, then fall back to `browser` when any of these holds: the fast result has `botWall: true` (a wall served with HTTP 200), the fast result is thin (`isThin`, 500 visible characters or fewer), or the fast chain threw `FetchError` with code `blocked` (a wall served with 403/429/503). The browser fetcher never returns `botWall: true`; it throws `blocked`, which auto mode surfaces as the error envelope.
+- Thin without wall evidence is not an error: when the fast result is merely thin and the browser is unavailable or fails, the thin fast result is returned. When the browser result is also thin and has less than twice the fast result's visible text, the fast result wins (the page is simply short). When the fast result is a bot wall and the browser fails for any reason, the tool returns `blocked`, never wall text.
+- Jina Reader executes JavaScript, so a JS-rendered page is usually served by the fast path; the browser fallback matters mostly for sites that block Jina and direct fetches.
+- Cache: keyed on the canonical request URL plus `mode`, `max_chars` and `wait_for`; a second alias entry is written under `final_url` when it differs. Thin and bot-walled results are never cached.
 - PDFs are not supported by the fast path (`FetchError` code `invalid_input`). Until a PDF path exists (WP14), `fetch_page` returns that error unchanged.
 - Cache by `final_url` for 24 hours; `browser` results cache for 1 hour.
 
@@ -630,12 +633,12 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 
 **WP7: Research engine** (after WP2, WP5, WP6)
 - Depends on: WP2, WP5, WP6.
-- Deliver: `engine.ts` implementing Section 5 with injectable search/fetch/llm; `prompts.ts`; budget enforcement; notes data model.
+- Deliver: `src/schemas/deep_research.ts`; `engine.ts` implementing Section 5 end to end including the writer, via `runResearch(input, deps)`; `prompts.ts`; `report.ts` with citation renumbering and invariant checks; budget enforcement through a per-run `CostMeter`; notes data model. The engine returns a complete `DeepResearchResult`.
 - Accept: a fully mocked run (fixture search results, fixture pages, scripted LLM responses) completes in under 2 s, produces the right number of iterations for each depth, stops on convergence, and stops on budget. Every claim in mocked output has at least one source id.
 
-**WP8: `deep_research` tool and report formatting** (after WP7)
+**WP8: `deep_research` tool** (after WP7)
 - Depends on: WP7.
-- Deliver: the tool, `report.ts` with stable citation numbering, `brief` mode, `stats`.
+- Deliver: `src/tools/deep_research.ts` wired through `Deps`; switch `test/evals/research/schema.ts` and `cli.ts` to import the result schema and `runResearch` from `src/`; an end-to-end stdio test that calls `deep_research` against mocked services and checks the envelope for the no-key case; progress logging to stderr per iteration.
 - Accept: snapshot test of report Markdown from fixed notes. Report has no `[n]` that is missing from `sources`. `gaps` is always present.
 
 **WP9: Research eval set** (parallel with WP7, WP8)
@@ -788,6 +791,7 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP5**: thin-page and browser-fallback rules in 3.2 made explicit; the bot-wall-plus-browser-failure case returns `blocked` (fixed during review). WP7 now owns the writer and citation renumbering; WP8 is the tool, the eval import switch and the stdio end-to-end test.
 - **2026-10-18, WP11 blocker**: `flight_number` made optional and `itinerary: "outbound_only"` added to offers, `blocked` added to `FlightProviderErrorCode`, after the WP11 implementer verified live that Google Flights result lists show neither flight numbers nor the return leg.
 - **2026-10-18, after WP2/WP9/WP12**: `Deps` now carries `llm` and `browser` with `closeDeps` on shutdown, so WP5, WP10 and WP11 consume rather than create them. 3.3 gained `published_at` on sources, `quote` on findings, `depth`, `stats.pages_failed`, `stats.stopped_reason`, the citation invariants and the engine entry point, all from the WP9 judge's needs. 3.5 gained field definitions, passenger limits and the currency and `max_stops` caveats from WP12. Canonicalization list unified between 3.1 and 4.1. SDK-level input validation accepted in place of `invalid_input` envelopes for malformed input.
 - **2026-10-18, after WP1/WP3/WP4/WP6**: recorded the implemented shapes for search normalization, bot-wall semantics (returned vs thrown), the browser session and snapshot contracts, and the LLM client (`Usage`, `LlmError`, per-run `CostMeter`, `maxTokens: 16000` for planner calls). WP5 now depends on WP2 for the cache and owns wiring the shared `BrowserSession` into `Deps` and shutdown. Jina's `X-Return-Format` header is dropped in WP5. PDF extraction and a Chromium CI job were added to WP14. Playwright is pinned to 1.56.1 to match the Chromium build shipped with the dev environment; the README (WP13) must say to run `npx playwright install chromium` elsewhere. `vitest.config.ts` includes `test/integration/**` only when `RUN_INTEGRATION=1`.
