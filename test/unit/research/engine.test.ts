@@ -438,6 +438,7 @@ describe("runResearch: failures", () => {
     const result = await runResearch({ question: QUESTION }, rig.deps);
     expect(result.sources).toHaveLength(1);
     expect(result.gaps.some((g) => /model call failed/.test(g))).toBe(true);
+    expect(result.stats.stopped_reason).toBe("error");
     expectInvariants(result);
   });
 
@@ -457,7 +458,11 @@ describe("runResearch: failures", () => {
 
   it("rejects invalid input with ResearchError", async () => {
     const rig = makeRig({});
-    await expect(runResearch({ question: "" }, rig.deps)).rejects.toBeInstanceOf(ResearchError);
+    await expect(runResearch({ question: "" }, rig.deps)).rejects.toMatchObject({
+      code: "invalid_input",
+      retryable: false,
+      details: { issues: expect.any(Array) },
+    });
     await expect(runResearch({ question: "x".repeat(2001) }, rig.deps)).rejects.toBeInstanceOf(ResearchError);
     await expect(runResearch({ question: "ok", max_cost_usd: -1 }, rig.deps)).rejects.toBeInstanceOf(ResearchError);
     expect(rig.llm.requests).toHaveLength(0);
