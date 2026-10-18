@@ -340,6 +340,7 @@ Output:
 Behavior:
 - Never performs: form submissions on payment pages, clicking buttons whose text matches a configurable deny list (`Buy`, `Pay`, `Confirm purchase`, `Place order`, etc.), file downloads outside the run dir.
 - Uses the owner's persistent profile (4.3). Stops with `blocked` on CAPTCHA detection rather than attempting to solve it.
+- Implemented semantics (WP10): `steps_taken` counts page actions that actually ran (click, type, select, navigate, scroll, wait); refused or failed actions and the `screenshot`, `extract`, `done` and `blocked` decisions do not count, while `max_steps` bounds model decisions. `extract` without an `extract_schema` runs one extractor call that answers the goal in prose and becomes `summary`. `blocked_reason` is omitted for budget exhaustion and for model-reported blocks that fit no enum value; the explanation goes in `summary`. The deny rules match whole path tokens (`checkout`, `payment`, `pay`, `billing`, `order/confirm`), not substrings. Off-domain navigation is blocked by request interception so link clicks, script redirects and server redirects are all caught. A ten-minute wall-clock cap returns `partial` with `timeout`. Label refs act on the label's control, so element facts (password, card fields) are read from the control, not the label.
 
 ### 3.5 `search_flights`
 
@@ -481,7 +482,7 @@ interface Snapshot {
 
 The generic agent works primarily from the accessibility tree and refs, and requests a screenshot only when needed. This is cheaper and more reliable than a pure vision loop.
 
-Implemented shape (WP4): the tree comes from Playwright's `ariaSnapshot()` parsed into nested nodes; `Snapshot` also carries `refs: Map<string, Locator>` (role-plus-name locators, `getByText` for text-only nodes) and `refInfo: Map<string, {role, name}>`. Refs are deterministic for an unchanged page but go stale after any DOM change, so the agent takes a fresh snapshot after every action and prefers interactive refs. Iframe content is not in the tree. Names are truncated to 120 characters in the text but locators use the full name. The tree is capped at 400 lines; nodes past the cap have no ref. A screenshot is taken only when requested, or when the tree is empty and a `screenshotDir` was given.
+Implemented shape (WP4): the tree comes from Playwright's `ariaSnapshot()` parsed into nested nodes; `Snapshot` also carries `refs: Map<string, Locator>` (role-plus-name locators, `getByText` for text-only nodes) and `refInfo: Map<string, {role, name}>`. Refs are deterministic for an unchanged page but go stale after any DOM change, so the agent takes a fresh snapshot after every action and prefers interactive refs. Iframe content is not in the tree. Names are truncated to 120 characters in the text but locators use the full name. The tree is capped at 400 lines; nodes past the cap have no ref. A screenshot is taken only when requested, or when the tree is empty and a `screenshotDir` was given. `ariaSnapshot` reports password inputs as plain `textbox`, so any action layer must check the DOM for sensitive fields; refs on label text point at the `<label>` and Playwright retargets fill and click to its control.
 
 ### 4.5 `Recipe`
 
@@ -582,7 +583,9 @@ Guardrails:
 - Hard stop at `max_cost_usd`; return what exists with `gaps` explaining the cutoff.
 - A page fetch that fails is logged and skipped. Never retried more than once.
 - Source list ids are stable across the report; the writer receives notes keyed by id.
-- Prompts live in `prompts.ts` with a version string included in cache keys for evals.
+- Prompts live in `prompts.ts` with a `PROMPT_VERSION` string logged at run start.
+
+Implemented behavior (WP7): the reflect call also returns the next round's sub-queries, so rounds 2 and up have no separate plan call; a reflect call is skipped when a hard limit already ends the loop. Stop precedence after an iteration: budget, searches, reads, iterations, fewer than 2 new claims (reported as `converged`), then the planner's own stop. Failed fetches do not consume the read budget; the next candidate replaces them within the iteration up to twice the per-iteration cap. If every search in an iteration fails before any note exists the engine throws (`provider`, or `timeout` when all timed out); with notes it stops with `stopped_reason: "searches"` and a gap line. The loop keeps an estimated writer cost in reserve so the writer can still run when the budget is nearly spent; if the writer is refused anyway the report is a deterministic claims list with citations. Dangling `[n]` citations are removed and noted in Gaps; a missing `## Gaps` section is added. `stats.input_tokens` includes cache reads and writes. `sources[].accessed_at` comes from the fetch result's `fetched_at`, which can be a cached time up to 24 h old.
 
 ---
 
@@ -791,6 +794,7 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP7/WP10**: recorded the browse agent's implemented semantics (3.4, 4.4) and the research engine's stop precedence, writer reserve and search-failure handling (section 5). WP8 adds `error` to `stopped_reason` and `invalid_input` to `ResearchError`, switches the evals to the shared schema, and makes the judge print `published_at` and `quote`.
 - **2026-10-18, after WP5**: thin-page and browser-fallback rules in 3.2 made explicit; the bot-wall-plus-browser-failure case returns `blocked` (fixed during review). WP7 now owns the writer and citation renumbering; WP8 is the tool, the eval import switch and the stdio end-to-end test.
 - **2026-10-18, WP11 blocker**: `flight_number` made optional and `itinerary: "outbound_only"` added to offers, `blocked` added to `FlightProviderErrorCode`, after the WP11 implementer verified live that Google Flights result lists show neither flight numbers nor the return leg.
 - **2026-10-18, after WP2/WP9/WP12**: `Deps` now carries `llm` and `browser` with `closeDeps` on shutdown, so WP5, WP10 and WP11 consume rather than create them. 3.3 gained `published_at` on sources, `quote` on findings, `depth`, `stats.pages_failed`, `stats.stopped_reason`, the citation invariants and the engine entry point, all from the WP9 judge's needs. 3.5 gained field definitions, passenger limits and the currency and `max_stops` caveats from WP12. Canonicalization list unified between 3.1 and 4.1. SDK-level input validation accepted in place of `invalid_input` envelopes for malformed input.
