@@ -17,13 +17,15 @@ import {
   type SearchFlightsOutput,
 } from "../schemas/flights.js";
 import { jsonResult } from "../schemas/result.js";
+import { runWithWallClock, TOOL_WALL_CLOCK_MS } from "./guard.js";
 
 const DESCRIPTION =
   "Search for exact flight fares and schedules. Sources: Google Flights (read through a real browser, no API key needed) and Duffel (licensed API, needs DUFFEL_API_KEY). " +
   "Takes IATA codes or city names, dates, passengers, cabin and optional stop limit; returns offers sorted by price with carriers, times, airports, stops and layovers, tagged by source (the same flight can show different prices per source). " +
   "Prices are quotes at fetch time and can change before booking; this tool reads and extracts only and never books. " +
   "For personal use: reading Google Flights automatically is against Google's terms of service, so keep volume low. " +
-  "Google Flights lists only the outbound leg of a round trip and no flight numbers; the caveats field says when that applies.";
+  "Google Flights lists only the outbound leg of a round trip and no flight numbers; the caveats field says when that applies. " +
+  "Transient Duffel failures (429, 5xx, network errors) are retried up to twice; Google Flights is never retried automatically. The whole call is capped at 120 seconds; past that it returns error code timeout (retryable).";
 
 /** Per-source time budgets, in ms. Google Flights loads a page and calls the LLM, so it gets the longer one. */
 const DEFAULT_TIMEOUTS_MS: Record<FlightSource, number> = { google_flights: 90_000, duffel: 45_000 };
@@ -33,6 +35,8 @@ export interface SearchFlightsToolOptions {
   providers?: (deps: Deps) => FlightProvider[];
   /** Overrides the per-source timeouts. For tests. */
   timeoutsMs?: Partial<Record<FlightSource, number>>;
+  /** Overrides the 120 s wall-clock cap. For tests. */
+  wallClockMs?: number;
 }
 
 interface Failure {
@@ -55,6 +59,7 @@ const NOT_CONFIGURED_HINT: Record<FlightSource, string> = {
 };
 
 export function registerSearchFlightsTool(server: McpServer, deps: Deps, options: SearchFlightsToolOptions = {}): void {
+  const capMs = options.wallClockMs ?? TOOL_WALL_CLOCK_MS.search_flights;
   const makeProviders =
     options.providers ??
     ((d: Deps): FlightProvider[] =>
@@ -72,8 +77,9 @@ export function registerSearchFlightsTool(server: McpServer, deps: Deps, options
       outputSchema: SearchFlightsOutputSchema,
       annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true },
     },
-    async (args, extra) => {
-      try {
+    (args, extra) =>
+      runWithWallClock("search_flights", capMs, async (wallSignal) => {
+        try {
         const parsed = SearchFlightsInputSchema.safeParse(args);
         if (!parsed.success) {
           return toolError("invalid_input", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), false);
@@ -132,7 +138,7 @@ export function registerSearchFlightsTool(server: McpServer, deps: Deps, options
               return;
             }
             const timeoutMs = options.timeoutsMs?.[source] ?? DEFAULT_TIMEOUTS_MS[source];
-            const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), extra.signal]);
+            const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), extra.signal, wallSignal]);
             try {
               const found = await raceAbort(
                 (provider as unknown as HookedSearch).search(query, signal, { caveats: providerCaveats }),
@@ -179,8 +185,8 @@ export function registerSearchFlightsTool(server: McpServer, deps: Deps, options
         const message = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "unknown error";
         deps.log.error("search_flights failed unexpectedly", { error: message });
         return toolError("internal", `search_flights failed: ${message}`, false);
-      }
-    },
+        }
+      }),
   );
 }
 

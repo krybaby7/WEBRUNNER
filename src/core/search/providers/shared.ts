@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { parseRetryAfter } from "../../retry.js";
 import { normalizePublishedAt } from "../normalize.js";
 import {
   isRetryableStatus,
   ProviderError,
+  type ProviderErrorInit,
   type RawResult,
   type Recency,
   type SearchProviderName,
@@ -55,6 +57,19 @@ function abortable<T>(provider: SearchProviderName, p: Promise<T>, signal: Abort
   });
 }
 
+/**
+ * A ProviderError for HTTP 429 that carries the server's `Retry-After` wish in
+ * milliseconds, so the shared retry helper can honor it (see core/retry.ts).
+ */
+export class RateLimitedProviderError extends ProviderError {
+  readonly retryAfterMs: number;
+
+  constructor(init: ProviderErrorInit, retryAfterMs: number) {
+    super(init);
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 export interface JsonRequest {
   provider: SearchProviderName;
   url: string;
@@ -66,7 +81,9 @@ export interface JsonRequest {
 /**
  * Perform one HTTP request and return the parsed JSON body. Every failure is a
  * ProviderError: abort and network errors and 429/5xx are retryable, other
- * non-2xx statuses and unparseable bodies are not. No automatic retries.
+ * non-2xx statuses and unparseable bodies are not. No retries here: the caller
+ * wraps the call in `withRetry`. A 429 with a `Retry-After` header carries
+ * `retryAfterMs` for it to honor.
  */
 export async function requestJson(req: JsonRequest): Promise<unknown> {
   const { provider, url, init, fetchImpl, signal } = req;
@@ -74,9 +91,11 @@ export async function requestJson(req: JsonRequest): Promise<unknown> {
 
   let text: string;
   let status: number;
+  let retryAfter: string | null;
   try {
     const res = await abortable(provider, Promise.resolve().then(() => fetchImpl(url, { ...init, signal })), signal);
     status = res.status;
+    retryAfter = res.headers?.get("retry-after") ?? null;
     text = await abortable(provider, res.text(), signal);
   } catch (err) {
     if (err instanceof ProviderError) throw err;
@@ -91,12 +110,14 @@ export async function requestJson(req: JsonRequest): Promise<unknown> {
 
   if (status < 200 || status > 299) {
     const preview = text.replace(/\s+/g, " ").trim().slice(0, ERROR_BODY_PREVIEW_CHARS);
-    throw new ProviderError({
+    const failure: ProviderErrorInit = {
       provider,
       status,
       message: `${provider} returned HTTP ${status}${preview !== "" ? `: ${preview}` : ""}`,
       retryable: isRetryableStatus(status),
-    });
+    };
+    const retryAfterMs = status === 429 ? parseRetryAfter(retryAfter) : undefined;
+    throw retryAfterMs !== undefined ? new RateLimitedProviderError(failure, retryAfterMs) : new ProviderError(failure);
   }
 
   try {

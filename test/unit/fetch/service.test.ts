@@ -395,7 +395,7 @@ describe("cache", () => {
   });
 
   it("does not cache failures", async () => {
-    const fast = fake("jina", new FetchError("jina", "provider", "boom", true, 500), fastPage());
+    const fast = fake("jina", new FetchError("jina", "provider", "boom", false, 500), fastPage());
     const svc = service([fast]);
     await failure(svc.fetchPage({ url: URL_A, mode: "fast" }));
     const out = await svc.fetchPage({ url: URL_A, mode: "fast" });

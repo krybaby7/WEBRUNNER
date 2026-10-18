@@ -14,6 +14,12 @@ export interface ResearchDeps {
   config: Config;
   /** Clock in epoch milliseconds, used for `elapsed_ms`. Default Date.now. */
   now?: () => number;
+  /**
+   * Cancels the run, normally when the tool's wall-clock cap is reached. The
+   * engine checks it between steps and passes it to every LLM call; once it
+   * aborts, `runResearch` throws a `ResearchError` with code `timeout`.
+   */
+  signal?: AbortSignal;
 }
 
 export interface NoteClaim {

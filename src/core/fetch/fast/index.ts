@@ -1,5 +1,6 @@
 import type { Config } from "../../../config.js";
 import { log } from "../../../log.js";
+import { createLimiter, DEFAULT_FETCH_CONCURRENCY } from "../../limit.js";
 import { THIN_THRESHOLD_CHARS, visibleTextLength } from "../botwall.js";
 import { FetchError, type FetchOpts, type FetchResult, type Fetcher } from "../types.js";
 import { DirectFetcher } from "./direct.js";
@@ -11,16 +12,35 @@ export { DirectFetcher } from "./direct.js";
 export { FirecrawlFetcher } from "./firecrawl.js";
 export { JinaFetcher } from "./jina.js";
 
+export interface FastFetchersOptions {
+  /** Concurrent requests per fetcher; further calls queue FIFO. Default 6. */
+  concurrency?: number;
+}
+
+/** The same fetcher, but at most `concurrency` of its requests run at once. */
+function withConcurrencyLimit(fetcher: Fetcher, concurrency: number): Fetcher {
+  const limiter = createLimiter(concurrency);
+  return {
+    name: fetcher.name,
+    isConfigured: () => fetcher.isConfigured(),
+    fetch: (url, opts, signal) => limiter.run(() => fetcher.fetch(url, opts, signal)),
+  };
+}
+
 /**
  * Fast fetchers in priority order: Firecrawl (only when a key is set), Jina
- * Reader, then direct HTTP with Readability.
+ * Reader, then direct HTTP with Readability. Each is limited to
+ * `options.concurrency` (default 6) simultaneous requests, so a research run
+ * reading many pages in parallel cannot flood one service. Time spent waiting
+ * for a slot counts against the chain's per-attempt timeout.
  */
-export function buildFastFetchers(config: Config, fetchImpl?: FetchImpl): Fetcher[] {
+export function buildFastFetchers(config: Config, fetchImpl?: FetchImpl, options: FastFetchersOptions = {}): Fetcher[] {
+  const concurrency = options.concurrency ?? DEFAULT_FETCH_CONCURRENCY;
   const fetchers: Fetcher[] = [];
   const firecrawl = new FirecrawlFetcher({ apiKey: config.firecrawl_api_key, fetchImpl });
-  if (firecrawl.isConfigured()) fetchers.push(firecrawl);
-  fetchers.push(new JinaFetcher({ apiKey: config.jina_api_key, fetchImpl }));
-  fetchers.push(new DirectFetcher({ fetchImpl }));
+  if (firecrawl.isConfigured()) fetchers.push(withConcurrencyLimit(firecrawl, concurrency));
+  fetchers.push(withConcurrencyLimit(new JinaFetcher({ apiKey: config.jina_api_key, fetchImpl }), concurrency));
+  fetchers.push(withConcurrencyLimit(new DirectFetcher({ fetchImpl }), concurrency));
   return fetchers;
 }
 

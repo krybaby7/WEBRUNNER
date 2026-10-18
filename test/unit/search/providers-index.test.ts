@@ -8,6 +8,7 @@ function config(keys: Partial<Config> = {}): Config {
   return {
     browser: { profile_dir: "/tmp/profile" },
     research_max_cost_usd: 3,
+    research_max_ms: 900_000,
     cache_dir: "/tmp/cache",
     log_level: "info",
     save_screenshots: false,

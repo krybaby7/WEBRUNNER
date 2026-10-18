@@ -90,19 +90,20 @@ describe("DirectFetcher", () => {
     expect(result.botWall).toBe(false);
   });
 
-  it("rejects PDFs with invalid_input before reading the body", async () => {
+  it("rejects a PDF that cannot be parsed with invalid_input (extraction itself is in pdf.test.ts)", async () => {
     const { fetchImpl } = mockFetch(() => new Response("%PDF-1.7 ...", { headers: { "content-type": "application/pdf" } }));
     const err = await failure(new DirectFetcher({ fetchImpl }).fetch("https://example.com/paper.pdf", OPTS, neverAborted()));
     expect(err.code).toBe("invalid_input");
     expect(err.retryable).toBe(false);
-    expect(err.message).toMatch(/PDF is not supported in the fast path yet/);
+    expect(err.message).toMatch(/Could not read the PDF/);
     expect(err.fetcher).toBe("direct");
   });
 
-  it("detects PDFs served without a content type", async () => {
+  it("detects PDFs by their magic bytes when the content type is generic", async () => {
     const { fetchImpl } = mockFetch(() => new Response("%PDF-1.7 binary", { headers: { "content-type": "application/octet-stream" } }));
     const err = await failure(new DirectFetcher({ fetchImpl }).fetch("https://example.com/download", OPTS, neverAborted()));
     expect(err.code).toBe("invalid_input");
+    expect(err.message).toMatch(/Could not read the PDF/);
   });
 
   it("rejects other binary types with invalid_input", async () => {

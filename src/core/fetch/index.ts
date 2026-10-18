@@ -8,6 +8,7 @@ import {
 } from "../../schemas/fetch_page.js";
 import type { ErrorCode } from "../../schemas/error.js";
 import type { Cache } from "../cache/index.js";
+import { withRetry, type RetryOptions } from "../retry.js";
 import { canonicalizeUrl } from "../search/canonical.js";
 import { isThin, visibleTextLength } from "./botwall.js";
 import { runFastChain } from "./fast/index.js";
@@ -69,6 +70,8 @@ export interface FetchServiceDeps {
   secrets?: string[];
   /** Override the browser per-attempt timeout (default 45000). */
   browserTimeoutMs?: number;
+  /** Retry tuning for the fast chain (retries, delays, clock). Retries default to 2 and are capped at 2. */
+  retry?: Pick<RetryOptions, "retries" | "baseMs" | "maxMs" | "random" | "sleep">;
 }
 
 /** Replace anything that looks like a credential in a message. */
@@ -176,8 +179,22 @@ export function createFetchService(deps: FetchServiceDeps): FetchService {
         retryable: false,
       });
     }
-    return await attempt(fastFetchers[0]?.name ?? "direct", fastTimeoutMs, (signal) =>
-      runFastChain(fastFetchers, url, { ...opts, timeoutMs: fastTimeoutMs }, signal),
+    // Only a chain that failed outright is retried, and only for transient causes: a provider error
+    // or a timeout marked retryable. `blocked` and `invalid_input` fail at once (auto mode needs the
+    // browser for the first, the caller's input is wrong for the second). Worst case for the whole
+    // call: 3 x 20 s attempts plus two waits of at most 2 s.
+    return await withRetry(
+      () =>
+        attempt(fastFetchers[0]?.name ?? "direct", fastTimeoutMs, (signal) =>
+          runFastChain(fastFetchers, url, { ...opts, timeoutMs: fastTimeoutMs }, signal),
+        ),
+      {
+        ...deps.retry,
+        isRetryable: (err) =>
+          err instanceof FetchError && err.retryable && (err.code === "provider" || err.code === "timeout"),
+        log,
+        label: "fetch:fast",
+      },
     );
   }
 

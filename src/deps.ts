@@ -6,6 +6,7 @@ import { createFetchService, type FetchService } from "./core/fetch/index.js";
 import { BrowserFetcher } from "./core/fetch/browser.js";
 import { buildFastFetchers } from "./core/fetch/fast/index.js";
 import { createLlmClient } from "./core/llm/index.js";
+import { DailyCostCap } from "./core/llm/daily-cap.js";
 import type { LlmClient } from "./core/llm/types.js";
 import { createSearchService, type SearchService } from "./core/search/index.js";
 import { buildProviders } from "./core/search/providers/index.js";
@@ -35,6 +36,12 @@ export interface Deps {
   browser?: BrowserSession;
   /** URL to Markdown with fast fetchers, a browser fallback and a cache (PLAN.md 3.2). Set by buildDeps. */
   fetch?: FetchService;
+  /**
+   * Daily soft cap on LLM spend, set only when WEBRUNNER_DAILY_COST_CAP_USD is
+   * configured. It is also the LLM client's client-wide meter, so every call is
+   * counted; tools use it to refuse work up front.
+   */
+  dailyCap?: DailyCostCap;
 }
 
 export function buildDeps(config: Config): Deps {
@@ -50,7 +57,11 @@ export function buildDeps(config: Config): Deps {
     config.duffel_api_key,
   ].filter((k): k is string => k !== undefined && k !== "");
   const search = createSearchService({ providers: buildProviders(config), cache, log, secrets });
-  const llm = createLlmClient(config);
+  const dailyCap =
+    config.daily_cost_cap_usd !== undefined
+      ? new DailyCostCap({ capUsd: config.daily_cost_cap_usd, dir: config.cache_dir, log })
+      : undefined;
+  const llm = createLlmClient(config, dailyCap !== undefined ? { meter: dailyCap } : {});
   const browser = createBrowserSession(config);
   const fetch = createFetchService({
     fastFetchers: buildFastFetchers(config),
@@ -59,16 +70,33 @@ export function buildDeps(config: Config): Deps {
     log,
     secrets,
   });
-  return { config, log, cache, search, llm, browser, fetch };
+  return { config, log, cache, search, llm, browser, fetch, ...(dailyCap !== undefined && { dailyCap }) };
 }
 
-/** Release everything that holds a process or file handle. Safe to call twice. */
-export async function closeDeps(deps: Deps): Promise<void> {
+/** How long `closeDeps` waits for the browser to close before it gives up and lets the process exit. */
+export const BROWSER_CLOSE_TIMEOUT_MS = 6000;
+
+/**
+ * Release everything that holds a process or file handle. Safe to call twice.
+ * Closing the browser is bounded by `browserCloseTimeoutMs`: a Chromium that
+ * will not close must not keep the server alive, and the caller's forced-exit
+ * timer must be longer than this so it never races a close still in progress.
+ */
+export async function closeDeps(deps: Deps, browserCloseTimeoutMs: number = BROWSER_CLOSE_TIMEOUT_MS): Promise<void> {
   if (deps.browser !== undefined) {
+    let timer: NodeJS.Timeout | undefined;
+    const gaveUp = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), browserCloseTimeoutMs);
+    });
     try {
-      await deps.browser.close();
+      const outcome = await Promise.race([deps.browser.close().then(() => "closed" as const), gaveUp]);
+      if (outcome === "timeout") {
+        log.warn("the browser did not close in time; exiting anyway", { timeout_ms: browserCloseTimeoutMs });
+      }
     } catch (err) {
       log.warn("error while closing the browser session", { error: String(err) });
+    } finally {
+      clearTimeout(timer);
     }
   }
 }
