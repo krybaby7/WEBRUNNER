@@ -5,6 +5,10 @@ on:
   pull_request:
 
 jobs:
+  # Fast path: no browser download. The browser-dependent test files probe for
+  # Chromium and skip their browser suites when it cannot launch; pointing
+  # PLAYWRIGHT_BROWSERS_PATH at a missing directory makes that deterministic
+  # whatever the runner image contains. The browser-tests job below runs them.
   check:
     runs-on: ubuntu-latest
     steps:
@@ -17,3 +21,35 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: /nonexistent
+
+  # Runs the test files that drive a real Chromium (BrowserSession, snapshots,
+  # the browse_task agent, the browser fetcher and the Google Flights recipe and
+  # provider against local fixture pages). No network access or API keys needed.
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # These test files skip themselves when Chromium cannot launch, which would
+      # make a broken install look like a pass. Fail here instead.
+      - name: Verify Chromium launches
+        run: |
+          node --input-type=module -e "
+            import { chromium } from 'playwright';
+            const browser = await chromium.launch({ headless: true });
+            console.log('Chromium', browser.version());
+            await browser.close();
+          "
+      - name: Browser tests
+        run: >
+          npx vitest run
+          test/unit/browser
+          test/unit/flights/google-flights-

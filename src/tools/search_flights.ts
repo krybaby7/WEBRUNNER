@@ -73,106 +73,113 @@ export function registerSearchFlightsTool(server: McpServer, deps: Deps, options
       annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true },
     },
     async (args, extra) => {
-      const parsed = SearchFlightsInputSchema.safeParse(args);
-      if (!parsed.success) {
-        return toolError("invalid_input", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), false);
-      }
-      const input = parsed.data;
-
-      const all = makeProviders(deps);
-      const configured = all.filter((p) => p.isConfigured());
-      if (input.sources === undefined && configured.length === 0) {
-        return toolError(
-          "config",
-          "No flight source is configured. Google Flights needs the browser and ANTHROPIC_API_KEY; Duffel needs DUFFEL_API_KEY.",
-          false,
-        );
-      }
-
-      // Place names resolve asynchronously (LLM fallback); normalizeFlightsInput takes a synchronous resolver.
-      let query: NormalizedFlightsQuery;
       try {
-        const [origin, destination] = await Promise.all([
-          resolvePlace(input.origin, deps.llm),
-          resolvePlace(input.destination, deps.llm),
-        ]);
-        const resolved = new Map<string, string>([
-          [input.origin, origin],
-          [input.destination, destination],
-        ]);
-        query = normalizeFlightsInput(input, deps.config, {
-          resolve: (place) => resolved.get(place),
-          defaultSources: configured.map((p) => p.name),
-        });
+        const parsed = SearchFlightsInputSchema.safeParse(args);
+        if (!parsed.success) {
+          return toolError("invalid_input", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "), false);
+        }
+        const input = parsed.data;
+
+        const all = makeProviders(deps);
+        const configured = all.filter((p) => p.isConfigured());
+        if (input.sources === undefined && configured.length === 0) {
+          return toolError(
+            "config",
+            "No flight source is configured. Google Flights needs the browser and ANTHROPIC_API_KEY; Duffel needs DUFFEL_API_KEY.",
+            false,
+          );
+        }
+
+        // Place names resolve asynchronously (LLM fallback); normalizeFlightsInput takes a synchronous resolver.
+        let query: NormalizedFlightsQuery;
+        try {
+          const [origin, destination] = await Promise.all([
+            resolvePlace(input.origin, deps.llm),
+            resolvePlace(input.destination, deps.llm),
+          ]);
+          const resolved = new Map<string, string>([
+            [input.origin, origin],
+            [input.destination, destination],
+          ]);
+          query = normalizeFlightsInput(input, deps.config, {
+            resolve: (place) => resolved.get(place),
+            defaultSources: configured.map((p) => p.name),
+          });
+        } catch (err) {
+          if (err instanceof FlightsInputError) return toolError("invalid_input", err.message, false);
+          if (err instanceof LlmError) return toolError(err.code, err.message, err.retryable, err.details);
+          const msg = err instanceof Error ? err.message : String(err);
+          deps.log.error("search_flights failed while resolving places", { error: msg });
+          return toolError("internal", `search_flights failed: ${msg}`, false);
+        }
+
+        const failures: Failure[] = [];
+        const used: FlightSource[] = [];
+        const offers: FlightOffer[] = [];
+        const providerCaveats: string[] = [];
+
+        await Promise.all(
+          query.sources.map(async (source) => {
+            const provider = all.find((p) => p.name === source);
+            if (provider === undefined || !provider.isConfigured()) {
+              failures.push({
+                source,
+                error: NOT_CONFIGURED_HINT[source],
+                code: "config",
+                retryable: false,
+                unconfigured: true,
+              });
+              return;
+            }
+            const timeoutMs = options.timeoutsMs?.[source] ?? DEFAULT_TIMEOUTS_MS[source];
+            const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), extra.signal]);
+            try {
+              const found = await raceAbort(
+                (provider as unknown as HookedSearch).search(query, signal, { caveats: providerCaveats }),
+                signal,
+                source,
+                timeoutMs,
+              );
+              used.push(source);
+              offers.push(...found);
+            } catch (err) {
+              const f = classify(err, source);
+              deps.log.warn("flight source failed", { source, code: f.code, error: f.error });
+              failures.push(f);
+            }
+          }),
+        );
+
+        if (used.length === 0) {
+          return failureResult(failures);
+        }
+
+        const { merged, omitted } = mergeOffers(offers, query.currency);
+        const caveats = buildCaveats({ query, merged, omitted, used, providerCaveats });
+
+        const output: SearchFlightsOutput = {
+          query,
+          offers: merged,
+          sources_used: query.sources.filter((s) => used.includes(s)),
+          sources_failed: query.sources
+            .map((s) => failures.find((f) => f.source === s))
+            .filter((f): f is Failure => f !== undefined)
+            .map((f) => ({ source: f.source, error: f.error })),
+          fetched_at: new Date().toISOString(),
+          caveats,
+        };
+        const checked = SearchFlightsOutputSchema.safeParse(output);
+        if (!checked.success) {
+          deps.log.error("search_flights produced an invalid result", { issues: checked.error.issues.length });
+          return toolError("internal", "search_flights produced a result that failed its own schema check", false);
+        }
+        return jsonResult(checked.data);
       } catch (err) {
-        if (err instanceof FlightsInputError) return toolError("invalid_input", err.message, false);
-        if (err instanceof LlmError) return toolError(err.code, err.message, err.retryable, err.details);
-        const msg = err instanceof Error ? err.message : String(err);
-        deps.log.error("search_flights failed while resolving places", { error: msg });
-        return toolError("internal", `search_flights failed: ${msg}`, false);
+        // Anything that escapes the per-source handling above (a throwing provider factory, a merge bug).
+        const message = (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "unknown error";
+        deps.log.error("search_flights failed unexpectedly", { error: message });
+        return toolError("internal", `search_flights failed: ${message}`, false);
       }
-
-      const failures: Failure[] = [];
-      const used: FlightSource[] = [];
-      const offers: FlightOffer[] = [];
-      const providerCaveats: string[] = [];
-
-      await Promise.all(
-        query.sources.map(async (source) => {
-          const provider = all.find((p) => p.name === source);
-          if (provider === undefined || !provider.isConfigured()) {
-            failures.push({
-              source,
-              error: NOT_CONFIGURED_HINT[source],
-              code: "config",
-              retryable: false,
-              unconfigured: true,
-            });
-            return;
-          }
-          const timeoutMs = options.timeoutsMs?.[source] ?? DEFAULT_TIMEOUTS_MS[source];
-          const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), extra.signal]);
-          try {
-            const found = await raceAbort(
-              (provider as unknown as HookedSearch).search(query, signal, { caveats: providerCaveats }),
-              signal,
-              source,
-              timeoutMs,
-            );
-            used.push(source);
-            offers.push(...found);
-          } catch (err) {
-            const f = classify(err, source);
-            deps.log.warn("flight source failed", { source, code: f.code, error: f.error });
-            failures.push(f);
-          }
-        }),
-      );
-
-      if (used.length === 0) {
-        return failureResult(failures);
-      }
-
-      const { merged, omitted } = mergeOffers(offers, query.currency);
-      const caveats = buildCaveats({ query, merged, omitted, used, providerCaveats });
-
-      const output: SearchFlightsOutput = {
-        query,
-        offers: merged,
-        sources_used: query.sources.filter((s) => used.includes(s)),
-        sources_failed: query.sources
-          .map((s) => failures.find((f) => f.source === s))
-          .filter((f): f is Failure => f !== undefined)
-          .map((f) => ({ source: f.source, error: f.error })),
-        fetched_at: new Date().toISOString(),
-        caveats,
-      };
-      const checked = SearchFlightsOutputSchema.safeParse(output);
-      if (!checked.success) {
-        deps.log.error("search_flights produced an invalid result", { issues: checked.error.issues.length });
-        return toolError("internal", "search_flights produced a result that failed its own schema check", false);
-      }
-      return jsonResult(checked.data);
     },
   );
 }
