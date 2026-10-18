@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mini Shop</title>
+</head>
+<body>
+  <h1>Mini Shop</h1>
+  <p>A tiny two-page shop used to test the browse agent.</p>
+
+  <form action="/results.html" method="get" aria-label="Product search">
+    <label for="q">Search products</label>
+    <input id="q" name="q" type="search">
+    <button type="submit">Search</button>
+  </form>
+
+  <nav>
+    <a href="/results.html">All results</a>
+    <a href="__OTHER_ORIGIN__/results.html">Partner site</a>
+    <a href="/download.bin">Price list file</a>
+  </nav>
+
+  <!-- Outside the search form on purpose. The test server counts hits on /__bought. -->
+  <button type="button" onclick="fetch('/__bought'); this.textContent = 'Order placed'">Buy now</button>
+  <button type="button" onclick="location.href = '__OTHER_ORIGIN__/results.html'">Open partner page</button>
+</body>
+</html>
