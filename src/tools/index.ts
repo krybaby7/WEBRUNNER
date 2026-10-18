@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Deps } from "../deps.js";
+import { registerAccountsTool } from "./accounts.js";
 import { registerBrowseTaskTool } from "./browse_task.js";
 import { registerDeepResearchTool } from "./deep_research.js";
 import { registerHealthTool } from "./health.js";
@@ -20,6 +21,7 @@ export const TOOL_NAMES = [
   "browse_task",
   "search_flights",
   "deep_research",
+  "accounts",
   "health",
 ] as const;
 
@@ -31,5 +33,6 @@ export function registerTools(server: McpServer, deps: Deps): void {
   registerBrowseTaskTool(server, deps);
   registerSearchFlightsTool(server, deps);
   registerDeepResearchTool(server, deps);
+  registerAccountsTool(server, deps);
   registerHealthTool(server, deps, TOOL_NAMES);
 }

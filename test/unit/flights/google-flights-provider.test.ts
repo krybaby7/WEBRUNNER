@@ -33,6 +33,9 @@ function fakeBrowser(): BrowserSession & { acquire: ReturnType<typeof vi.fn>; re
     close: vi.fn(),
     isOpen: () => true,
     stats: () => ({}) as never,
+    cookies: () => Promise.resolve([]),
+    clearCookies: () => Promise.resolve(0),
+    openUnpooledPage: () => Promise.reject(new Error("fakeBrowser: openUnpooledPage is not available")),
   } as never;
 }
 

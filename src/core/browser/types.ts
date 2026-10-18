@@ -15,6 +15,26 @@ export interface BrowserSession {
   /** True while a browser or CDP connection is up. False before first use and after close. */
   isOpen(): boolean;
   stats(): BrowserSessionStats;
+  /** Cookies visible to the shared context, optionally only those sent to these URLs. Launches or attaches if needed. */
+  cookies(urls?: string[]): Promise<BrowserCookie[]>;
+  /** Remove cookies whose domain matches (exact, or a leading-dot parent). Persistent mode only; CDP mode throws. Returns how many were removed. */
+  clearCookies(filter: { domain: string }): Promise<number>;
+  /** A page that is not counted against the pool, for long-lived interactive use (login windows). Closed by `close()`. */
+  openUnpooledPage(): Promise<Page>;
+}
+
+/**
+ * PLAN.md 14.8. A cookie as reported by `BrowserSession.cookies()`: there is
+ * no `value` field, by design, so a cookie value can never reach a tool
+ * result or a log line. `expires` is Unix seconds, or -1 for a session cookie.
+ */
+export interface BrowserCookie {
+  name: string;
+  domain: string;
+  path: string;
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
 }
 
 export interface BrowserSessionStats {

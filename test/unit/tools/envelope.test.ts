@@ -4,6 +4,7 @@ import type { FlightProvider } from "../../../src/core/flights/types.js";
 import type { SearchService } from "../../../src/core/search/index.js";
 import type { Deps } from "../../../src/deps.js";
 import { ErrorEnvelopeSchema } from "../../../src/schemas/error.js";
+import { registerAccountsTool } from "../../../src/tools/accounts.js";
 import { registerBrowseTaskTool } from "../../../src/tools/browse_task.js";
 import { registerDeepResearchTool } from "../../../src/tools/deep_research.js";
 import { registerFetchPageTool } from "../../../src/tools/fetch_page.js";
@@ -93,6 +94,16 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
   deep_research: {
     args: { question: "what is going on?" },
     register: (server, deps) => registerDeepResearchTool(server, deps, () => Promise.reject(boom())),
+  },
+  accounts: {
+    args: { action: "list" },
+    // The service factory throws before any action runs: only the catch-all can turn it into an envelope.
+    register: (server, deps) =>
+      registerAccountsTool(server, deps, {
+        service: () => {
+          throw boom();
+        },
+      }),
   },
   health: {
     args: {},

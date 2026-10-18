@@ -1,7 +1,13 @@
 import { createServer } from "node:net";
 import { chromium, type Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { MAX_CONCURRENT_PAGES, createBrowserSession, resolveHeadless } from "../../../src/core/browser/session.js";
+import {
+  MAX_CONCURRENT_PAGES,
+  cookieDomainMatches,
+  cookieDomainPattern,
+  createBrowserSession,
+  resolveHeadless,
+} from "../../../src/core/browser/session.js";
 import { makeConfig, makeTempDir, probeChromium, removeDir, startFixtureServer, type FixtureServer } from "./helpers.js";
 
 const probe = await probeChromium();
@@ -30,6 +36,32 @@ describe("resolveHeadless (no browser needed)", () => {
   it("is headful on macOS and Windows", () => {
     expect(resolveHeadless(unset, {}, "darwin")).toBe(false);
     expect(resolveHeadless(unset, {}, "win32")).toBe(false);
+  });
+});
+
+describe("cookie domain matching (no browser needed)", () => {
+  it("matches the same host, a leading-dot parent and subdomains, ignoring case and dots on either side", () => {
+    for (const filter of ["reddit.com", ".reddit.com", "Reddit.COM"]) {
+      expect(cookieDomainMatches("reddit.com", filter)).toBe(true);
+      expect(cookieDomainMatches(".reddit.com", filter)).toBe(true);
+      expect(cookieDomainMatches("www.reddit.com", filter)).toBe(true);
+      expect(cookieDomainMatches(".old.reddit.com", filter)).toBe(true);
+      expect(cookieDomainMatches("notreddit.com", filter)).toBe(false);
+      expect(cookieDomainMatches("reddit.com.evil.test", filter)).toBe(false);
+    }
+    expect(cookieDomainMatches("127.0.0.1", "127.0.0.1")).toBe(true);
+    expect(cookieDomainMatches("anything", "")).toBe(false);
+  });
+
+  it("builds the equivalent RegExp for Playwright, with metacharacters escaped", () => {
+    const re = cookieDomainPattern("reddit.com");
+    expect(re.test("reddit.com")).toBe(true);
+    expect(re.test(".reddit.com")).toBe(true);
+    expect(re.test("www.reddit.com")).toBe(true);
+    expect(re.test("notreddit.com")).toBe(false);
+    expect(re.test("redditXcom")).toBe(false);
+    expect(cookieDomainPattern("127.0.0.1").test("127.0.0.1")).toBe(true);
+    expect(cookieDomainPattern("127.0.0.1").test("127a0b0c1")).toBe(false);
   });
 });
 
@@ -208,7 +240,12 @@ describe.skipIf(!probe.available)(`BrowserSession${probe.available ? "" : ` (${p
       await page.goto(`${server.url}/article.html`);
       expect(await page.title()).toContain("Tides");
       expect(owner.pages().some((p) => p.url().endsWith("/article.html"))).toBe(true);
+      // Cookies can be read through the attached Chrome, but never changed (PLAN.md 14.7).
+      await page.goto(`${server.url}/set-cookie`);
       await session.release(page);
+      expect((await session.cookies()).map((c) => c.name)).toContain("wr_test");
+      await expect(session.clearCookies({ domain: "127.0.0.1" })).rejects.toThrow(/never changes the cookies of your own Chrome/);
+      expect((await owner.cookies(server.url)).map((c) => c.name)).toContain("wr_test");
       await session.close();
       // Attached sessions disconnect; they never kill the owner's browser.
       expect(owner.browser()?.isConnected()).toBe(true);
@@ -248,4 +285,98 @@ describe.skipIf(!probe.available)(`BrowserSession${probe.available ? "" : ` (${p
       await second.close();
     }
   }, 45_000);
+
+  it("cookies() launches lazily and reports cookies without a value field", async () => {
+    const { session } = await newSession();
+    try {
+      expect(session.isOpen()).toBe(false);
+      expect(await session.cookies()).toEqual([]);
+      expect(session.isOpen()).toBe(true);
+
+      const page = await session.acquire();
+      await page.goto(`${server.url}/set-cookie`);
+      await session.release(page);
+
+      const all = await session.cookies();
+      const wr = all.find((c) => c.name === "wr_test");
+      expect(wr).toMatchObject({ name: "wr_test", domain: "127.0.0.1", path: "/", httpOnly: false });
+      expect(wr?.expires).toBeGreaterThan(Date.now() / 1000);
+      for (const c of all) {
+        expect(Object.keys(c).sort()).toEqual(["domain", "expires", "httpOnly", "name", "path", "secure"]);
+        expect("value" in c).toBe(false);
+      }
+      expect(JSON.stringify(all)).not.toContain("persisted-value");
+
+      // The URL filter keeps cookies that would be sent to that URL only.
+      expect((await session.cookies([server.url])).map((c) => c.name)).toContain("wr_test");
+      expect(await session.cookies(["https://elsewhere.example/"])).toEqual([]);
+      // Pool accounting is untouched by cookie reads.
+      expect(session.stats()).toMatchObject({ activePages: 0, totalAcquired: 1 });
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("clearCookies removes the domain, its leading-dot form and subdomains, counts them, and leaves lookalikes", async () => {
+    const { session } = await newSession();
+    try {
+      const page = await session.acquire();
+      const ctx = page.context();
+      const base = { value: "v", path: "/", expires: Math.floor(Date.now() / 1000) + 3600, httpOnly: false, secure: false, sameSite: "Lax" as const };
+      await ctx.addCookies([
+        { ...base, name: "a", domain: ".example.test" },
+        { ...base, name: "b", domain: "www.example.test" },
+        { ...base, name: "c", domain: "example.test" },
+        { ...base, name: "d", domain: "notexample.test" },
+        { ...base, name: "e", domain: ".example.test.evil.test" },
+      ]);
+      await session.release(page);
+      expect(await session.cookies()).toHaveLength(5);
+
+      expect(await session.clearCookies({ domain: "example.test" })).toBe(3);
+      expect((await session.cookies()).map((c) => c.name).sort()).toEqual(["d", "e"]);
+      expect(await session.clearCookies({ domain: "example.test" })).toBe(0);
+      expect(await session.clearCookies({ domain: ".notexample.test" })).toBe(1);
+      expect((await session.cookies()).map((c) => c.name)).toEqual(["e"]);
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("openUnpooledPage is outside the pool: not counted, available while the pool is full, closed by release or close", async () => {
+    const { session } = await newSession();
+    try {
+      const held = await Promise.all([session.acquire(), session.acquire(), session.acquire()]);
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 0 });
+
+      // A full pool does not block it.
+      const login = await session.openUnpooledPage();
+      expect(login.isClosed()).toBe(false);
+      expect(login.context()).toBe((held[0] as Page).context());
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 0, totalAcquired: 3 });
+      await login.goto(`${server.url}/article.html`);
+      expect(await login.title()).toContain("Tides");
+
+      // release() closes it and frees no slot: a waiter still waits.
+      const waiter = session.acquire();
+      await session.release(login);
+      expect(login.isClosed()).toBe(true);
+      expect(await settled(waiter)).toBe("pending");
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 1 });
+      await session.release(held[0] as Page);
+      await session.release(await waiter);
+      for (const p of held.slice(1)) await session.release(p);
+
+      // close() closes a still-open unpooled page.
+      const other = await session.openUnpooledPage();
+      const closedEvent = new Promise<void>((resolve) => other.once("close", () => resolve()));
+      await session.close();
+      await closedEvent;
+      expect(other.isClosed()).toBe(true);
+      await expect(session.openUnpooledPage()).rejects.toThrow(/closed/);
+      await expect(session.cookies()).rejects.toThrow(/closed/);
+    } finally {
+      await session.close();
+    }
+  }, 40_000);
 });
