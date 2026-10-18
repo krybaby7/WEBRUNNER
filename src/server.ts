@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Config } from "./config.js";
-import { buildDeps } from "./deps.js";
+import type { Deps } from "./deps.js";
 import { registerTools } from "./tools/index.js";
 
 const SERVER_NAME = "webrunner";
@@ -14,8 +13,8 @@ export function getVersion(): string {
   return parsed.version;
 }
 
-export function buildServer(config: Config): McpServer {
+export function buildServer(deps: Deps): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: getVersion() });
-  registerTools(server, buildDeps(config));
+  registerTools(server, deps);
   return server;
 }

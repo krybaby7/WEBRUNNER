@@ -160,7 +160,7 @@ webrunner/
 
 All tools return JSON in the MCP `content` as a single `text` block containing a JSON string, plus `structuredContent` where the client supports it. Use `jsonResult(data)` from `src/schemas/result.ts` for success and `toolError(code, message, retryable, details?)` from `src/schemas/error.ts` for failure. All errors use the error envelope in 3.6. All timestamps are ISO 8601 UTC.
 
-Tool wiring convention (DECIDED): each tool lives in `src/tools/<name>.ts` and exports `register<Name>Tool(server: McpServer, deps: Deps)`. It is wired by adding one line to `src/tools/index.ts`. Tools receive everything they need through `Deps` (`src/deps.ts`); a work package that introduces a new shared service (cache, llm, search, fetch, browser) adds one optional field to `Deps` and populates it in `buildDeps`.
+Tool wiring convention (DECIDED): each tool lives in `src/tools/<name>.ts` and exports `register<Name>Tool(server: McpServer, deps: Deps)`. It is wired by adding one line to `src/tools/index.ts`. Tools receive everything they need through `Deps` (`src/deps.ts`). `Deps` already carries `config`, `log`, `cache`, `search`, `llm` and `browser` (lazy `BrowserSession`, closed by `closeDeps` on shutdown); WP5 adds `fetch`. Input validation: tools pass their zod schema as `inputSchema`, so the MCP SDK rejects malformed input before the handler runs with the SDK's own error rather than a 3.6 envelope. This is accepted (DECIDED); the envelope's `invalid_input` code is for semantic failures the schema cannot express, such as an unresolvable city name.
 
 ### 3.1 `web_search`
 
@@ -278,20 +278,30 @@ Output:
     url: string;
     title: string;
     accessed_at: string;
+    published_at?: string;      // ISO 8601 UTC when the page or search result carried a date
     used_for: string;           // one line on what this source supported
   }>;
   gaps: string[];               // what could not be established
+  depth: "quick" | "standard" | "deep";   // echo of the effective depth
   stats: {
     searches: number;
     pages_read: number;
+    pages_failed: number;       // fetches that errored and were skipped
     iterations: number;
     input_tokens: number;
     output_tokens: number;
-    cost_usd: number;
+    cost_usd: number;           // LLM spend only; search and fetch provider fees are not metered
     elapsed_ms: number;
+    stopped_reason: "converged" | "iterations" | "budget" | "searches" | "reads" | "no_results";
   };
 }
 ```
+
+`findings[]` also carries an optional `quote: string` (verbatim supporting text from the source, 300 characters max) so a judge can check that a source actually supports the claim.
+
+Invariants (DECIDED): every `[n]` in `report_markdown` has a matching `sources[].id`; every `findings[].source_ids` entry exists in `sources`; `sources[].id` are contiguous from 1 in first-citation order; no claim in the report lacks a citation except in the `gaps` section.
+
+Engine entry point (DECIDED): `src/core/research/engine.ts` exports `runResearch(input: DeepResearchInput, deps: ResearchDeps): Promise<DeepResearchResult>` where `ResearchDeps = { search: SearchService; fetch: FetchService; llm: LlmClient; log: Logger; config: Config; now?: () => number }`. The input and result zod schemas live in `src/schemas/deep_research.ts`; the eval runner (`test/evals/research/schema.ts`) switches to importing them in WP8.
 
 Behavior: see Section 5.
 
@@ -374,12 +384,14 @@ Output:
     booking_url?: string;
     fare_notes?: string[];                // e.g. "Basic economy, no carry-on"
   }>;
-  sources_used: string[];
-  sources_failed: Array<{ source: string; error: string }>;
+  sources_used: FlightSource[];
+  sources_failed: Array<{ source: FlightSource; error: string }>;
   fetched_at: string;
   caveats: string[];            // e.g. "Google Flights showed 'prices may change'"
 }
 ```
+
+Field definitions (DECIDED, as implemented in `src/schemas/flights.ts`): `airline` is the 2-character IATA carrier code and `flight_number` is carrier code plus number with no space (`BA117`). `depart_at` and `arrive_at` are local times; the UTC offset is present only when the source provides it. Each slice has exactly `segments.length - 1` layovers. `query` echoes `NormalizedFlightsQuerySchema` (resolved IATA codes, fully populated passengers, resolved sources, currency always set). Passenger limits: at least 1 adult, infants no more than adults, at most 9 in total. Duffel prices children at an assumed age of 8 and infants at 1 because the contract carries counts only; an optional `child_ages` input is deferred. Duffel returns offers in the airline's currency and cannot convert, so when any offer's currency differs from `query.currency` the tool adds a caveat and sorts within currency groups rather than across them. `max_stops` unset means "provider default", which differs between sources (Duffel defaults to 1 connection); the tool says so in a caveat when sources disagree. Each provider caps at 30 offers before the tool merges and re-sorts.
 
 Behavior:
 - Google Flights via recipe (Section 4.5). Build the search URL directly from parameters where possible, fall back to form interaction.
@@ -416,7 +428,7 @@ interface SearchQuery { query: string; maxResults: number; recency?: Recency; in
 interface RawResult { url: string; title: string; snippet: string; publishedAt?: string; rank: number; }
 ```
 
-URL canonicalization (used for dedupe and cache keys): lowercase scheme and host, strip `www.`, strip fragment, strip tracking params (`utm_*`, `fbclid`, `gclid`, `ref`), strip trailing slash, sort remaining query params.
+URL canonicalization (used for dedupe and cache keys): lowercase scheme and host, strip `www.`, strip fragment, strip tracking params (`utm_*`, `fbclid`, `gclid`, `ref`, `ref_src`, `mc_cid`, `mc_eid`, `igshid`), strip trailing slash except on the root path, remove default ports, sort remaining query params. Implemented in `canonical.ts` (WP2).
 
 `published_at` normalization (DECIDED, implemented in `normalize.ts`): a mapper converts anything `Date.parse` accepts to ISO 8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`); a date-only or zone-less value is read as UTC; numbers are epoch seconds (values of 1e12 and above are milliseconds); strings without a 4-digit year and anything unparseable are omitted, never passed through raw.
 
@@ -640,7 +652,7 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 
 **WP11: Recipe framework and Google Flights recipe** (after WP4, WP6; parallel with WP10)
 - Depends on: WP4, WP6.
-- Deliver: `Recipe` interface, registry, `google-flights.ts` with `buildUrl` for one-way and round-trip, wait strategy, "show more flights" expansion, LLM extraction to the `search_flights` offer schema, city-to-IATA resolution (static table of top 300 airports plus LLM fallback), currency handling. `search_flights` tool.
+- Deliver: `Recipe` interface, registry, `google-flights.ts` with `buildUrl` for one-way and round-trip, wait strategy, "show more flights" expansion, LLM extraction to the `search_flights` offer schema, city-to-IATA resolution via the existing `resolveIata` (WP12) plus an LLM fallback through the `extractor` role when it returns `undefined`, currency caveats per 3.5. `search_flights` tool merging Duffel (`buildAllFlightProviders` in WP12 lists unconfigured providers for `sources_failed`) and the Google Flights recipe.
 - Accept: fixture test: saved Google Flights results DOM text → extractor → offers that validate against the schema with prices, times, airlines and stops populated. Integration test (gated) runs a real search for a route 30 days out and returns at least 5 offers. Blocked page returns `blocked` error, not garbage.
 
 **WP12: Duffel provider for `search_flights`** (parallel with WP11, after WP0)
@@ -776,5 +788,6 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP2/WP9/WP12**: `Deps` now carries `llm` and `browser` with `closeDeps` on shutdown, so WP5, WP10 and WP11 consume rather than create them. 3.3 gained `published_at` on sources, `quote` on findings, `depth`, `stats.pages_failed`, `stats.stopped_reason`, the citation invariants and the engine entry point, all from the WP9 judge's needs. 3.5 gained field definitions, passenger limits and the currency and `max_stops` caveats from WP12. Canonicalization list unified between 3.1 and 4.1. SDK-level input validation accepted in place of `invalid_input` envelopes for malformed input.
 - **2026-10-18, after WP1/WP3/WP4/WP6**: recorded the implemented shapes for search normalization, bot-wall semantics (returned vs thrown), the browser session and snapshot contracts, and the LLM client (`Usage`, `LlmError`, per-run `CostMeter`, `maxTokens: 16000` for planner calls). WP5 now depends on WP2 for the cache and owns wiring the shared `BrowserSession` into `Deps` and shutdown. Jina's `X-Return-Format` header is dropped in WP5. PDF extraction and a Chromium CI job were added to WP14. Playwright is pinned to 1.56.1 to match the Chromium build shipped with the dev environment; the README (WP13) must say to run `npx playwright install chromium` elsewhere. `vitest.config.ts` includes `test/integration/**` only when `RUN_INTEGRATION=1`.
 - **2026-10-18, after WP0**: added `src/deps.ts`, `src/schemas/result.ts`, `src/tools/index.ts` and the tool wiring convention; moved `ping` to `src/tools/ping.ts`. Added config keys for browser profile dir, screenshots, currency and per-role model overrides so WP4, WP6, WP10 and WP11 do not each edit `config.ts`. Pinned MCP SDK to the 1.32.x line for v1. Made `ANTHROPIC_API_KEY` optional at startup. Fixed `published_at` normalization. All raised by the WP0 implementer's report.

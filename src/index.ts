@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ConfigError, loadConfig } from "./config.js";
+import { buildDeps, closeDeps } from "./deps.js";
 import { log, setLogLevel } from "./log.js";
 import { buildServer } from "./server.js";
 
@@ -19,7 +20,8 @@ async function main(): Promise<void> {
   }
   setLogLevel(config.log_level);
 
-  const server = buildServer(config);
+  const deps = buildDeps(config);
+  const server = buildServer(deps);
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;
@@ -28,13 +30,14 @@ async function main(): Promise<void> {
     shuttingDown = true;
     log.info("shutting down", { reason });
     // Last resort so a stuck close never leaves the process hanging.
-    setTimeout(() => process.exit(0), 2000).unref();
+    setTimeout(() => process.exit(0), 5000).unref();
     try {
       await server.close();
     } catch (err) {
       log.error("error while closing server", { error: String(err) });
       process.exitCode = 1;
     }
+    await closeDeps(deps);
   };
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
