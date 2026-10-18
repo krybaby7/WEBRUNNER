@@ -2,6 +2,9 @@ import type { Config } from "./config.js";
 import { createBrowserSession } from "./core/browser/session.js";
 import type { BrowserSession } from "./core/browser/types.js";
 import { createCache, type Cache } from "./core/cache/index.js";
+import { createFetchService, type FetchService } from "./core/fetch/index.js";
+import { BrowserFetcher } from "./core/fetch/browser.js";
+import { buildFastFetchers } from "./core/fetch/fast/index.js";
 import { createLlmClient } from "./core/llm/index.js";
 import type { LlmClient } from "./core/llm/types.js";
 import { createSearchService, type SearchService } from "./core/search/index.js";
@@ -30,6 +33,8 @@ export interface Deps {
    * `acquire()`; `closeDeps` closes it on shutdown.
    */
   browser?: BrowserSession;
+  /** URL to Markdown with fast fetchers, a browser fallback and a cache (PLAN.md 3.2). Set by buildDeps. */
+  fetch?: FetchService;
 }
 
 export function buildDeps(config: Config): Deps {
@@ -47,7 +52,14 @@ export function buildDeps(config: Config): Deps {
   const search = createSearchService({ providers: buildProviders(config), cache, log, secrets });
   const llm = createLlmClient(config);
   const browser = createBrowserSession(config);
-  return { config, log, cache, search, llm, browser };
+  const fetch = createFetchService({
+    fastFetchers: buildFastFetchers(config),
+    browserFetcher: new BrowserFetcher(browser),
+    cache,
+    log,
+    secrets,
+  });
+  return { config, log, cache, search, llm, browser, fetch };
 }
 
 /** Release everything that holds a process or file handle. Safe to call twice. */
