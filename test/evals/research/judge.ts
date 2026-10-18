@@ -125,6 +125,8 @@ Citation rules:
 - The task includes a locally computed citation check. Treat it as ground truth about which numbers are dangling.
 - Penalize factual claims, figures and dates that carry no citation, and sources whose "used_for" line does not plausibly support the claim they are cited for.
 - A source must be a plausible primary or authoritative source for the claim. Aggregators and marketing pages for official facts are weaker.
+- Findings may carry a verbatim "quote" from the source. Use it to check that the cited source actually supports the claim: a quote that does not back the claim, or a claim that goes beyond its quote, counts against the report.
+- Sources may carry a "published" date. Use it for recency criteria, comparing it with today's date, rather than guessing from the title or URL. A source with no published date cannot establish that something is recent.
 
 Verdict fields:
 - overall_score: 0 to 10 for the report as a whole. 0 to 2 is useless or misleading, 3 to 4 is weak, 5 to 6 is acceptable, 7 to 8 is good, 9 to 10 is excellent and would beat a strong human-written answer. Dangling citations, unsourced key claims and ignored gaps must lower it.
@@ -139,14 +141,20 @@ function formatRubric(rubric: readonly Criterion[]): string {
 function formatSources(result: DeepResearchResult): string {
   if (result.sources.length === 0) return "(the sources list is empty)";
   return result.sources
-    .map((s) => `[${s.id}] ${s.title} | ${s.url} | accessed ${s.accessed_at}\n    used for: ${s.used_for}`)
+    .map((s) => {
+      const published = s.published_at !== undefined ? ` | published ${s.published_at}` : "";
+      return `[${s.id}] ${s.title} | ${s.url}${published} | accessed ${s.accessed_at}\n    used for: ${s.used_for}`;
+    })
     .join("\n");
 }
 
 function formatFindings(result: DeepResearchResult): string {
   if (result.findings.length === 0) return "(no findings were returned)";
   return result.findings
-    .map((f) => `- (${f.confidence}) ${f.claim} [sources: ${f.source_ids.join(", ") || "none"}]`)
+    .map((f) => {
+      const line = `- (${f.confidence}) ${f.claim} [sources: ${f.source_ids.join(", ") || "none"}]`;
+      return f.quote !== undefined ? `${line}\n    quote: "${f.quote}"` : line;
+    })
     .join("\n");
 }
 

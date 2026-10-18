@@ -5,12 +5,16 @@
     {
       "claim": "The committee left the target range unchanged at its most recent meeting.",
       "confidence": "high",
-      "source_ids": [1]
+      "source_ids": [
+        1
+      ]
     },
     {
       "claim": "The statement signalled patience on further changes.",
       "confidence": "medium",
-      "source_ids": [7]
+      "source_ids": [
+        7
+      ]
     }
   ],
   "sources": [
@@ -19,7 +23,8 @@
       "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
       "title": "Federal Reserve issues FOMC statement",
       "accessed_at": "2026-10-18T09:10:00.000Z",
-      "used_for": "The rate decision."
+      "used_for": "The rate decision.",
+      "published_at": "2026-09-16T18:00:00.000Z"
     },
     {
       "id": 2,
@@ -30,13 +35,16 @@
     }
   ],
   "gaps": [],
+  "depth": "standard",
   "stats": {
     "searches": 8,
     "pages_read": 11,
+    "pages_failed": 0,
     "iterations": 2,
     "input_tokens": 90000,
     "output_tokens": 6100,
     "cost_usd": 0.74,
-    "elapsed_ms": 61000
+    "elapsed_ms": 61000,
+    "stopped_reason": "iterations"
   }
 }
