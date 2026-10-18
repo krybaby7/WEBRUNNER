@@ -1,0 +1,12 @@
+{
+  "results": [
+    { "url": "https://example.org/page-1", "title": "Canberra: the capital of Australia", "snippet": "Canberra is the capital city of Australia, chosen in 1908.", "published_at": "2024-05-01T00:00:00.000Z" },
+    { "url": "https://example.org/page-2", "title": "Why Sydney and Melbourne lost out", "snippet": "The compromise that placed the capital between the two rivals.", "published_at": "2023-11-12T00:00:00.000Z" },
+    { "url": "https://example.org/page-3", "title": "Walter Burley Griffin and the design of Canberra", "snippet": "The 1912 design competition and the Griffins' plan." },
+    { "url": "https://example.org/page-4", "title": "The name Canberra", "snippet": "How the city got its name in 1913." },
+    { "url": "https://example.org/page-5", "title": "National Capital Authority fact sheet", "snippet": "Facts about the Australian Capital Territory." },
+    { "url": "https://example.org/page-6", "title": "A short note on road signs", "snippet": "Road signs in the capital follow the national standard." },
+    { "url": "https://spam.example.com/buy-cheap-flights?utm_source=x", "title": "SPAM: buy cheap flights to Canberra now", "snippet": "Best deals." },
+    { "url": "https://spam.example.com/clickbait", "title": "SPAM: ten things you will not believe", "snippet": "Click here." }
+  ]
+}
