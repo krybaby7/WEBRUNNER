@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "title": "Tokio vs async-std vs smol: choosing a Rust async runtime",
+      "url": "https://blog.example.dev/rust-async-runtimes",
+      "snippet": "Tokio remains the default choice for network services, while smol keeps the dependency tree small.",
+      "date": "2025-03-11",
+      "last_updated": "2025-09-25"
+    },
+    {
+      "title": "Async runtimes - Asynchronous Programming in Rust",
+      "url": "https://rust-lang.github.io/async-book/08_ecosystem/00_chapter.html",
+      "snippet": "The Rust standard library does not ship an executor, so applications pick a runtime from the ecosystem.",
+      "date": null,
+      "last_updated": null
+    },
+    {
+      "title": "smol-rs/smol: A small and fast async runtime",
+      "url": "https://github.com/smol-rs/smol",
+      "snippet": "A small and fast async runtime.",
+      "date": "2025-09-25T10:00:00-05:00",
+      "last_updated": "2025-09-25"
+    },
+    {
+      "title": "Runtime roundup",
+      "url": "https://news.example.org/runtime-roundup",
+      "snippet": "A monthly digest of Rust runtime news.",
+      "date": "n/a",
+      "last_updated": null
+    }
+  ],
+  "id": "00000000-0000-0000-0000-000000000000",
+  "server_time": null
+}
