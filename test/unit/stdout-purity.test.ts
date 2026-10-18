@@ -96,6 +96,7 @@ describe("stdio server smoke test", () => {
 
     const list = byId.get(2)?.result as { tools: Array<{ name: string }> } | undefined;
     expect(list?.tools.map((t) => t.name)).toContain("ping");
+    expect(list?.tools.map((t) => t.name)).toContain("web_search");
 
     const ping = byId.get(3)?.result as
       | { content: Array<{ type: string; text: string }>; structuredContent: Record<string, unknown> }
