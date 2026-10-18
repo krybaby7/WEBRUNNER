@@ -9,3 +9,5 @@ browser-profile/
 .browser-profile/
 profile/
 .DS_Store
+# agent worktrees created by Claude Code sessions
+.claude/worktrees/

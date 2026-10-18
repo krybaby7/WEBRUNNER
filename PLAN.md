@@ -1,6 +1,6 @@
 # WEBRUNNER: Implementation Plan
 
-> Repository: github.com/krybaby7/WEBRUNNER. Package name: `webrunner`.
+> Repository: github.com/krybaby7/WEBRUNNER (GitHub slugs are case-insensitive). The npm package and all code use lowercase `webrunner`.
 > Status: v1 plan, not yet started.
 > Audience: an orchestrator model (Claude Fable 5.1) that delegates work packages to implementer models (Claude Sonnet 5.5), and the human owner who reviews PRs.
 
@@ -39,6 +39,8 @@ A single MCP server, run locally over stdio, that gives Claude Code and Codex fo
 - **DECIDED: stdio transport only for v1.** No HTTP transport. Simpler security story for a personal tool.
 - **DECIDED: all logging to stderr.** stdout is the MCP protocol channel. A single stray `console.log` breaks the server. Lint rule enforces this.
 - **DECIDED: the server calls the Claude API directly** for research and extraction, via the official `@anthropic-ai/sdk`. Claude Code and Codex see one tool call, not forty.
+- **DECIDED: MCP SDK 1.32.x (the v1 line) for v1 of this project.** The SDK's v2 packages (`@modelcontextprotocol/server`) became the stable line in July 2026 and v1 is in maintenance for at least six months from then. v1 is what the scaffold, tests and docs are built on; WP14 evaluates the migration.
+- **DECIDED: `ANTHROPIC_API_KEY` is optional at startup.** Search and fetch work without it. Tools that need the LLM (`deep_research`, `browse_task`, LLM extraction in recipes) return error code `config` when it is unset.
 - Terms of service: scraping Google Flights violates Google's ToS. Acceptable for personal use by the owner's explicit decision. The repo README must say so and the server must not be published as a hosted service.
 
 ---
@@ -88,10 +90,13 @@ webrunner/
   tsconfig.json
   src/
     index.ts                  entry: build server, register tools, stdio
-    server.ts                 McpServer construction
+    server.ts                 McpServer construction, calls registerTools
+    deps.ts                   Deps passed to every tool: config, log, later cache/llm/search/fetch/browser
     config.ts                 env/config loading + validation (zod)
     log.ts                    stderr logger
     tools/
+      index.ts                registerTools(server, deps): one line per tool
+      ping.ts
       web_search.ts
       fetch_page.ts
       deep_research.ts
@@ -130,6 +135,8 @@ webrunner/
       cache/
         index.ts              disk cache (content-addressed JSON)
     schemas/                  zod schemas shared by tools and tests
+      error.ts                error envelope + toolError()
+      result.ts               jsonResult() success helper
   test/
     unit/
     fixtures/                 recorded provider responses
@@ -146,7 +153,9 @@ webrunner/
 
 ## 3. Tool contracts (source of truth)
 
-All tools return JSON in the MCP `content` as a single `text` block containing a JSON string, plus `structuredContent` where the client supports it. All errors use the error envelope in 3.6. All timestamps are ISO 8601 UTC.
+All tools return JSON in the MCP `content` as a single `text` block containing a JSON string, plus `structuredContent` where the client supports it. Use `jsonResult(data)` from `src/schemas/result.ts` for success and `toolError(code, message, retryable, details?)` from `src/schemas/error.ts` for failure. All errors use the error envelope in 3.6. All timestamps are ISO 8601 UTC.
+
+Tool wiring convention (DECIDED): each tool lives in `src/tools/<name>.ts` and exports `register<Name>Tool(server: McpServer, deps: Deps)`. It is wired by adding one line to `src/tools/index.ts`. Tools receive everything they need through `Deps` (`src/deps.ts`); a work package that introduces a new shared service (cache, llm, search, fetch, browser) adds one optional field to `Deps` and populates it in `buildDeps`.
 
 ### 3.1 `web_search`
 
@@ -327,7 +336,7 @@ Input:
   cabin?: "economy" | "premium_economy" | "business" | "first";  // default economy
   max_stops?: 0 | 1 | 2;
   sources?: ("google_flights" | "duffel")[];  // default: all configured
-  currency?: string;            // ISO 4217; default from config
+  currency?: string;            // ISO 4217; default config.currency (WEBRUNNER_CURRENCY, USD)
 }
 ```
 
@@ -402,6 +411,8 @@ interface RawResult { url: string; title: string; snippet: string; publishedAt?:
 
 URL canonicalization (used for dedupe and cache keys): lowercase scheme and host, strip `www.`, strip fragment, strip tracking params (`utm_*`, `fbclid`, `gclid`, `ref`), strip trailing slash, sort remaining query params.
 
+`published_at` normalization (DECIDED): providers return dates in many shapes. A mapper converts anything `Date.parse` accepts to ISO 8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`); a date-only value becomes midnight UTC; anything unparseable is omitted, never passed through raw.
+
 ### 4.2 `Fetcher`
 
 ```ts
@@ -474,7 +485,7 @@ interface LlmClient {
 }
 ```
 
-Model routing table (DECIDED defaults, overridable in config):
+Model routing table (DECIDED defaults; override per role with `WEBRUNNER_MODEL_<ROLE>` env vars or `model_<role>` config-file keys, read from `config.models.<role>`):
 
 | role      | model             | effort | notes                                   |
 |-----------|-------------------|--------|-----------------------------------------|
@@ -501,7 +512,7 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 
 | var                     | required | purpose                                  |
 |-------------------------|----------|------------------------------------------|
-| ANTHROPIC_API_KEY       | yes      | research and extraction                  |
+| ANTHROPIC_API_KEY       | no*      | research and extraction; LLM tools return error `config` when unset |
 | BRAVE_API_KEY           | one of   | search                                   |
 | EXA_API_KEY             | one of   | search                                   |
 | TAVILY_API_KEY          | one of   | search                                   |
@@ -511,9 +522,18 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | DUFFEL_API_KEY          | no       | licensed flight offers                   |
 | BROWSER_CDP_URL         | no       | attach to owner's Chrome                 |
 | BROWSER_HEADLESS        | no       | force headless                           |
+| WEBRUNNER_BROWSER_PROFILE_DIR | no | persistent Chromium profile; default ~/.config/webrunner/browser-profile |
+| WEBRUNNER_SAVE_SCREENSHOTS | no    | browse_task saves screenshots under the run dir; default false |
+| WEBRUNNER_CURRENCY      | no       | ISO 4217 default for search_flights; default USD |
+| WEBRUNNER_MODEL_PLANNER | no       | override planner model; default claude-opus-5-5 |
+| WEBRUNNER_MODEL_SCORER  | no       | override scorer model; default claude-haiku-5-5 |
+| WEBRUNNER_MODEL_EXTRACTOR | no     | override extractor model; default claude-sonnet-5-5 |
+| WEBRUNNER_MODEL_WRITER  | no       | override writer model; default claude-opus-5-5 |
 | RESEARCH_MAX_COST_USD   | no       | default 3.00 per deep_research call      |
 | WEBRUNNER_CACHE_DIR  | no       | default ~/.cache/webrunner            |
 | WEBRUNNER_LOG_LEVEL  | no       | default info                             |
+
+\* Optional at startup by decision (Section 1). Config-file keys are the lowercase variable names (`brave_api_key`, `model_planner`, ...); unknown keys are rejected; the environment overrides the file; empty env vars count as unset. All keys above already exist in `src/config.ts`; work packages read them from `deps.config` and do not edit `config.ts` unless their brief says so.
 
 ---
 
@@ -620,7 +640,7 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 - Accept: both scripts are idempotent. A fresh Claude Code session lists all five tools. A fresh Codex session lists all five tools.
 
 **WP14: Hardening**
-- Deliver: global per-call timeouts, concurrency limits per provider, retry with jitter on 429/5xx (max 2), cost cap enforcement across all tools, graceful browser shutdown on SIGTERM, structured error envelope everywhere, a `health` tool reporting configured providers and browser status.
+- Deliver: global per-call timeouts, concurrency limits per provider, retry with jitter on 429/5xx (max 2), cost cap enforcement across all tools, graceful browser shutdown on SIGTERM, structured error envelope everywhere, a `health` tool reporting configured providers and browser status, a `tsconfig.test.json` so `npm run typecheck` covers `test/`, and a written evaluation of migrating to MCP SDK v2 (`@modelcontextprotocol/server`).
 - Accept: fault-injection tests for each failure mode return the correct `error.code`. Killing the server mid-browse leaves no orphan Chromium.
 
 ### Dependency graph
@@ -736,3 +756,9 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 2. **M2, research**: WP6 to WP9 merged. `deep_research` passes the eval set at `standard` depth with a score the owner is happy with, and beats a Perplexity Deep Research answer on at least 15 of the 20 questions in a side-by-side the owner judges.
 3. **M3, live data**: WP10 to WP12 merged. `search_flights` returns real fares for three routes the owner picks.
 4. **M4, done**: WP13 and WP14 merged. Both clients configured by script. README complete.
+
+---
+
+## 13. Decision log
+
+- **2026-10-18, after WP0**: added `src/deps.ts`, `src/schemas/result.ts`, `src/tools/index.ts` and the tool wiring convention; moved `ping` to `src/tools/ping.ts`. Added config keys for browser profile dir, screenshots, currency and per-role model overrides so WP4, WP6, WP10 and WP11 do not each edit `config.ts`. Pinned MCP SDK to the 1.32.x line for v1. Made `ANTHROPIC_API_KEY` optional at startup. Fixed `published_at` normalization. All raised by the WP0 implementer's report.

@@ -132,6 +132,40 @@ describe("loadConfig", () => {
     expect(messages.some((m) => m.includes("EXA_API_KEY"))).toBe(true);
   });
 
+  it("applies defaults for currency and model roles", () => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    const config = load({});
+    expect(config.currency).toBe("USD");
+    expect(config.models).toEqual({
+      planner: "claude-opus-5-5",
+      scorer: "claude-haiku-5-5",
+      extractor: "claude-sonnet-5-5",
+      writer: "claude-opus-5-5",
+    });
+  });
+
+  it("parses the browser profile, screenshot, currency and model variables", () => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    const config = load({
+      WEBRUNNER_BROWSER_PROFILE_DIR: "~/profiles/wr",
+      WEBRUNNER_SAVE_SCREENSHOTS: "yes",
+      WEBRUNNER_CURRENCY: " eur ",
+      WEBRUNNER_MODEL_PLANNER: "claude-fable-5-1",
+      WEBRUNNER_MODEL_SCORER: "s",
+      WEBRUNNER_MODEL_EXTRACTOR: "e",
+      WEBRUNNER_MODEL_WRITER: "w",
+    });
+    expect(config.browser.profile_dir).toBe(join(home, "profiles", "wr"));
+    expect(config.save_screenshots).toBe(true);
+    expect(config.currency).toBe("EUR");
+    expect(config.models).toEqual({ planner: "claude-fable-5-1", scorer: "s", extractor: "e", writer: "w" });
+  });
+
+  it("rejects a malformed currency code", () => {
+    expect(() => load({ WEBRUNNER_CURRENCY: "dollars" })).toThrow(ConfigError);
+    expect(() => load({ WEBRUNNER_CURRENCY: "dollars" })).toThrow(/WEBRUNNER_CURRENCY/);
+  });
+
   describe("config file", () => {
     it("is used when the environment does not set a value", () => {
       vi.spyOn(log, "warn").mockImplementation(() => {});

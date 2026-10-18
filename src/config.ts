@@ -16,9 +16,26 @@ import { LOG_LEVELS, log, type LogLevel } from "./log.js";
  * Empty environment variables count as unset.
  */
 
+/** Per-role model routing, PLAN.md section 4.6. */
+export interface ModelRoles {
+  planner: string;
+  scorer: string;
+  extractor: string;
+  writer: string;
+}
+
+export const DEFAULT_MODELS: ModelRoles = {
+  planner: "claude-opus-5-5",
+  scorer: "claude-haiku-5-5",
+  extractor: "claude-sonnet-5-5",
+  writer: "claude-opus-5-5",
+};
+
 export interface Config {
-  // TODO(WP6): ANTHROPIC_API_KEY becomes required once the LLM client lands.
-  // It is optional in WP0 so the skeleton can start without any keys.
+  /**
+   * Optional at startup by decision (PLAN.md section 1): search and fetch work
+   * without it. Tools that need the LLM return error code "config" when unset.
+   */
   anthropic_api_key?: string;
   brave_api_key?: string;
   exa_api_key?: string;
@@ -38,8 +55,11 @@ export interface Config {
   research_max_cost_usd: number;
   cache_dir: string;
   log_level: LogLevel;
-  /** Config-file only. Save browse_task screenshots under the run dir. */
+  /** Save browse_task screenshots under the run dir. */
   save_screenshots: boolean;
+  /** ISO 4217 default currency for search_flights. */
+  currency: string;
+  models: ModelRoles;
 }
 
 export class ConfigError extends Error {
@@ -64,19 +84,18 @@ const ENV_VARS = {
   research_max_cost_usd: "RESEARCH_MAX_COST_USD",
   cache_dir: "WEBRUNNER_CACHE_DIR",
   log_level: "WEBRUNNER_LOG_LEVEL",
+  browser_profile_dir: "WEBRUNNER_BROWSER_PROFILE_DIR",
+  save_screenshots: "WEBRUNNER_SAVE_SCREENSHOTS",
+  currency: "WEBRUNNER_CURRENCY",
+  model_planner: "WEBRUNNER_MODEL_PLANNER",
+  model_scorer: "WEBRUNNER_MODEL_SCORER",
+  model_extractor: "WEBRUNNER_MODEL_EXTRACTOR",
+  model_writer: "WEBRUNNER_MODEL_WRITER",
 } as const;
 
-type EnvBackedKey = keyof typeof ENV_VARS;
+type RawKey = keyof typeof ENV_VARS;
 
-/** Keys that exist only in the config file. */
-const FILE_ONLY_KEYS = ["browser_profile_dir", "save_screenshots"] as const;
-
-type RawKey = EnvBackedKey | (typeof FILE_ONLY_KEYS)[number];
-
-const ALL_KEYS: readonly RawKey[] = [
-  ...(Object.keys(ENV_VARS) as EnvBackedKey[]),
-  ...FILE_ONLY_KEYS,
-];
+const ALL_KEYS: readonly RawKey[] = Object.keys(ENV_VARS) as RawKey[];
 
 const SCALAR = z.union([z.string(), z.number(), z.boolean()]);
 
@@ -135,6 +154,16 @@ const ResolvedSchema = z.object({
   log_level: logLevel.default("info"),
   browser_profile_dir: nonEmptyString.optional(),
   save_screenshots: booleanLike.default(false),
+  currency: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().toUpperCase() : v),
+    z
+      .string({ error: "must be a 3-letter ISO 4217 code, for example USD" })
+      .regex(/^[A-Z]{3}$/, { error: "must be a 3-letter ISO 4217 code, for example USD" }),
+  ).default("USD"),
+  model_planner: nonEmptyString.default(DEFAULT_MODELS.planner),
+  model_scorer: nonEmptyString.default(DEFAULT_MODELS.scorer),
+  model_extractor: nonEmptyString.default(DEFAULT_MODELS.extractor),
+  model_writer: nonEmptyString.default(DEFAULT_MODELS.writer),
 });
 
 export interface LoadConfigOptions {
@@ -199,9 +228,9 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   const merged: Partial<Record<RawKey, unknown>> = {};
   const origin: Partial<Record<RawKey, string>> = {};
   for (const key of ALL_KEYS) {
-    const envName = key in ENV_VARS ? ENV_VARS[key as EnvBackedKey] : undefined;
-    const envRaw = envName === undefined ? undefined : env[envName];
-    if (envName !== undefined && envRaw !== undefined && envRaw.trim() !== "") {
+    const envName = ENV_VARS[key];
+    const envRaw = env[envName];
+    if (envRaw !== undefined && envRaw.trim() !== "") {
       merged[key] = envRaw;
       origin[key] = `environment variable ${envName}`;
     } else if (fileValues[key] !== undefined) {
@@ -245,6 +274,13 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     cache_dir: cacheDir,
     log_level: r.log_level,
     save_screenshots: r.save_screenshots,
+    currency: r.currency,
+    models: {
+      planner: r.model_planner,
+      scorer: r.model_scorer,
+      extractor: r.model_extractor,
+      writer: r.model_writer,
+    },
   };
 
   warnAboutMissingKeys(config);
@@ -253,7 +289,6 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
 
 function warnAboutMissingKeys(config: Config): void {
   if (config.anthropic_api_key === undefined) {
-    // TODO(WP6): make this a startup failure once the LLM client lands.
     log.warn(
       `${ENV_VARS.anthropic_api_key} is not set; deep_research, browse_task and LLM extraction will be unavailable`,
       { var: ENV_VARS.anthropic_api_key },

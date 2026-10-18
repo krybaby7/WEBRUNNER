@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import type { Config } from "./config.js";
+import { buildDeps } from "./deps.js";
+import { registerTools } from "./tools/index.js";
 
 const SERVER_NAME = "webrunner";
 
@@ -11,30 +14,8 @@ export function getVersion(): string {
   return parsed.version;
 }
 
-export function buildServer(): McpServer {
-  const version = getVersion();
-  const server = new McpServer({ name: SERVER_NAME, version });
-
-  server.registerTool(
-    "ping",
-    {
-      title: "Ping",
-      description: "Health check. Returns ok, the server version and the current time.",
-      outputSchema: {
-        ok: z.literal(true),
-        version: z.string(),
-        time: z.string(),
-      },
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-    },
-    () => {
-      const result = { ok: true as const, version, time: new Date().toISOString() };
-      return {
-        content: [{ type: "text", text: JSON.stringify(result) }],
-        structuredContent: result,
-      };
-    },
-  );
-
+export function buildServer(config: Config): McpServer {
+  const server = new McpServer({ name: SERVER_NAME, version: getVersion() });
+  registerTools(server, buildDeps(config));
   return server;
 }

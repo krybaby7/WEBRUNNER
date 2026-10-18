@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   }
   setLogLevel(config.log_level);
 
-  const server = buildServer();
+  const server = buildServer(config);
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;
