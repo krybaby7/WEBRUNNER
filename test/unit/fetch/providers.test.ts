@@ -163,13 +163,13 @@ describe("JinaFetcher", () => {
     expect(new JinaFetcher().name).toBe("jina");
   });
 
-  it("requests markdown as JSON from r.jina.ai, unauthenticated by default", async () => {
+  it("requests JSON from r.jina.ai without X-Return-Format, unauthenticated by default", async () => {
     const { fetchImpl, calls } = mockFetch(() => jsonResponse(reader));
     await new JinaFetcher({ fetchImpl }).fetch("https://example.com/blog/caching", OPTS, neverAborted());
     expect(calls[0]?.url).toBe("https://r.jina.ai/https://example.com/blog/caching");
     const headers = calls[0]?.init.headers as Record<string, string>;
     expect(headers["Accept"]).toBe("application/json");
-    expect(headers["X-Return-Format"]).toBe("markdown");
+    expect(headers["X-Return-Format"]).toBeUndefined();
     expect(headers["Authorization"]).toBeUndefined();
   });
 

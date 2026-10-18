@@ -16,8 +16,9 @@ import {
  * https://github.com/jina-ai/reader:
  *   GET https://r.jina.ai/<url>
  *   Accept: application/json        -> JSON envelope instead of plain text
- *   X-Return-Format: markdown       -> Markdown content
  *   Authorization: Bearer <key>     -> higher rate limit (optional)
+ * `X-Return-Format: markdown` is deliberately not sent: live calls showed it
+ * returns the full page chrome, while the default output is cleaner Markdown.
  * The JSON envelope shape (data.title, data.url, data.content, data.httpStatus,
  * and { data: null, code, name, message } on failure) was confirmed against the
  * live service when this was written.
@@ -57,7 +58,6 @@ export class JinaFetcher implements Fetcher {
     const doFetch = this.fetchImpl ?? fetch;
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "X-Return-Format": "markdown",
     };
     if (this.apiKey !== undefined) headers["Authorization"] = `Bearer ${this.apiKey}`;
 
