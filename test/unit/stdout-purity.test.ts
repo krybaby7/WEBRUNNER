@@ -98,6 +98,7 @@ describe("stdio server smoke test", () => {
     expect(list?.tools.map((t) => t.name)).toContain("ping");
     expect(list?.tools.map((t) => t.name)).toContain("web_search");
     expect(list?.tools.map((t) => t.name)).toContain("fetch_page");
+    expect(list?.tools.map((t) => t.name)).toContain("browse_task");
 
     const ping = byId.get(3)?.result as
       | { content: Array<{ type: string; text: string }>; structuredContent: Record<string, unknown> }
