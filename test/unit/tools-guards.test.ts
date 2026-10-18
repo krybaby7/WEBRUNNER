@@ -220,12 +220,13 @@ describe("tool wall-clock caps", () => {
     expect(desc("web_search")).toMatch(/30 seconds/);
     expect(desc("fetch_page")).toMatch(/90 seconds/);
     expect(desc("search_flights")).toMatch(/120 seconds/);
+    expect(desc("social_search")).toMatch(/180 seconds/);
     expect(desc("browse_task")).toMatch(/10 minutes/);
     expect(desc("browse_task")).toMatch(/11 minutes/);
     expect(desc("deep_research")).toMatch(/15 minutes/);
     expect(desc("deep_research")).toMatch(/WEBRUNNER_RESEARCH_MAX_MS/);
     expect(desc("accounts")).toMatch(/330 seconds/);
-    for (const name of ["web_search", "fetch_page", "search_flights", "browse_task", "deep_research", "accounts"]) {
+    for (const name of ["web_search", "fetch_page", "search_flights", "browse_task", "social_search", "deep_research", "accounts"]) {
       expect(desc(name)).toMatch(/timeout/);
     }
   });

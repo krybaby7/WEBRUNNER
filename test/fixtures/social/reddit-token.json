@@ -1,0 +1,7 @@
+{
+  "_note": "From docs, unverified: POST /api/v1/access_token (grant_type=client_credentials) response shape per https://github.com/reddit-archive/reddit/wiki/OAuth2. The token value is a placeholder, not a real credential.",
+  "access_token": "test-access-token-placeholder",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "scope": "*"
+}

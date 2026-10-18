@@ -1,0 +1,50 @@
+{
+  "_note": "From docs, unverified: app.bsky.feed.searchPosts response shape per https://docs.bsky.app/docs/api/app-bsky-feed-search-posts. The public API answered 403 (connection reset) from the development environment, so this was not recorded live. Handles and texts are invented.",
+  "posts": [
+    {
+      "uri": "at://did:plc:aaaa1111bbbb2222cccc3333/app.bsky.feed.post/3kz7abcdefg2a",
+      "cid": "bafyreiexample1",
+      "author": { "did": "did:plc:aaaa1111bbbb2222cccc3333", "handle": "rustacean.example.com", "displayName": "Rustacean" },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Tokio's new runtime metrics saved us a week of debugging. Async Rust is finally pleasant.",
+        "createdAt": "2026-10-15T09:12:00.000Z",
+        "langs": ["en"]
+      },
+      "replyCount": 4,
+      "repostCount": 7,
+      "likeCount": 42,
+      "indexedAt": "2026-10-15T09:12:03.000Z"
+    },
+    {
+      "uri": "at://did:plc:dddd4444eeee5555ffff6666/app.bsky.feed.post/3kz7hijklmn3b",
+      "cid": "bafyreiexample2",
+      "author": { "did": "did:plc:dddd4444eeee5555ffff6666", "handle": "compiler.bsky.social" },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Honest take: async Rust still has too many footguns around cancellation. Pin, Send bounds, futurelock...",
+        "createdAt": "2026-10-14T18:40:00.000Z"
+      },
+      "replyCount": 11,
+      "repostCount": 2,
+      "likeCount": 18,
+      "indexedAt": "2026-10-14T18:40:05.000Z"
+    },
+    {
+      "uri": "at://did:plc:gggg7777hhhh8888iiii9999/app.bsky.feed.post/3kz7opqrstu4c",
+      "cid": "bafyreiexample3",
+      "author": { "did": "did:plc:gggg7777hhhh8888iiii9999", "handle": "systems.example.org", "displayName": "Systems Person" },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Wrote up how we moved a service from threads to async Rust and cut p99 latency in half.",
+        "createdAt": "2026-10-13T07:00:00.000Z",
+        "langs": ["en-GB"]
+      },
+      "replyCount": 0,
+      "repostCount": 0,
+      "likeCount": 5,
+      "indexedAt": "2026-10-13T07:00:02.000Z"
+    }
+  ],
+  "cursor": "3"
+}

@@ -1,0 +1,55 @@
+{
+  "_note": "From docs, unverified: search.list (part=snippet, type=video) response shape per https://developers.google.com/youtube/v3/docs/search/list. The API needs a key the development environment does not have. Ids, channels and texts are invented.",
+  "kind": "youtube#searchListResponse",
+  "etag": "example",
+  "nextPageToken": "CAUQAA",
+  "regionCode": "US",
+  "pageInfo": { "totalResults": 1000000, "resultsPerPage": 3 },
+  "items": [
+    {
+      "kind": "youtube#searchResult",
+      "etag": "e1",
+      "id": { "kind": "youtube#video", "videoId": "dQw4w9WgXcQ" },
+      "snippet": {
+        "publishedAt": "2026-10-10T15:00:00Z",
+        "channelId": "UCexamplechannel0001",
+        "title": "Async Rust in 2026: what changed",
+        "description": "A tour of the async Rust ecosystem: Tokio, smol, structured concurrency and the cancellation story.",
+        "thumbnails": { "default": { "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/default.jpg", "width": 120, "height": 90 } },
+        "channelTitle": "Systems Programming Weekly",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-10-10T15:00:00Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "e2",
+      "id": { "kind": "youtube#video", "videoId": "aBcDeFgHiJk" },
+      "snippet": {
+        "publishedAt": "2026-09-28T12:30:00Z",
+        "channelId": "UCexamplechannel0002",
+        "title": "I rewrote my service in async Rust and regretted it",
+        "description": "Not every service needs async. Here is what went wrong and what I would do differently.",
+        "thumbnails": { "default": { "url": "https://i.ytimg.com/vi/aBcDeFgHiJk/default.jpg", "width": 120, "height": 90 } },
+        "channelTitle": "Grumpy Backend Dev",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-09-28T12:30:00Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "e3",
+      "id": { "kind": "youtube#video", "videoId": "zYxWvUtSrQp" },
+      "snippet": {
+        "publishedAt": "2026-08-01T08:00:00Z",
+        "channelId": "UCexamplechannel0003",
+        "title": "Tokio internals explained",
+        "description": "",
+        "thumbnails": { "default": { "url": "https://i.ytimg.com/vi/zYxWvUtSrQp/default.jpg", "width": 120, "height": 90 } },
+        "channelTitle": "Deep Dive Code",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-08-01T08:00:00Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "_note": "From docs, unverified: com.atproto.identity.resolveHandle response shape per https://docs.bsky.app/docs/api/com-atproto-identity-resolve-handle.",
+  "did": "did:plc:aaaa1111bbbb2222cccc3333"
+}
