@@ -225,8 +225,11 @@ export const FlightSegmentSchema = z.object({
   /** IATA carrier code, for example "BA". */
   airline: z.string().regex(/^[A-Z0-9]{2}$/, { error: "must be a 2-character IATA carrier code" }),
   airline_name: z.string().min(1),
-  /** Carrier code plus number without a space, for example "BA117". */
-  flight_number: z.string().min(1),
+  /**
+   * Carrier code plus number without a space, for example "BA117". Omitted
+   * when the source does not show it (Google Flights result lists do not).
+   */
+  flight_number: z.string().min(1).optional(),
   depart_airport: IataCodeSchema,
   depart_at: LocalDateTimeSchema,
   arrive_airport: IataCodeSchema,
@@ -264,8 +267,14 @@ export const FlightOfferSchema = z.object({
   total_duration_min: z.number().int().min(0),
   /** Maximum stops over the slices. */
   stops: z.number().int().min(0),
-  /** One slice for one-way, two for round trip. */
+  /**
+   * One slice for one-way, two for round trip. A round-trip offer from a
+   * source that lists only the outbound leg (Google Flights) carries one slice
+   * and `itinerary: "outbound_only"`; its price is still the round-trip total.
+   */
   slices: z.array(FlightSliceSchema).min(1).max(2),
+  /** Absent means the slices describe the whole priced itinerary. */
+  itinerary: z.enum(["complete", "outbound_only"]).optional(),
   booking_url: z.url().optional(),
   fare_notes: z.array(z.string()).optional(),
 });

@@ -14,7 +14,7 @@ export interface FlightProvider {
   search(query: NormalizedFlightsQuery, signal: AbortSignal): Promise<FlightOffer[]>;
 }
 
-export type FlightProviderErrorCode = "provider" | "timeout" | "invalid_input" | "config";
+export type FlightProviderErrorCode = "provider" | "timeout" | "invalid_input" | "config" | "blocked";
 
 export interface FlightProviderErrorOptions {
   provider: FlightSource;
