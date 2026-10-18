@@ -674,7 +674,10 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 - Deliver: `scripts/install-claude-code.sh` (adds the server to Claude Code via `claude mcp add` with env passthrough), `scripts/install-codex.sh` (writes the `[mcp_servers.webrunner]` block to `~/.codex/config.toml`), README covering keys, browser profile setup, CDP attach, ToS note, cost expectations, troubleshooting.
 - Accept: both scripts are idempotent. A fresh Claude Code session lists all five tools. A fresh Codex session lists all five tools.
 
-**WP14: Hardening**
+**WP14: Hardening** (split into two parallel packages after WP8; both independent of WP13)
+- WP14a: `health` tool, `tsconfig.test.json` so typecheck covers tests, a CI job running the browser tests with Chromium installed plus a weekly live-integration workflow driven by repository secrets, the written MCP SDK v2 evaluation, and an error-envelope audit test over every tool.
+- WP14b: shared retry-with-jitter helper (max 2, `Retry-After` honored) applied to search, fast fetch and Duffel; per-provider concurrency limiters; wall-clock caps per tool (`web_search` 30 s, `fetch_page` 90 s, `search_flights` 120 s, `deep_research` 15 min via `WEBRUNNER_RESEARCH_MAX_MS`, cancellation threaded through the engine); PDF text extraction in the direct fetcher (`pdf-parse`, 25 MB cap); a SIGTERM shutdown test proving no orphaned Chromium; an optional process-wide daily LLM spend cap `WEBRUNNER_DAILY_COST_CAP_USD`.
+- Original deliverable list follows.
 - Deliver: global per-call timeouts, concurrency limits per provider, retry with jitter on 429/5xx (max 2), cost cap enforcement across all tools, graceful browser shutdown on SIGTERM, structured error envelope everywhere, a `health` tool reporting configured providers and browser status, a `tsconfig.test.json` so `npm run typecheck` covers `test/`, PDF text extraction in `fetch_page` (`pdf-parse` or equivalent; the fast path currently returns `invalid_input` for PDFs), a CI job that runs the browser tests with Chromium installed, and a written evaluation of migrating to MCP SDK v2 (`@modelcontextprotocol/server`).
 - Accept: fault-injection tests for each failure mode return the correct `error.code`. Killing the server mid-browse leaves no orphan Chromium.
 
@@ -797,6 +800,7 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP8**: all six tools are on main. WP14 split into WP14a (quality gates) and WP14b (resilience) and started in parallel with WP13, since the three touch disjoint files. Two config keys are added by WP14b: `WEBRUNNER_RESEARCH_MAX_MS` and `WEBRUNNER_DAILY_COST_CAP_USD`.
 - **2026-10-18, after WP11**: recorded the live Google Flights findings (rate limiting, query-text cabin and passenger clauses, code-side resolution and cross-checks) in 3.5 and the risk table. WP13 started in parallel with WP8 since the README only needs the 3.3 contract for `deep_research`.
 - **2026-10-18, after WP7/WP10**: recorded the browse agent's implemented semantics (3.4, 4.4) and the research engine's stop precedence, writer reserve and search-failure handling (section 5). WP8 adds `error` to `stopped_reason` and `invalid_input` to `ResearchError`, switches the evals to the shared schema, and makes the judge print `published_at` and `quote`.
 - **2026-10-18, after WP5**: thin-page and browser-fallback rules in 3.2 made explicit; the bot-wall-plus-browser-failure case returns `blocked` (fixed during review). WP7 now owns the writer and citation renumbering; WP8 is the tool, the eval import switch and the stdio end-to-end test.
