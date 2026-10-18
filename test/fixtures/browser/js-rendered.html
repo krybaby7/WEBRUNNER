@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Late Content</title></head>
+<body>
+  <div id="app">Loading...</div>
+  <script>
+    setTimeout(function () {
+      document.getElementById("app").innerHTML =
+        '<article id="late"><h1>Rendered By Script</h1>' +
+        '<p>This paragraph only exists after JavaScript ran. It is long enough for Readability to treat it as ' +
+        'real article content rather than boilerplate, so here is a second sentence about nothing in particular, ' +
+        'and a third one to be safe, because short snippets are often discarded by the scoring heuristics.</p>' +
+        '<p>A second paragraph keeps the candidate score up. Readability looks at commas, text length and link ' +
+        'density when choosing the main node, and this paragraph has plenty of commas, clauses, and words.</p></article>';
+    }, 400);
+  </script>
+</body>
+</html>
