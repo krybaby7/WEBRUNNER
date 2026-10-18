@@ -42,6 +42,8 @@ export type RecipeErrorCode = "blocked" | "timeout" | "provider" | "invalid_inpu
 
 export interface RecipeErrorOptions {
   retryable?: boolean;
+  /** The site wants a logged-in session (PLAN.md 14.8). The owning tool reports `needs_login` and names the `accounts` tool. */
+  needsLogin?: boolean;
   cause?: unknown;
 }
 
@@ -49,11 +51,13 @@ export interface RecipeErrorOptions {
 export class RecipeError extends Error {
   readonly code: RecipeErrorCode;
   readonly retryable: boolean;
+  readonly needsLogin: boolean;
 
   constructor(code: RecipeErrorCode, message: string, options: RecipeErrorOptions = {}) {
     super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "RecipeError";
     this.code = code;
     this.retryable = options.retryable ?? (code === "timeout" || code === "provider");
+    this.needsLogin = options.needsLogin ?? false;
   }
 }

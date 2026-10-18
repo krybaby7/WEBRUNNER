@@ -44,6 +44,15 @@ export interface Config {
   firecrawl_api_key?: string;
   jina_api_key?: string;
   duffel_api_key?: string;
+  /** Reddit API app-only auth (PLAN.md 14.5). Both or neither. */
+  reddit_client_id?: string;
+  reddit_client_secret?: string;
+  /** User-Agent for Reddit requests. Default: webrunner/<version> personal MCP server. */
+  reddit_user_agent?: string;
+  /** YouTube Data API v3, for the youtube platform of social_search. */
+  youtube_api_key?: string;
+  /** Finnhub, an optional stock quote source for market_quote. */
+  finnhub_api_key?: string;
   browser: {
     /** Attach to the owner's running Chrome instead of launching one. */
     cdp_url?: string;
@@ -86,6 +95,11 @@ const ENV_VARS = {
   firecrawl_api_key: "FIRECRAWL_API_KEY",
   jina_api_key: "JINA_API_KEY",
   duffel_api_key: "DUFFEL_API_KEY",
+  reddit_client_id: "REDDIT_CLIENT_ID",
+  reddit_client_secret: "REDDIT_CLIENT_SECRET",
+  reddit_user_agent: "REDDIT_USER_AGENT",
+  youtube_api_key: "YOUTUBE_API_KEY",
+  finnhub_api_key: "FINNHUB_API_KEY",
   browser_cdp_url: "BROWSER_CDP_URL",
   browser_headless: "BROWSER_HEADLESS",
   research_max_cost_usd: "RESEARCH_MAX_COST_USD",
@@ -160,6 +174,11 @@ const ResolvedSchema = z.object({
   firecrawl_api_key: nonEmptyString.optional(),
   jina_api_key: nonEmptyString.optional(),
   duffel_api_key: nonEmptyString.optional(),
+  reddit_client_id: nonEmptyString.optional(),
+  reddit_client_secret: nonEmptyString.optional(),
+  reddit_user_agent: nonEmptyString.optional(),
+  youtube_api_key: nonEmptyString.optional(),
+  finnhub_api_key: nonEmptyString.optional(),
   browser_cdp_url: z
     .url({
       protocol: /^(https?|wss?)$/,
@@ -232,7 +251,15 @@ const SEARCH_KEYS = [
   "perplexity_api_key",
 ] as const;
 
-const OPTIONAL_FETCH_AND_FLIGHT_KEYS = ["firecrawl_api_key", "jina_api_key", "duffel_api_key"] as const;
+const OPTIONAL_FETCH_AND_FLIGHT_KEYS = [
+  "firecrawl_api_key",
+  "jina_api_key",
+  "duffel_api_key",
+  "reddit_client_id",
+  "reddit_client_secret",
+  "youtube_api_key",
+  "finnhub_api_key",
+] as const;
 
 /**
  * Load and validate configuration. Throws ConfigError with a readable
@@ -285,6 +312,11 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
     ...(r.firecrawl_api_key !== undefined && { firecrawl_api_key: r.firecrawl_api_key }),
     ...(r.jina_api_key !== undefined && { jina_api_key: r.jina_api_key }),
     ...(r.duffel_api_key !== undefined && { duffel_api_key: r.duffel_api_key }),
+    ...(r.reddit_client_id !== undefined && { reddit_client_id: r.reddit_client_id }),
+    ...(r.reddit_client_secret !== undefined && { reddit_client_secret: r.reddit_client_secret }),
+    ...(r.reddit_user_agent !== undefined && { reddit_user_agent: r.reddit_user_agent }),
+    ...(r.youtube_api_key !== undefined && { youtube_api_key: r.youtube_api_key }),
+    ...(r.finnhub_api_key !== undefined && { finnhub_api_key: r.finnhub_api_key }),
     browser: {
       ...(r.browser_cdp_url !== undefined && { cdp_url: r.browser_cdp_url }),
       ...(r.browser_headless !== undefined && { headless: r.browser_headless }),
@@ -304,6 +336,12 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
       writer: r.model_writer,
     },
   };
+
+  if ((config.reddit_client_id === undefined) !== (config.reddit_client_secret === undefined)) {
+    throw new ConfigError(
+      `Invalid configuration:\n  - ${ENV_VARS.reddit_client_id} and ${ENV_VARS.reddit_client_secret} must be set together (or neither)`,
+    );
+  }
 
   warnAboutMissingKeys(config);
   return config;

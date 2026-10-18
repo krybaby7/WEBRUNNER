@@ -39,6 +39,36 @@ describe("loadConfig", () => {
     expect(config.anthropic_api_key).toBeUndefined();
   });
 
+  it("parses the phase 5 keys (PLAN.md 14.8) and redacts nothing of them into warnings", () => {
+    const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+    const config = load({
+      REDDIT_CLIENT_ID: "rid",
+      REDDIT_CLIENT_SECRET: "rsecret",
+      REDDIT_USER_AGENT: "webrunner-test/1.0",
+      YOUTUBE_API_KEY: "yt",
+      FINNHUB_API_KEY: "fh",
+    });
+    expect(config).toMatchObject({
+      reddit_client_id: "rid",
+      reddit_client_secret: "rsecret",
+      reddit_user_agent: "webrunner-test/1.0",
+      youtube_api_key: "yt",
+      finnhub_api_key: "fh",
+    });
+    const messages = warn.mock.calls.map((c) => String(c[0]));
+    expect(messages.join("\n")).not.toContain("rsecret");
+  });
+
+  it("leaves the phase 5 keys unset when absent and rejects a lone Reddit id or secret", () => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    const config = load({});
+    for (const key of ["reddit_client_id", "reddit_client_secret", "reddit_user_agent", "youtube_api_key", "finnhub_api_key"] as const) {
+      expect(config[key]).toBeUndefined();
+    }
+    expect(() => load({ REDDIT_CLIENT_ID: "rid" })).toThrow(/REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set together/);
+    expect(() => load({ REDDIT_CLIENT_SECRET: "rsecret" })).toThrow(/must be set together/);
+  });
+
   it("parses every variable in the PLAN.md 4.8 table", () => {
     vi.spyOn(log, "warn").mockImplementation(() => {});
     const config = load({

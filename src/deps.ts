@@ -55,6 +55,9 @@ export function buildDeps(config: Config): Deps {
     config.firecrawl_api_key,
     config.jina_api_key,
     config.duffel_api_key,
+    config.reddit_client_secret,
+    config.youtube_api_key,
+    config.finnhub_api_key,
   ].filter((k): k is string => k !== undefined && k !== "");
   const search = createSearchService({ providers: buildProviders(config), cache, log, secrets });
   const dailyCap =
