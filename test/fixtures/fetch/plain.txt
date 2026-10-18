@@ -1,0 +1,11 @@
+release-notes 2.4.0
+====================
+
+- Added a `--dry-run` flag.
+- Fixed a crash when the config file is empty.
+
+```
+This line contains a literal fence and must survive wrapping.
+```
+
+Thanks to everyone who reported issues.
