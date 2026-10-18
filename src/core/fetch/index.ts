@@ -229,6 +229,15 @@ export function createFetchService(deps: FetchServiceDeps): FetchService {
       rendered = await runBrowser(url, opts);
     } catch (err) {
       if (err instanceof FetchError && err.code === "blocked" && wallEvidence) throw err;
+      if (fast !== undefined && fast.botWall) {
+        // The fast result is wall text, not the page; never hand it back as content.
+        throw new FetchServiceError({
+          code: "blocked",
+          message: "The page is behind a bot wall and the browser fallback failed: " + redact(err instanceof Error ? err.message : String(err)),
+          retryable: err instanceof FetchError ? err.retryable : false,
+          method: fast.method,
+        });
+      }
       if (fast !== undefined) {
         log.warn("fetch_page: browser fallback failed, returning the fast result", {
           url,

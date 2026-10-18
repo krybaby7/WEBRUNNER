@@ -225,6 +225,13 @@ describe("auto mode", () => {
     );
   });
 
+  it("surfaces blocked, not wall text, when the fast result is a bot wall and the browser fails otherwise", async () => {
+    const fast = fake("jina", fastPage({ botWall: true, markdown: WALL }));
+    const browser = fake("browser", new FetchError("browser", "timeout", "Navigation timed out", true));
+    const err = await failure(service([fast], browser).fetchPage({ url: URL_A }));
+    expect(err).toMatchObject({ code: "blocked", method: "jina", retryable: true });
+  });
+
   it("rethrows the browser error when there was no fast result", async () => {
     const fast = fake("jina", new FetchError("jina", "blocked", "HTTP 403", false, 403));
     const browser = fake("browser", new FetchError("browser", "provider", "Chromium crashed", true));
