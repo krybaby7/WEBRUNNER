@@ -14,6 +14,7 @@ import { registerPingTool } from "../../../src/tools/ping.js";
 import { registerSearchFlightsTool } from "../../../src/tools/search_flights.js";
 import { registerSocialSearchTool } from "../../../src/tools/social_search.js";
 import { registerSearchHotelsTool } from "../../../src/tools/search_hotels.js";
+import { registerSearchReviewsTool } from "../../../src/tools/search_reviews.js";
 import { registerWebSearchTool } from "../../../src/tools/web_search.js";
 import { makeConfig } from "../llm/helpers.js";
 import { recordingLogger, scriptedLlm } from "../research/helpers.js";
@@ -109,6 +110,16 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
     register: (server, deps) =>
       registerSearchHotelsTool(server, deps, {
         providers: () => {
+          throw boom();
+        },
+      }),
+  },
+  search_reviews: {
+    args: { subject: "Notion" },
+    // The source factory throws before any source runs: nothing per-source can catch it.
+    register: (server, deps) =>
+      registerSearchReviewsTool(server, deps, {
+        sources: () => {
           throw boom();
         },
       }),

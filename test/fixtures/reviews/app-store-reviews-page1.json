@@ -1,0 +1,539 @@
+{
+  "feed": {
+    "author": {
+      "name": {
+        "label": "iTunes Store"
+      },
+      "uri": {
+        "label": "http://www.apple.com/itunes/"
+      }
+    },
+    "entry": [
+      {
+        "author": {
+          "name": {
+            "label": "The Monker"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-16T20:59:35-07:00"
+        },
+        "im:rating": {
+          "label": "5"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14675987099"
+        },
+        "title": {
+          "label": "Great with Ai agents"
+        },
+        "content": {
+          "label": "it’s a great tool for organizing lot of imputs",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "pappaopag"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-15T17:37:32-07:00"
+        },
+        "im:rating": {
+          "label": "3"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14671531500"
+        },
+        "title": {
+          "label": "It’s alright"
+        },
+        "content": {
+          "label": "Notion web is much better, albeit you of course need your computer. Notion is feature rich but it can get frustrating really quick on mobile devices, as it is fairly buggy.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "_Paradroid"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-14T17:46:34-07:00"
+        },
+        "im:rating": {
+          "label": "5"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14667594254"
+        },
+        "title": {
+          "label": "PKM via MCP"
+        },
+        "content": {
+          "label": "Using Notion MCP as a read/write layer for personal knowledge-base documentation feels…alien.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "Joey gggdyyhvx"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-14T14:50:22-07:00"
+        },
+        "im:rating": {
+          "label": "1"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14667156847"
+        },
+        "title": {
+          "label": "Unintuitive bloat"
+        },
+        "content": {
+          "label": "One of the most unintuitive apps I’ve ever used. Even the AI assistant built-in can’t answer simple questions. \n\nI literally just want to create a kanban style board to track projects in 4 stages but there is no ability to add a 4th step in the board. It just defaults to the “not started”, “in progress”, and “done” steps. \n\nApparently online I’ve read that there is something called statuses and I need to update my database… what database? I have created nothing. This app is god awful and incredibly hostile to users. \n\nTry making a less convoluted app.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "jordan 🪩🫶🏽✨"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-13T19:24:46-07:00"
+        },
+        "im:rating": {
+          "label": "2"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14663973234"
+        },
+        "title": {
+          "label": "Lacking in Functionality"
+        },
+        "content": {
+          "label": "I enjoy the/Laptop app, but on phones and ipads it just feels clunky and lacks a lot of the quick functionality features that make it a good tool. For me, especially with ADHD, it starts to feel less like an organization and note taking app, and more like an extra task in it of itself. \n\nI think these would make a huge difference :\n\n— bulk photo delete \n— bulk tab moving \n— command buttons (could use the 3 lines at the bottom.)\n— more intuitive ways to organize (charts, calendars, etc are quite difficult to use in app.)",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "1"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "1"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "Magicuniform"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-13T13:04:17-07:00"
+        },
+        "im:rating": {
+          "label": "5"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14663002399"
+        },
+        "title": {
+          "label": "Add widgets"
+        },
+        "content": {
+          "label": "Notion is the best personal and professional organizer I have found. Please give us large widgets for our home screens!",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "MrArkansas870"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-13T05:15:16-07:00"
+        },
+        "im:rating": {
+          "label": "1"
+        },
+        "im:version": {
+          "label": "1.7.346"
+        },
+        "id": {
+          "label": "14661465107"
+        },
+        "title": {
+          "label": "Stop Removing Useful Functionality"
+        },
+        "content": {
+          "label": "I’m on a iPad. Stop removing useful features. The sidebars collapse/expand on pages is no longer there anymore.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "2"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "2"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "Tech44"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-12T18:59:09-07:00"
+        },
+        "im:rating": {
+          "label": "1"
+        },
+        "im:version": {
+          "label": "1.7.345"
+        },
+        "id": {
+          "label": "14660016015"
+        },
+        "title": {
+          "label": "I suggest you look elsewhere"
+        },
+        "content": {
+          "label": "Well, notion is a great service to organize just about any type of information, but the iOS app is terrible. Incredibly buggy, that seems to get worse with every update. I’m still using it because I have too much invested in the platform, so I hope they get around to fixing everything.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "1"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "1"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "Murilaio"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-11T22:28:16-07:00"
+        },
+        "im:rating": {
+          "label": "1"
+        },
+        "im:version": {
+          "label": "1.7.345"
+        },
+        "id": {
+          "label": "14656572111"
+        },
+        "title": {
+          "label": "Heavy"
+        },
+        "content": {
+          "label": "680mb is crazy",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      },
+      {
+        "author": {
+          "name": {
+            "label": "Aslantulip"
+          },
+          "label": ""
+        },
+        "updated": {
+          "label": "2026-10-09T16:11:38-07:00"
+        },
+        "im:rating": {
+          "label": "5"
+        },
+        "im:version": {
+          "label": "1.7.345"
+        },
+        "id": {
+          "label": "14647609628"
+        },
+        "title": {
+          "label": "Colors"
+        },
+        "content": {
+          "label": "I love the app, still I feel something that should be added is a color wheel, that way we can make texts whatever color we want and not just be stuck with the ten colors that are already given.",
+          "attributes": {
+            "type": "text"
+          }
+        },
+        "link": {
+          "attributes": {
+            "rel": "related",
+            "href": "https://itunes.apple.com/us/review?id=1232780281&type=Purple%20Software"
+          }
+        },
+        "im:voteSum": {
+          "label": "0"
+        },
+        "im:contentType": {
+          "attributes": {
+            "term": "Application",
+            "label": "Application"
+          }
+        },
+        "im:voteCount": {
+          "label": "0"
+        }
+      }
+    ],
+    "updated": {
+      "label": "2026-10-18T05:52:51-07:00"
+    },
+    "rights": {
+      "label": "Copyright 2008 Apple Inc."
+    },
+    "title": {
+      "label": "iTunes Store: Customer Reviews"
+    },
+    "icon": {
+      "label": "http://itunes.apple.com/favicon.ico"
+    },
+    "link": [
+      {
+        "attributes": {
+          "rel": "alternate",
+          "type": "text/html",
+          "href": "https://music.apple.com/WebObjects/MZStore.woa/wa/viewGrouping?cc=us&id=1"
+        }
+      },
+      {
+        "attributes": {
+          "rel": "self",
+          "href": "https://itunes.apple.com/us/rss/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+        }
+      },
+      {
+        "attributes": {
+          "rel": "first",
+          "href": "https://itunes.apple.com/us/rss/customerreviews/page=1/id=1232780281/sortby=mostrecent/xml?urlDesc=/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+        }
+      },
+      {
+        "attributes": {
+          "rel": "last",
+          "href": "https://itunes.apple.com/us/rss/customerreviews/page=10/id=1232780281/sortby=mostrecent/xml?urlDesc=/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+        }
+      },
+      {
+        "attributes": {
+          "rel": "previous",
+          "href": "https://itunes.apple.com/us/rss/customerreviews/page=1/id=1232780281/sortby=mostrecent/xml?urlDesc=/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+        }
+      },
+      {
+        "attributes": {
+          "rel": "next",
+          "href": "https://itunes.apple.com/us/rss/customerreviews/page=2/id=1232780281/sortby=mostrecent/xml?urlDesc=/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+        }
+      }
+    ],
+    "id": {
+      "label": "https://itunes.apple.com/us/rss/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json"
+    },
+    "_note": "Recorded live on 2026-10-18 from https://itunes.apple.com/us/rss/customerreviews/id=1232780281/sortBy=mostRecent/page=1/json (HTTP 200, 50 entries). Trimmed to the first 10 entries; author profile URIs removed. No entry on this live page was the app itself, so the test prepends a synthetic app entry to exercise the skip."
+  }
+}

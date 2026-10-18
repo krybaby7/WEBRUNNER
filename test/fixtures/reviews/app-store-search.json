@@ -1,0 +1,120 @@
+{
+  "_note": "Recorded live on 2026-10-18 from https://itunes.apple.com/search?term=Notion&entity=software&country=us&limit=5 (HTTP 200). Each result trimmed to the fields the App Store source reads plus a few identifying ones; artwork, screenshots, device lists and descriptions removed.",
+  "resultCount": 5,
+  "results": [
+    {
+      "trackId": 1232780281,
+      "trackName": "Notion: Notes, Tasks, AI",
+      "trackViewUrl": "https://apps.apple.com/us/app/notion-notes-tasks-ai/id1232780281?uo=4",
+      "averageUserRating": 4.77521,
+      "userRatingCount": 90424,
+      "averageUserRatingForCurrentVersion": 4.77521,
+      "userRatingCountForCurrentVersion": 90424,
+      "sellerName": "Notion Labs, Incorporated",
+      "artistName": "Notion Labs, Incorporated",
+      "primaryGenreName": "Productivity",
+      "genres": [
+        "Productivity",
+        "Business"
+      ],
+      "bundleId": "notion.id",
+      "version": "1.7.346",
+      "kind": "software",
+      "wrapperType": "software",
+      "currentVersionReleaseDate": "2026-10-13T04:16:20Z",
+      "price": 0.0,
+      "formattedPrice": "Free"
+    },
+    {
+      "trackId": 1607562761,
+      "trackName": "Notion Calendar",
+      "trackViewUrl": "https://apps.apple.com/us/app/notion-calendar/id1607562761?uo=4",
+      "averageUserRating": 4.7355,
+      "userRatingCount": 7671,
+      "averageUserRatingForCurrentVersion": 4.7355,
+      "userRatingCountForCurrentVersion": 7671,
+      "sellerName": "Notion Labs, Incorporated",
+      "artistName": "Notion Labs, Incorporated",
+      "primaryGenreName": "Productivity",
+      "genres": [
+        "Productivity"
+      ],
+      "bundleId": "com.cron.calendar",
+      "version": "1.92.0",
+      "kind": "software",
+      "wrapperType": "software",
+      "currentVersionReleaseDate": "2026-07-30T19:50:59Z",
+      "price": 0.0,
+      "formattedPrice": "Free"
+    },
+    {
+      "trackId": 6473753684,
+      "trackName": "Claude by Anthropic",
+      "trackViewUrl": "https://apps.apple.com/us/app/claude-by-anthropic/id6473753684?uo=4",
+      "averageUserRating": 4.72187,
+      "userRatingCount": 281284,
+      "averageUserRatingForCurrentVersion": 4.72187,
+      "userRatingCountForCurrentVersion": 281284,
+      "sellerName": "Anthropic PBC",
+      "artistName": "Anthropic PBC",
+      "primaryGenreName": "Productivity",
+      "genres": [
+        "Productivity",
+        "Business"
+      ],
+      "bundleId": "com.anthropic.claude",
+      "version": "1.261016.20",
+      "kind": "software",
+      "wrapperType": "software",
+      "currentVersionReleaseDate": "2026-10-17T23:27:06Z",
+      "price": 0.0,
+      "formattedPrice": "Free"
+    },
+    {
+      "trackId": 1594021892,
+      "trackName": "To-Do List & Tasks for Notion",
+      "trackViewUrl": "https://apps.apple.com/us/app/to-do-list-tasks-for-notion/id1594021892?uo=4",
+      "averageUserRating": 4.3342,
+      "userRatingCount": 760,
+      "averageUserRatingForCurrentVersion": 4.3342,
+      "userRatingCountForCurrentVersion": 760,
+      "sellerName": "Zipo Apps Ltd.",
+      "artistName": "ZipoApps",
+      "primaryGenreName": "Productivity",
+      "genres": [
+        "Productivity",
+        "Utilities"
+      ],
+      "bundleId": "com.vladyslavlietun.NotionPro",
+      "version": "1.6.9",
+      "kind": "software",
+      "wrapperType": "software",
+      "currentVersionReleaseDate": "2026-08-21T17:09:45Z",
+      "price": 0.0,
+      "formattedPrice": "Free"
+    },
+    {
+      "trackId": 6751851452,
+      "trackName": "Widget for Notion",
+      "trackViewUrl": "https://apps.apple.com/us/app/widget-for-notion/id6751851452?uo=4",
+      "averageUserRating": 4.30556,
+      "userRatingCount": 36,
+      "averageUserRatingForCurrentVersion": 4.30556,
+      "userRatingCountForCurrentVersion": 36,
+      "sellerName": "YUYA YOSHIDA",
+      "artistName": "YUYA YOSHIDA",
+      "primaryGenreName": "Productivity",
+      "genres": [
+        "Productivity",
+        "Lifestyle"
+      ],
+      "bundleId": "com.yossy.notion-widget",
+      "version": "2.9.1",
+      "kind": "software",
+      "wrapperType": "software",
+      "currentVersionReleaseDate": "2026-10-11T22:13:53Z",
+      "price": 0.0,
+      "formattedPrice": "Free"
+    }
+  ]
+}

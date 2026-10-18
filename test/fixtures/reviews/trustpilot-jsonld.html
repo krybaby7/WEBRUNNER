@@ -1,0 +1,15 @@
+<!doctype html>
+<!--
+  FROM DOCS, UNVERIFIED. A Trustpilot-style company page that carries its
+  reviews only as JSON-LD (schema.org LocalBusiness with aggregateRating and
+  Review items), the second parser's input. No __NEXT_DATA__ on purpose.
+  The company is fictional; reviewer names are invented.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Acme Travel Reviews</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"LocalBusiness","@id":"https://www.trustpilot.com/review/acme-travel.example","name":"Acme Travel","url":"http://acme-travel.example","aggregateRating":{"@type":"AggregateRating","ratingValue":"3.6","bestRating":"5","worstRating":"1","reviewCount":"1284"},"review":[{"@type":"Review","@id":"https://www.trustpilot.com/reviews/6711a0c1e3f2a90012ab0001","url":"https://www.trustpilot.com/reviews/6711a0c1e3f2a90012ab0001","author":{"@type":"Person","name":"Marta K"},"datePublished":"2026-10-02T10:11:12.000Z","headline":"Smooth booking, quick support","reviewBody":"Booked a week in Lisbon through Acme. The confirmation came through in minutes and the hotel matched the photos.","reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5","worstRating":"1"},"inLanguage":"en"},{"@type":"Review","@id":"https://www.trustpilot.com/reviews/6710b2d2e3f2a90012ab0002","url":"https://www.trustpilot.com/reviews/6710b2d2e3f2a90012ab0002","author":{"@type":"Person","name":"Daniel O"},"datePublished":"2026-09-30T18:45:00.000Z","headline":"Refund took far too long","reviewBody":"Flight was cancelled by the airline and Acme took three weeks to process the refund.","reviewRating":{"@type":"Rating","ratingValue":2,"bestRating":5,"worstRating":1},"inLanguage":"en"}]}]}</script>
+</head>
+<body><main><h1>Acme Travel</h1></main></body>
+</html>
