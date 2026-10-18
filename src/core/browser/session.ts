@@ -2,9 +2,9 @@ import { mkdir } from "node:fs/promises";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { Config } from "../../config.js";
 import { log } from "../../log.js";
-import type { BrowserSession, BrowserSessionOptions, BrowserSessionStats } from "./types.js";
+import type { BrowserCookie, BrowserSession, BrowserSessionOptions, BrowserSessionStats } from "./types.js";
 
-export type { BrowserSession, BrowserSessionOptions, BrowserSessionStats } from "./types.js";
+export type { BrowserCookie, BrowserSession, BrowserSessionOptions, BrowserSessionStats } from "./types.js";
 
 /** PLAN.md 4.3: one context, pages pooled, at most 3 concurrent pages. */
 export const MAX_CONCURRENT_PAGES = 3;
@@ -43,6 +43,8 @@ class PlaywrightBrowserSession implements BrowserSession {
 
   /** Pages handed out to callers. */
   private readonly leased = new Set<Page>();
+  /** Long-lived interactive pages (login windows), outside the pool. */
+  private readonly unpooled = new Set<Page>();
   /** Slots reserved for callers whose page is still being created. */
   private creating = 0;
   private readonly waiters: Waiter[] = [];
@@ -97,6 +99,11 @@ class PlaywrightBrowserSession implements BrowserSession {
   }
 
   async release(page: Page): Promise<void> {
+    // An unpooled page holds no slot: closing it is all there is to do.
+    if (this.unpooled.delete(page)) {
+      await page.close().catch(() => undefined);
+      return;
+    }
     // A page we did not hand out, or one already released or swept up by
     // close(), is a no-op. Release must never throw.
     if (!this.leased.delete(page)) return;
@@ -111,6 +118,47 @@ class PlaywrightBrowserSession implements BrowserSession {
   close(): Promise<void> {
     this.closing ??= this.doClose();
     return this.closing;
+  }
+
+  // -- cookies and unpooled pages (PLAN.md 14.8) ---------------------------
+
+  async cookies(urls?: string[]): Promise<BrowserCookie[]> {
+    if (this.closed) throw new Error("browser session is closed");
+    const ctx = await this.ensureContext();
+    const raw = urls === undefined ? await ctx.cookies() : await ctx.cookies(urls);
+    // Drop `value` (and everything else Playwright adds) so no caller can ever
+    // see, return or log a cookie value: the profile is the owner's secret.
+    return raw.map(({ name, domain, path, expires, httpOnly, secure }) => ({ name, domain, path, expires, httpOnly, secure }));
+  }
+
+  async clearCookies(filter: { domain: string }): Promise<number> {
+    if (this.closed) throw new Error("browser session is closed");
+    // Refuse before attaching: there is no reason to connect to Chrome just to say no.
+    if (this.config.browser.cdp_url !== undefined || this.mode === "cdp") {
+      throw new Error("webrunner never changes the cookies of your own Chrome (BROWSER_CDP_URL is set); log out there instead");
+    }
+    const ctx = await this.ensureContext();
+    const matches = (c: { domain: string }): boolean => cookieDomainMatches(c.domain, filter.domain);
+    const before = (await ctx.cookies()).filter(matches).length;
+    if (before === 0) return 0;
+    await ctx.clearCookies({ domain: cookieDomainPattern(filter.domain) });
+    // Count by diffing rather than trusting the filter: what matters is what is really gone.
+    const after = (await ctx.cookies()).filter(matches).length;
+    return Math.max(0, before - after);
+  }
+
+  async openUnpooledPage(): Promise<Page> {
+    if (this.closed) throw new Error("browser session is closed");
+    const ctx = await this.ensureContext();
+    const page = await ctx.newPage();
+    if (this.closed) {
+      await page.close().catch(() => undefined);
+      throw new Error("browser session is closed");
+    }
+    this.unpooled.add(page);
+    // The owner may close the window by hand; forget it then so close() does not wait on a dead page.
+    page.once("close", () => this.unpooled.delete(page));
+    return page;
   }
 
   // -- pool ---------------------------------------------------------------
@@ -213,8 +261,9 @@ class PlaywrightBrowserSession implements BrowserSession {
     // Let an in-flight launch finish so it can be torn down cleanly.
     if (this.launching !== null) await this.launching.catch(() => undefined);
 
-    const pages = [...this.leased];
+    const pages = [...this.leased, ...this.unpooled];
     this.leased.clear();
+    this.unpooled.clear();
     await Promise.all(pages.map((p) => p.close().catch(() => undefined)));
 
     const ctx = this.context;
@@ -239,6 +288,29 @@ class PlaywrightBrowserSession implements BrowserSession {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** `.reddit.com` and `reddit.com` are the same site for our purposes; cookie domains store the dot, filters usually do not. */
+function stripLeadingDots(domain: string): string {
+  return domain.replace(/^\.+/, "").toLowerCase();
+}
+
+/**
+ * True when a stored cookie domain belongs to `filter`: the same host, or a
+ * subdomain of it. Leading dots are ignored on both sides, so a filter of
+ * `reddit.com` (or `.reddit.com`) matches cookies on `.reddit.com`,
+ * `reddit.com` and `www.reddit.com`, and never `notreddit.com`.
+ */
+export function cookieDomainMatches(cookieDomain: string, filter: string): boolean {
+  const host = stripLeadingDots(cookieDomain);
+  const want = stripLeadingDots(filter);
+  return want !== "" && (host === want || host.endsWith(`.${want}`));
+}
+
+/** The same rule as `cookieDomainMatches`, as the RegExp Playwright's `clearCookies({ domain })` accepts. */
+export function cookieDomainPattern(filter: string): RegExp {
+  const escaped = stripLeadingDots(filter).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^(?:.*\\.)?${escaped}$`, "i");
 }
 
 /**

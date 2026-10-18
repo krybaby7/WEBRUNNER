@@ -224,7 +224,8 @@ describe("tool wall-clock caps", () => {
     expect(desc("browse_task")).toMatch(/11 minutes/);
     expect(desc("deep_research")).toMatch(/15 minutes/);
     expect(desc("deep_research")).toMatch(/WEBRUNNER_RESEARCH_MAX_MS/);
-    for (const name of ["web_search", "fetch_page", "search_flights", "browse_task", "deep_research"]) {
+    expect(desc("accounts")).toMatch(/330 seconds/);
+    for (const name of ["web_search", "fetch_page", "search_flights", "browse_task", "deep_research", "accounts"]) {
       expect(desc(name)).toMatch(/timeout/);
     }
   });
