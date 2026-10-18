@@ -7,6 +7,7 @@ import { registerHealthTool } from "./health.js";
 import { registerPingTool } from "./ping.js";
 import { registerFetchPageTool } from "./fetch_page.js";
 import { registerSearchFlightsTool } from "./search_flights.js";
+import { registerSocialSearchTool } from "./social_search.js";
 import { registerWebSearchTool } from "./web_search.js";
 
 /**
@@ -20,6 +21,7 @@ export const TOOL_NAMES = [
   "fetch_page",
   "browse_task",
   "search_flights",
+  "social_search",
   "deep_research",
   "accounts",
   "health",
@@ -32,6 +34,7 @@ export function registerTools(server: McpServer, deps: Deps): void {
   registerFetchPageTool(server, deps);
   registerBrowseTaskTool(server, deps);
   registerSearchFlightsTool(server, deps);
+  registerSocialSearchTool(server, deps);
   registerDeepResearchTool(server, deps);
   registerAccountsTool(server, deps);
   registerHealthTool(server, deps, TOOL_NAMES);

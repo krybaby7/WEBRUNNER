@@ -1,0 +1,91 @@
+{
+  "_note": "Recorded live from hn.algolia.com on 2026-10-18 from the development environment (HTTP 200). Trimmed: _highlightResult removed, children lists shortened; no redaction needed, all fields are public.",
+  "exhaustive": {
+    "nbHits": false,
+    "typo": false
+  },
+  "exhaustiveNbHits": false,
+  "exhaustiveTypo": false,
+  "hits": [
+    {
+      "_tags": [
+        "comment",
+        "author_kxo",
+        "story_9088640"
+      ],
+      "author": "kxo",
+      "comment_text": "If Rust had asynchronous I&#x2F;O this would be less of a head scratcher.<p>Too bad that AIO and related, necessary primitives were forsaken for other priorities.",
+      "created_at": "2015-02-24T02:19:58Z",
+      "created_at_i": 1424744398,
+      "objectID": "9098368",
+      "parent_id": 9089454,
+      "points": null,
+      "story_id": 9088640,
+      "story_title": "On Rust and Nim",
+      "story_url": "https://andreaferretti.github.io/on-rust-and-nim/",
+      "updated_at": "2023-09-07T02:09:54Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_freekh",
+        "story_8458831"
+      ],
+      "author": "freekh",
+      "comment_text": "Is Rust Postgres async?",
+      "created_at": "2014-10-16T08:39:15Z",
+      "created_at_i": 1413448755,
+      "objectID": "8463969",
+      "parent_id": 8461182,
+      "story_id": 8458831,
+      "story_title": "Rustful – A RESTful web framework for Rust",
+      "story_url": "https://github.com/Ogeon/rustful",
+      "updated_at": "2024-09-19T21:17:41Z"
+    },
+    {
+      "_tags": [
+        "comment",
+        "author_kscan1992",
+        "story_49922569"
+      ],
+      "author": "kscan1992",
+      "comment_text": "NeuralFrame | Senior Backend Engineer, Medical Data Pipeline (Python + Rust) | REMOTE (US only, US time zones; no visa sponsorship) | Full-time | $170k–$210k + 0.1%–0.25% equity<p>We build software that hospitals, cancer registries and researchers use. You&#x27;d own the pipeline that pulls data from hospital systems and transforms it for analytics and research.<p>Where Rust fits: part of our hospital data acquisition layer, the code that talks to hospital systems, is written in Rust. You&#x27;d work on both sides: Rust where performance and correctness matter most, async Python for the rest of the pipeline. Rust experience is a strong plus. Whether you learned it at work or on your own, we want to hear what you built with it.<p>Stack: Rust, async Python (mypy, pytest, ruff, uv), PostgreSQL and MongoDB, Dagster, Terraform&#x2F;OpenTofu, AWS (ECS&#x2F;Fargate, RDS, Lambda, S3), GitHub Actions.<p>You&#x27;ll need 5+ years building backend services or data pipelines in production (retries, idempotency, schema design and migrations, well-tested and typed code) and strong Python and SQL. No healthcare background needed.<p>Apply: <a href=\"https:&#x2F;&#x2F;wellfound.com&#x2F;jobs&#x2F;4829721-senior-backend-software-engineer-medical-data-pipeline\" rel=\"nofollow\">https:&#x2F;&#x2F;wellfound.com&#x2F;jobs&#x2F;4829721-senior-backend-software-e...</a>. In your note, tell us in a few sentences about one pipeline failure you traced (what broke, how you found it, what you changed) and, if you&#x27;ve written Rust, what you built with it.",
+      "created_at": "2026-10-14T21:53:28Z",
+      "created_at_i": 1792014808,
+      "objectID": "50095921",
+      "parent_id": 49922569,
+      "story_id": 49922569,
+      "story_title": "Ask HN: Who is hiring? (October 2026)",
+      "updated_at": "2026-10-15T13:11:46Z"
+    }
+  ],
+  "hitsPerPage": 3,
+  "nbHits": 14350,
+  "nbPages": 334,
+  "page": 0,
+  "params": "query=rust+async&tags=comment&hitsPerPage=3&advancedSyntax=true&analyticsTags=backend",
+  "processingTimeMS": 38,
+  "processingTimingsMS": {
+    "_request": {
+      "roundTrip": 14
+    },
+    "afterFetch": {
+      "merge": {
+        "mergeLoop": {
+          "prepareNextHit": 2,
+          "total": 2
+        },
+        "total": 2
+      },
+      "total": 2
+    },
+    "fetch": {
+      "query": 4,
+      "scanning": 30,
+      "total": 35
+    },
+    "total": 38
+  },
+  "query": "rust async",
+  "serverTimeMS": 39
+}

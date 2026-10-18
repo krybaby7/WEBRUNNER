@@ -1,0 +1,72 @@
+{
+  "_note": "From docs, unverified: commentThreads.list (part=snippet, textFormat=plainText) response shape per https://developers.google.com/youtube/v3/docs/commentThreads/list. Not recorded live (no key). Authors and texts are invented.",
+  "kind": "youtube#commentThreadListResponse",
+  "etag": "example",
+  "pageInfo": { "totalResults": 2, "resultsPerPage": 20 },
+  "items": [
+    {
+      "kind": "youtube#commentThread",
+      "etag": "c1",
+      "id": "UgzCommentThread0001",
+      "snippet": {
+        "channelId": "UCexamplechannel0001",
+        "videoId": "dQw4w9WgXcQ",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "c1a",
+          "id": "UgzCommentThread0001",
+          "snippet": {
+            "channelId": "UCexamplechannel0001",
+            "videoId": "dQw4w9WgXcQ",
+            "textDisplay": "Finally someone explains cancellation safety without hand-waving. Great video.",
+            "textOriginal": "Finally someone explains cancellation safety without hand-waving. Great video.",
+            "authorDisplayName": "@asyncfan",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/example",
+            "authorChannelUrl": "http://www.youtube.com/@asyncfan",
+            "authorChannelId": { "value": "UCviewer0001" },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 128,
+            "publishedAt": "2026-10-11T02:14:00Z",
+            "updatedAt": "2026-10-11T02:14:00Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 6,
+        "isPublic": true
+      }
+    },
+    {
+      "kind": "youtube#commentThread",
+      "etag": "c2",
+      "id": "UgzCommentThread0002",
+      "snippet": {
+        "channelId": "UCexamplechannel0001",
+        "videoId": "dQw4w9WgXcQ",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "c2a",
+          "id": "UgzCommentThread0002",
+          "snippet": {
+            "channelId": "UCexamplechannel0001",
+            "videoId": "dQw4w9WgXcQ",
+            "textDisplay": "Disagree on smol, it is not production ready for anything with TLS.",
+            "textOriginal": "Disagree on smol, it is not production ready for anything with TLS.",
+            "authorDisplayName": "@tls_pedant",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/example2",
+            "authorChannelUrl": "http://www.youtube.com/@tls_pedant",
+            "authorChannelId": { "value": "UCviewer0002" },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 17,
+            "publishedAt": "2026-10-12T19:45:00Z",
+            "updatedAt": "2026-10-12T19:45:00Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 0,
+        "isPublic": true
+      }
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import { registerHealthTool } from "../../../src/tools/health.js";
 import { registerTools, TOOL_NAMES } from "../../../src/tools/index.js";
 import { registerPingTool } from "../../../src/tools/ping.js";
 import { registerSearchFlightsTool } from "../../../src/tools/search_flights.js";
+import { registerSocialSearchTool } from "../../../src/tools/social_search.js";
 import { registerWebSearchTool } from "../../../src/tools/web_search.js";
 import { makeConfig } from "../llm/helpers.js";
 import { recordingLogger, scriptedLlm } from "../research/helpers.js";
@@ -87,6 +88,16 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
     register: (server, deps) =>
       registerSearchFlightsTool(server, deps, {
         providers: () => {
+          throw boom();
+        },
+      }),
+  },
+  social_search: {
+    args: { query: "anything" },
+    // The platform factory throws before any platform is called: nothing per-platform can catch it.
+    register: (server, deps) =>
+      registerSocialSearchTool(server, deps, {
+        platforms: () => {
           throw boom();
         },
       }),

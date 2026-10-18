@@ -1,0 +1,110 @@
+{
+  "_note": "Recorded live from hn.algolia.com on 2026-10-18 from the development environment (HTTP 200). Trimmed: _highlightResult removed, children lists shortened; no redaction needed, all fields are public.",
+  "author": "tazjin",
+  "created_at": "2021-03-10T02:16:55.000Z",
+  "created_at_i": 1615342615,
+  "id": 26406989,
+  "options": [],
+  "parent_id": null,
+  "points": 603,
+  "story_id": 26406989,
+  "text": null,
+  "title": "Why asynchronous Rust doesn't work",
+  "type": "story",
+  "url": "https://theta.eu.org/2021/03/08/async-rust-2.html",
+  "children": [
+    {
+      "author": "Animats",
+      "created_at": "2021-03-10T02:41:22.000Z",
+      "created_at_i": 1615344082,
+      "id": 26407139,
+      "options": [],
+      "parent_id": 26406989,
+      "points": null,
+      "story_id": 26406989,
+      "text": "I&#x27;m coming around to the position that pure &quot;async&quot; is OK, and pure threading is OK, and green threads (as in Go goroutines) are OK, but having more than one of those in a language is not OK. They do not get along well.",
+      "title": null,
+      "type": "comment",
+      "url": null,
+      "children": [
+        {
+          "author": "socialdemocrat",
+          "children": [],
+          "created_at": "2021-03-10T02:43:47.000Z",
+          "created_at_i": 1615344227,
+          "id": 26407152,
+          "options": [],
+          "parent_id": 26407139,
+          "points": null,
+          "story_id": 26406989,
+          "text": "Isn’t the Go solution green threads on top of hardware threads?<p>Lots of green threads get load balanced on top of a thread pool. Isn’t that the whole unique aspect of Go? So in essence they do both.",
+          "title": null,
+          "type": "comment",
+          "url": null
+        }
+      ]
+    },
+    {
+      "author": "nynx",
+      "created_at": "2021-03-10T02:45:34.000Z",
+      "created_at_i": 1615344334,
+      "id": 26407162,
+      "options": [],
+      "parent_id": 26406989,
+      "points": null,
+      "story_id": 26406989,
+      "text": "That&#x27;s an evocative title.",
+      "title": null,
+      "type": "comment",
+      "url": null,
+      "children": [
+        {
+          "author": "yannikyeo",
+          "children": [],
+          "created_at": "2021-03-10T03:12:43.000Z",
+          "created_at_i": 1615345963,
+          "id": 26407327,
+          "options": [],
+          "parent_id": 26407162,
+          "points": null,
+          "story_id": 26406989,
+          "text": "I would say it’s clickbaity.",
+          "title": null,
+          "type": "comment",
+          "url": null
+        }
+      ]
+    },
+    {
+      "author": "xiphias2",
+      "created_at": "2021-03-10T02:49:12.000Z",
+      "created_at_i": 1615344552,
+      "id": 26407186,
+      "options": [],
+      "parent_id": 26406989,
+      "points": null,
+      "story_id": 26406989,
+      "text": "As I read through the database example, I saw that the compiler just caught a multi-threading bug for the author, and instead of being thankful, he’s complaining that Rust is bad.<p>I think he should use a higher level framework, or wait a few years for them to mature, and use a garbage collected language until then.",
+      "title": null,
+      "type": "comment",
+      "url": null,
+      "children": [
+        {
+          "author": "_zhqs",
+          "children": [],
+          "created_at": "2021-03-10T03:12:37.000Z",
+          "created_at_i": 1615345957,
+          "id": 26407326,
+          "options": [],
+          "parent_id": 26407186,
+          "points": null,
+          "story_id": 26406989,
+          "text": "&gt; caught a multi-threading bug<p>The compiler complained: \n“error[E0308]: mismatched types”",
+          "title": null,
+          "type": "comment",
+          "url": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "_note": "From docs, unverified: app.bsky.feed.getPostThread response shape (depth 1) per https://docs.bsky.app/docs/api/app-bsky-feed-get-post-thread. Not recorded live (403 from the development environment). One reply is a notFoundPost to show that nodes without a post are skipped.",
+  "thread": {
+    "$type": "app.bsky.feed.defs#threadViewPost",
+    "post": {
+      "uri": "at://did:plc:aaaa1111bbbb2222cccc3333/app.bsky.feed.post/3kz7abcdefg2a",
+      "cid": "bafyreiexample1",
+      "author": { "did": "did:plc:aaaa1111bbbb2222cccc3333", "handle": "rustacean.example.com", "displayName": "Rustacean" },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Tokio's new runtime metrics saved us a week of debugging. Async Rust is finally pleasant.",
+        "createdAt": "2026-10-15T09:12:00.000Z",
+        "langs": ["en"]
+      },
+      "replyCount": 4,
+      "repostCount": 7,
+      "likeCount": 42,
+      "indexedAt": "2026-10-15T09:12:03.000Z"
+    },
+    "replies": [
+      {
+        "$type": "app.bsky.feed.defs#threadViewPost",
+        "post": {
+          "uri": "at://did:plc:jjjj0000kkkk1111llll2222/app.bsky.feed.post/3kz7reply0001",
+          "cid": "bafyreireply1",
+          "author": { "did": "did:plc:jjjj0000kkkk1111llll2222", "handle": "observer.bsky.social", "displayName": "Observer" },
+          "record": {
+            "$type": "app.bsky.feed.post",
+            "text": "Which metrics did you find most useful? Task poll counts or the scheduler ones?",
+            "createdAt": "2026-10-15T09:30:00.000Z",
+            "langs": ["en"],
+            "reply": { "root": { "uri": "at://did:plc:aaaa1111bbbb2222cccc3333/app.bsky.feed.post/3kz7abcdefg2a", "cid": "bafyreiexample1" }, "parent": { "uri": "at://did:plc:aaaa1111bbbb2222cccc3333/app.bsky.feed.post/3kz7abcdefg2a", "cid": "bafyreiexample1" } }
+          },
+          "replyCount": 1,
+          "repostCount": 0,
+          "likeCount": 3,
+          "indexedAt": "2026-10-15T09:30:02.000Z"
+        },
+        "replies": []
+      },
+      {
+        "$type": "app.bsky.feed.defs#threadViewPost",
+        "post": {
+          "uri": "at://did:plc:mmmm3333nnnn4444oooo5555/app.bsky.feed.post/3kz7reply0002",
+          "cid": "bafyreireply2",
+          "author": { "did": "did:plc:mmmm3333nnnn4444oooo5555", "handle": "skeptic.example.net" },
+          "record": {
+            "$type": "app.bsky.feed.post",
+            "text": "Pleasant until you hit a Send bound error three generics deep.",
+            "createdAt": "2026-10-15T10:02:00.000Z",
+            "langs": ["en"]
+          },
+          "replyCount": 0,
+          "repostCount": 1,
+          "likeCount": 9,
+          "indexedAt": "2026-10-15T10:02:01.000Z"
+        }
+      },
+      {
+        "$type": "app.bsky.feed.defs#notFoundPost",
+        "uri": "at://did:plc:pppp6666qqqq7777rrrr8888/app.bsky.feed.post/3kz7reply0003",
+        "notFound": true
+      }
+    ]
+  }
+}

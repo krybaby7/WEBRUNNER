@@ -1,0 +1,89 @@
+{
+  "_note": "From docs, unverified: /search.json (type=link, raw_json=1) Listing shape per https://www.reddit.com/dev/api/#GET_search. reddit.com answered 403 from the development environment and the API needs credentials, so this was not recorded live. Ids, authors and texts are invented.",
+  "kind": "Listing",
+  "data": {
+    "after": "t3_1abcd04",
+    "dist": 4,
+    "modhash": "",
+    "geo_filter": "",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abcd01",
+          "name": "t3_1abcd01",
+          "title": "Which async runtime should a new Rust service use in 2026?",
+          "selftext": "Starting a new backend service. Tokio is the default answer but smol looks simpler. What are people actually running in production?",
+          "author": "ferris_fan",
+          "score": 812,
+          "upvote_ratio": 0.96,
+          "num_comments": 143,
+          "subreddit": "rust",
+          "subreddit_name_prefixed": "r/rust",
+          "permalink": "/r/rust/comments/1abcd01/which_async_runtime_should_a_new_rust_service_use/",
+          "url": "https://www.reddit.com/r/rust/comments/1abcd01/which_async_runtime_should_a_new_rust_service_use/",
+          "is_self": true,
+          "created_utc": 1760428800
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abcd02",
+          "name": "t3_1abcd02",
+          "title": "Tokio 2.0 released with structured concurrency",
+          "selftext": "",
+          "author": "release_bot_human",
+          "score": 2401,
+          "upvote_ratio": 0.98,
+          "num_comments": 318,
+          "subreddit": "programming",
+          "subreddit_name_prefixed": "r/programming",
+          "permalink": "/r/programming/comments/1abcd02/tokio_20_released_with_structured_concurrency/",
+          "url": "https://tokio.rs/blog/2026-10-tokio-2",
+          "is_self": false,
+          "created_utc": 1760342400
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abcd03",
+          "name": "t3_1abcd03",
+          "title": "Async Rust cancellation footguns, a field guide",
+          "selftext": "After two outages caused by dropped futures, here is everything we learned about cancellation safety.",
+          "author": "[deleted]",
+          "score": 455,
+          "upvote_ratio": 0.93,
+          "num_comments": 67,
+          "subreddit": "rust",
+          "subreddit_name_prefixed": "r/rust",
+          "permalink": "/r/rust/comments/1abcd03/async_rust_cancellation_footguns_a_field_guide/",
+          "url": "https://www.reddit.com/r/rust/comments/1abcd03/async_rust_cancellation_footguns_a_field_guide/",
+          "is_self": true,
+          "created_utc": 1760256000
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1abcd04",
+          "name": "t3_1abcd04",
+          "title": "Is async Rust worth it for a CLI tool?",
+          "selftext": "Probably not, but convince me otherwise.",
+          "author": "cli_curious",
+          "score": 37,
+          "upvote_ratio": 0.8,
+          "num_comments": 22,
+          "subreddit": "learnrust",
+          "subreddit_name_prefixed": "r/learnrust",
+          "permalink": "/r/learnrust/comments/1abcd04/is_async_rust_worth_it_for_a_cli_tool/",
+          "url": "https://www.reddit.com/r/learnrust/comments/1abcd04/is_async_rust_worth_it_for_a_cli_tool/",
+          "is_self": true,
+          "created_utc": 1760169600
+        }
+      }
+    ],
+    "before": null
+  }
+}
