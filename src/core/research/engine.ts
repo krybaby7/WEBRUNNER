@@ -80,7 +80,9 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
   const parsedInput = DeepResearchInputSchema.safeParse(input);
   if (!parsedInput.success) {
     const issues = parsedInput.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`);
-    throw new ResearchError("internal", `Invalid deep_research input: ${issues.join("; ")}`, false);
+    throw new ResearchError("invalid_input", `Invalid deep_research input: ${issues.join("; ")}`, false, {
+      issues: parsedInput.error.issues,
+    });
   }
   const req = parsedInput.data;
   const { log, config } = deps;
@@ -484,7 +486,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       if (notes.length === 0) throw fromLlmError(err);
       log.warn("research stopped early after a model call failed", { code: err.code, kind: err.kind });
       engineGaps.push("Research stopped early because a model call failed, so some sub-questions were not researched.");
-      stopped = "iterations";
+      stopped = "error";
     } else {
       throw err;
     }

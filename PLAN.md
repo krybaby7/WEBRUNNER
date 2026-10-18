@@ -295,7 +295,7 @@ Output:
     output_tokens: number;
     cost_usd: number;           // LLM spend only; search and fetch provider fees are not metered
     elapsed_ms: number;
-    stopped_reason: "converged" | "iterations" | "budget" | "searches" | "reads" | "no_results";
+    stopped_reason: "converged" | "iterations" | "budget" | "searches" | "reads" | "no_results" | "error";
   };
 }
 ```

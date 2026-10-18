@@ -6,7 +6,7 @@ import { RECENCY_VALUES } from "./web_search.js";
 export const DEPTHS = ["quick", "standard", "deep"] as const;
 export const OUTPUT_FORMATS = ["report", "brief"] as const;
 export const CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
-export const STOPPED_REASONS = ["converged", "iterations", "budget", "searches", "reads", "no_results"] as const;
+export const STOPPED_REASONS = ["converged", "iterations", "budget", "searches", "reads", "no_results", "error"] as const;
 
 export const QUOTE_MAX_CHARS = 300;
 export const QUESTION_MAX_CHARS = 2000;

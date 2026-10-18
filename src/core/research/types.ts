@@ -60,7 +60,7 @@ export interface PlanStep {
   rationale: string;
 }
 
-export type ResearchErrorCode = "config" | "provider" | "timeout" | "budget_exceeded" | "internal";
+export type ResearchErrorCode = "config" | "provider" | "timeout" | "budget_exceeded" | "invalid_input" | "internal";
 
 /**
  * Thrown by `runResearch` when no result can be produced. `code` maps onto the
