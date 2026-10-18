@@ -20,12 +20,26 @@ import { toolError } from "../schemas/error.js";
  *   search_flights  Google Flights 90 s or Duffel 45 s per source, plus place resolution.
  *   browse_task     the agent stops itself after 10 minutes between steps; the extra minute is a
  *                   backstop for a step that hangs.
+ *   search_hotels   Google Hotels 90 s per source, like flights (PLAN.md 14.1).
+ *   market_quote    10 s per source per symbol, sources tried in turn (14.2).
+ *   weather         two 10 s requests, geocoding then forecast (14.3).
+ *   exchange_rate   one 10 s request plus a cached currency list (14.4).
+ *   social_search   60 s per browser platform in parallel plus the summary call (14.5).
+ *   search_reviews  60 s per browser source in parallel plus the summary call (14.6).
+ *   accounts        a login wait of up to 300 s plus margin (14.7).
  */
 export const TOOL_WALL_CLOCK_MS = {
   web_search: 30_000,
   fetch_page: 90_000,
   search_flights: 120_000,
   browse_task: 11 * 60_000,
+  search_hotels: 120_000,
+  market_quote: 30_000,
+  weather: 20_000,
+  exchange_rate: 20_000,
+  social_search: 180_000,
+  search_reviews: 180_000,
+  accounts: 330_000,
 } as const;
 
 /** Thrown by `withWallClock` when the cap is reached. */

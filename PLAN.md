@@ -815,3 +815,463 @@ Status on 2026-10-18: all fourteen work packages are merged (WP14 as WP14a and W
 - **2026-10-18, after WP2/WP9/WP12**: `Deps` now carries `llm` and `browser` with `closeDeps` on shutdown, so WP5, WP10 and WP11 consume rather than create them. 3.3 gained `published_at` on sources, `quote` on findings, `depth`, `stats.pages_failed`, `stats.stopped_reason`, the citation invariants and the engine entry point, all from the WP9 judge's needs. 3.5 gained field definitions, passenger limits and the currency and `max_stops` caveats from WP12. Canonicalization list unified between 3.1 and 4.1. SDK-level input validation accepted in place of `invalid_input` envelopes for malformed input.
 - **2026-10-18, after WP1/WP3/WP4/WP6**: recorded the implemented shapes for search normalization, bot-wall semantics (returned vs thrown), the browser session and snapshot contracts, and the LLM client (`Usage`, `LlmError`, per-run `CostMeter`, `maxTokens: 16000` for planner calls). WP5 now depends on WP2 for the cache and owns wiring the shared `BrowserSession` into `Deps` and shutdown. Jina's `X-Return-Format` header is dropped in WP5. PDF extraction and a Chromium CI job were added to WP14. Playwright is pinned to 1.56.1 to match the Chromium build shipped with the dev environment; the README (WP13) must say to run `npx playwright install chromium` elsewhere. `vitest.config.ts` includes `test/integration/**` only when `RUN_INTEGRATION=1`.
 - **2026-10-18, after WP0**: added `src/deps.ts`, `src/schemas/result.ts`, `src/tools/index.ts` and the tool wiring convention; moved `ping` to `src/tools/ping.ts`. Added config keys for browser profile dir, screenshots, currency and per-role model overrides so WP4, WP6, WP10 and WP11 do not each edit `config.ts`. Pinned MCP SDK to the 1.32.x line for v1. Made `ANTHROPIC_API_KEY` optional at startup. Fixed `published_at` normalization. All raised by the WP0 implementer's report.
+
+---
+
+## 14. Phase 5: the all-rounder expansion (v0.2)
+
+> Added 2026-10-18 after the v0.1 close-out, at the owner's request: "expand not just search flights but hotels, stocks and more; search comments or reviews specifically; search Reddit and other social media; connect my own accounts (Facebook, Google, ...) so the AI can browse these platforms through my account for a 'what are people saying' social search."
+>
+> Sections 14.1 to 14.7 are tool contracts and carry the same authority as Section 3. Section 14.8 extends the internal interfaces of Section 4. Section 14.9 is the work breakdown (WP15 to WP21). Everything marked DECIDED is settled.
+
+### 14.0 Scope and principles
+
+Seven new tools, in three groups:
+
+| group | tools | data path |
+|-------|-------|-----------|
+| live data recipes | `search_hotels`, `market_quote`, `weather`, `exchange_rate` | public APIs where a keyless or free-key one exists, the browser otherwise |
+| opinion search | `social_search`, `search_reviews` | public APIs first (Hacker News, Bluesky, Reddit API, YouTube Data API, App Store feed), the browser through the owner's own logged-in profile for platforms with no usable API (X, Facebook, Google Maps, Google Play, Amazon, Reddit when its API blocks) |
+| account plumbing | `accounts` | the persistent browser profile's cookies, or the owner's Chrome over CDP |
+
+Principles (DECIDED):
+
+- **Same architecture as flights.** Each live-data tool is a thin tool file over a provider list built from `Config` plus the shared `BrowserSession`, `LlmClient` and `FetchService` in `Deps`. Browser-based sources are `Recipe`s (4.5): navigate, wait, probe the DOM for a deterministic fast path, fall back to schema-driven LLM extraction. Every provider failure is a typed error whose `code` maps onto the envelope (3.6).
+- **Logged-in browsing is passive.** Social and review recipes use whatever session the persistent profile (or the owner's Chrome) already has. They never type credentials, never log in, never post, like, follow, reply or message. The `browse_task` agent's rules (3.4) are unchanged. When a recipe lands on a login wall it fails with `needs_login: true` and names the `accounts` tool.
+- **Cookie values never leave the server.** `accounts` reports platform names and a boolean; `health` reports connected platform names; nothing logs or returns a cookie value. The profile directory is the owner's secret, like a key.
+- **Terms of service.** Automated reading of X, Facebook, Google Maps, Google Play, Amazon and Reddit's site (as opposed to its API) is against those platforms' terms and, when done through the owner's account, can get that account rate-limited or suspended. The owner has accepted this for personal, low-volume use from their own machine, as for Google Flights. The README says so per platform. No stealth, no CAPTCHA solving: a CAPTCHA or checkpoint is reported as `blocked`.
+- **Keyless first, keys optional.** Every tool does something useful with no key at all; keys widen coverage. New keys: `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (Reddit API, app-only auth), `REDDIT_USER_AGENT` (optional), `YOUTUBE_API_KEY` (YouTube Data API v3), `FINNHUB_API_KEY` (stock quotes).
+- **Verification honesty.** From the development environment (a cloud IP behind a proxy), Hacker News, Open-Meteo geocoding, Frankfurter, CoinGecko, the App Store review feed, Google Hotels, Google Finance, Google Maps and YouTube pages answered; Yahoo Finance returned 429, Reddit's JSON endpoints 403, Bluesky's public API 403, Trustpilot an AWS WAF challenge, Open-Meteo's forecast host timed out, Stooq reset the connection. Implementers verify live what the environment allows, record what they saw in the PR, and build fixtures from documentation for the rest, with the field mapping marked "from docs" in the fixture file. The owner's first live run from a home IP is the real test for those.
+
+### 14.1 `search_hotels`
+
+Purpose: nightly rates and ratings for a destination and dates, from Google Hotels read through the browser.
+
+Input:
+```ts
+{
+  destination: string;            // city, area, landmark or hotel name, free text, 1..120 chars
+  check_in: string;               // YYYY-MM-DD, real date
+  check_out: string;              // YYYY-MM-DD, after check_in, at most 30 nights
+  guests?: { adults?: number; children?: number };   // default 2 adults; adults 1..8, children 0..6
+  max_price_per_night?: number;   // in `currency`, > 0
+  min_rating?: number;            // guest rating floor, 0..5
+  star_classes?: (2 | 3 | 4 | 5)[];
+  sort?: "relevance" | "price" | "rating";   // default relevance (the page's own order)
+  sources?: ("google_hotels")[];  // default: all configured
+  currency?: string;              // ISO 4217; default config.currency
+  max_results?: number;           // default 20, max 40
+}
+```
+
+Output:
+```ts
+{
+  query: NormalizedHotelsQuery;   // echo: destination, check_in, check_out, nights, guests, filters, sort, currency, sources, max_results
+  hotels: Array<{
+    id: string;                   // "<source>:<12 hex of a stable hash of name + price text>"
+    source: "google_hotels";
+    name: string;
+    price_per_night?: { amount: number; currency: string };   // absent when the row shows no price (sold out, "View prices")
+    total_price?: { amount: number; currency: string };       // only when the page shows a stay total
+    rating?: number;              // guest rating 0..5, one decimal
+    review_count?: number;
+    star_class?: number;          // hotel class 1..5 when printed ("4-star hotel")
+    type?: string;                // "hotel", "apartment", "hostel", "resort", ... as printed, lower-case
+    location_note?: string;       // "0.3 mi from Louvre", neighbourhood, as printed
+    amenities: string[];          // as printed, deduplicated, at most 12
+    tags: string[];               // "Great deal", "Free cancellation", "Breakfast included", ... as printed
+    url?: string;                 // the hotel's Google Hotels page when the row links to one
+    availability: "available" | "sold_out" | "unknown";
+  }>;
+  sources_used: HotelSource[];
+  sources_failed: Array<{ source: HotelSource; error: string }>;
+  fetched_at: string;
+  caveats: string[];
+}
+```
+
+Behaviour (DECIDED):
+- Recipe `google_hotels` in `src/core/browser/recipes/google-hotels.ts`, provider in `src/core/hotels/providers/google-hotels.ts`, built by `buildAllHotelProviders(config, { browser, llm })` in `src/core/hotels/providers/index.ts`, mirroring flights. Needs the browser; extraction needs `ANTHROPIC_API_KEY` only for the LLM fallback: when the deterministic DOM probe yields rows that validate, no model call is made and the tool works keyless.
+- `buildUrl`: candidate forms to verify live, in order: `https://www.google.com/travel/search?q=hotels%20in%20<destination>&hl=en&curr=<CUR>&checkin=YYYY-MM-DD&checkout=YYYY-MM-DD&adults=N&children=M` and the natural-language `q=hotels in <destination> from <check_in> to <check_out> for 2 adults` form that flights uses. The implementer records which form sets the dates and guests in the page controls, reads those controls back and adds a caveat on mismatch, as the flights recipe does.
+- Consent dialog, CAPTCHA and "unusual traffic" handling reuse the flights recipe's patterns (REJECT/ACCEPT names, `detectBotWall`); a wall is `blocked`.
+- Filters: `max_price_per_night`, `min_rating` and `star_classes` are applied in code after extraction; when the page offers the same filter in its URL, the recipe may also pass it, but the code-side filter is what guarantees the contract. `sort` is applied in code: `price` ascending (rows without a price last), `rating` descending (unrated last), `relevance` keeps page order.
+- Nights are `check_out - check_in`. When the page shows per-night prices only, `total_price` is omitted and a caveat says the total is nights times the nightly rate before taxes.
+- The recipe scrolls or clicks "more results" at most twice; the incompleteness caveat says when more rows existed.
+- Cache: none (prices move). Per-source timeout 90 s; tool wall clock 120 s.
+- Prices are quotes at fetch time, taxes and fees vary by site; the last caveat always says so. The tool reads only; it never opens a booking site.
+
+### 14.2 `market_quote`
+
+Purpose: current prices (and optionally price history) for stocks, ETFs, indices and crypto assets.
+
+Input:
+```ts
+{
+  symbols: string[];              // 1..10 entries; a ticker ("AAPL", "VOD.L", "^GSPC", "BTC-USD") or a name ("Apple", "bitcoin")
+  history?: {
+    range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "5y" | "max";
+    interval?: "1m" | "5m" | "15m" | "1h" | "1d" | "1wk" | "1mo";   // default: the coarsest sensible one for the range
+  };
+  sources?: ("yahoo" | "finnhub" | "coingecko" | "google_finance")[];   // default: every configured source
+  currency?: string;              // quote currency for crypto (CoinGecko); default config.currency. Stocks are quoted in their listing currency.
+}
+```
+
+Output:
+```ts
+{
+  quotes: Array<{
+    requested: string;            // the input string this quote answers
+    symbol: string;               // the ticker as the source names it
+    name?: string;
+    asset_type: "stock" | "etf" | "index" | "crypto" | "fund" | "other";
+    exchange?: string;
+    currency: string;
+    price: number;
+    previous_close?: number;
+    change?: number;
+    change_pct?: number;
+    open?: number; day_high?: number; day_low?: number;
+    volume?: number;
+    market_cap?: number;
+    week52_high?: number; week52_low?: number;
+    market_state?: "pre" | "regular" | "post" | "closed";
+    as_of: string;                // ISO 8601 UTC of the quote's own timestamp
+    delayed_min?: number;         // 0 for real time, 15 typical for free equity data; omitted when the source does not say
+    source: MarketSource;
+    history?: {
+      range: HistoryRange; interval: HistoryInterval;
+      bars: Array<{ t: string; o: number; h: number; l: number; c: number; v?: number }>;   // t ISO UTC, ascending, at most 1000 bars
+    };
+  }>;
+  unresolved: Array<{ requested: string; error: string }>;   // inputs no source could resolve or quote
+  sources_used: MarketSource[];
+  sources_failed: Array<{ source: MarketSource; error: string }>;
+  fetched_at: string;
+  caveats: string[];
+}
+```
+
+Behaviour (DECIDED):
+- Sources and what each does: `yahoo` (keyless; quote, history, name lookup via the search endpoint; chart endpoint `query1.finance.yahoo.com/v8/finance/chart/<symbol>` with `range`/`interval`), `finnhub` (needs `FINNHUB_API_KEY`; `/quote` and `/search`; no history on the free tier), `coingecko` (keyless; crypto price, 24 h change, market cap via `/simple/price`, history via `/coins/<id>/market_chart`; coin lookup via `/search`), `google_finance` (browser recipe over `https://www.google.com/finance/quote/<SYMBOL>:<EXCHANGE>?hl=en`; quote only; the keyless fallback when Yahoo rate-limits).
+- Routing per input, first configured source wins: names and tickers that look like crypto (`BTC`, `BTC-USD`, `bitcoin`, a CoinGecko search hit) go to `coingecko` then `yahoo`; everything else goes `yahoo`, then `finnhub`, then `google_finance`. A source that fails for one symbol with a retryable error lets the next source try; `sources_failed` lists each source that failed at least once. An input nobody could quote lands in `unresolved` with the last error, and the tool still succeeds when at least one quote exists. When no quote exists at all the tool returns the most specific shared error code, as `search_flights` does.
+- Name lookup: when the input is not a plausible ticker (letters, digits, `.`, `-`, `^`, `=`, at most 12 characters, no spaces), the source's lookup runs first and the best match is quoted; a lookup with several plausible matches quotes the first and adds a caveat naming the others (at most 3).
+- Cache: quotes 60 s, history 10 min, lookups 24 h, keyed per source. Per-source timeout 10 s. Tool wall clock 30 s.
+- Caveats always include "Quotes may be delayed; not investment advice." and name the delay when known.
+
+### 14.3 `weather`
+
+Purpose: current conditions and a daily (optionally hourly) forecast for a place.
+
+Input:
+```ts
+{
+  location: string | { latitude: number; longitude: number };   // place name (city, "Paris, FR", postcode) or coordinates
+  days?: number;                  // forecast days, 1..16, default 3
+  units?: "metric" | "imperial";  // default metric (°C, km/h, mm); imperial is °F, mph, inch
+  hourly?: boolean;               // default false; when true, `hourly` holds the next 48 hours
+}
+```
+
+Output:
+```ts
+{
+  location: { name: string; country?: string; admin1?: string; latitude: number; longitude: number; timezone: string };
+  current: { time: string; temperature: number; apparent_temperature: number; humidity_pct: number; wind_speed: number;
+             wind_direction_deg: number; precipitation: number; weather_code: number; condition: string; is_day: boolean };
+  daily: Array<{ date: string; temp_max: number; temp_min: number; precipitation_sum: number; precipitation_probability_max?: number;
+                 wind_speed_max: number; sunrise: string; sunset: string; weather_code: number; condition: string; uv_index_max?: number }>;
+  hourly?: Array<{ time: string; temperature: number; precipitation_probability?: number; precipitation: number;
+                   weather_code: number; condition: string; wind_speed: number }>;
+  units: { temperature: "°C" | "°F"; wind_speed: "km/h" | "mph"; precipitation: "mm" | "inch" };
+  source: "open_meteo";
+  fetched_at: string;
+  caveats: string[];
+}
+```
+
+Behaviour (DECIDED): Open-Meteo only (keyless, no account). Geocoding through `geocoding-api.open-meteo.com/v1/search?name=&count=5&language=en`; the first hit is used and, when more than one hit has a different country or admin1, a caveat lists up to three alternatives with their coordinates. Forecast through `api.open-meteo.com/v1/forecast` with `timezone=auto`; `condition` is the WMO weather-code text from a table in code. Times are the location's local time as the API returns them, with the timezone named in `location.timezone`. Cache 10 min for forecasts, 30 days for geocoding. Timeout 10 s per request, tool wall clock 20 s.
+
+### 14.4 `exchange_rate`
+
+Purpose: convert an amount between currencies at the latest or a historical reference rate.
+
+Input:
+```ts
+{
+  from: string;                   // ISO 4217
+  to: string[];                   // 1..20 ISO 4217 codes
+  amount?: number;                // default 1, > 0
+  date?: string;                  // YYYY-MM-DD for a historical rate (1999-01-04 or later); default latest
+}
+```
+
+Output:
+```ts
+{
+  base: string;
+  date: string;                   // the reference date the rates are for (the previous working day on weekends and holidays)
+  amount: number;
+  rates: Array<{ currency: string; rate: number; converted: number }>;
+  source: "frankfurter";
+  fetched_at: string;
+  caveats: string[];              // always: ECB reference rates, published once per working day around 16:00 CET; not a trading quote; crypto is not covered
+}
+```
+
+Behaviour (DECIDED): Frankfurter (`api.frankfurter.dev/v1/latest?base=&symbols=` and `/v1/<date>`), keyless, ECB reference rates for about 30 currencies. An unsupported code is `invalid_input` naming the supported list (from `/v1/currencies`, cached 7 days). Cache 1 h for latest, 30 days for historical. Timeout 10 s, wall clock 20 s.
+
+### 14.5 `social_search`
+
+Purpose: what people are saying about something, across social platforms, as posts and comments; or the comments on one specific thread.
+
+Input:
+```ts
+{
+  query?: string;                 // required unless `url` is given; 1..300 chars
+  url?: string;                   // a post, thread or video URL on a supported platform: return its comments instead of searching
+  platforms?: SocialPlatform[];   // "reddit" | "hackernews" | "bluesky" | "x" | "facebook" | "youtube"; default every configured platform
+  kind?: "posts" | "comments" | "both";   // default both
+  recency?: "day" | "week" | "month" | "year";
+  sort?: "engagement" | "recent"; // default engagement
+  max_results?: number;           // merged total, default 30, max 100
+  per_platform?: number;          // default 15, max 50
+  subreddits?: string[];          // reddit only: restrict the search to these subreddits
+  lang?: string;                  // BCP-47 primary tag, for platforms that filter by language (bluesky, x)
+  summarize?: boolean;            // default false; needs ANTHROPIC_API_KEY; writes `summary`
+  max_cost_usd?: number;          // cap on LLM spend for this call (summary and any LLM extraction), default 0.50
+}
+```
+
+Output:
+```ts
+{
+  query: { mode: "search" | "thread"; query?: string; url?: string; platforms: SocialPlatform[]; kind; recency?; sort; max_results; per_platform };
+  items: Array<{
+    id: string;                   // "<platform>:<native id>"
+    platform: SocialPlatform;
+    kind: "post" | "comment";
+    url: string;
+    author?: string;              // handle or display name as shown; never an email address
+    title?: string;               // reddit and HN posts, YouTube video titles
+    text: string;                 // plain text, at most 2000 chars; `truncated` says when it was cut
+    truncated: boolean;
+    created_at?: string;          // ISO 8601 UTC
+    score?: number;               // upvotes, points or likes
+    replies?: number;
+    reposts?: number;
+    community?: string;           // subreddit, YouTube channel, Facebook group or page, HN section
+    parent_url?: string;          // for comments: the post they belong to
+    lang?: string;
+  }>;
+  summary?: {
+    text: string;                 // 150 to 400 words, every claim followed by the item ids it rests on in square brackets
+    themes: Array<{ theme: string; sentiment: "positive" | "negative" | "mixed" | "neutral"; item_ids: string[] }>;
+    cost_usd: number;
+  };
+  platforms_used: SocialPlatform[];
+  platforms_failed: Array<{ platform: SocialPlatform; error: string; needs_login: boolean }>;
+  fetched_at: string;
+  caveats: string[];
+}
+```
+
+Platform access (DECIDED):
+
+| platform | search | thread (`url`) | access | login |
+|----------|--------|----------------|--------|-------|
+| reddit | `/search` (posts); comments = top-level comments of the top matching posts (at most 5 posts, by score) | `/comments/<id>` | 1. Reddit API with app-only OAuth when `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are set (`POST https://www.reddit.com/api/v1/access_token`, `grant_type=client_credentials`, then `https://oauth.reddit.com/...`); 2. the public `.json` endpoints on `www.reddit.com` with a descriptive User-Agent (`REDDIT_USER_AGENT`, default `webrunner/<version> personal MCP server`); 3. the browser on `old.reddit.com` | optional; the browser path uses the profile's session when there is one |
+| hackernews | Algolia `hn.algolia.com/api/v1/search` with `tags=story` or `tags=comment` and `numericFilters=created_at_i>` | `/api/v1/items/<id>` | keyless API | none |
+| bluesky | `public.api.bsky.app/xrpc/app.bsky.feed.searchPosts` (`sort=top|latest`, `since`, `lang`); comments = replies of the top 3 posts via `getPostThread` depth 1 | `getPostThread` after resolving the handle to a DID | keyless API | none |
+| x | `https://x.com/search?q=<q>&src=typed_query&f=top` (engagement) or `f=live` (recent), scrolled at most 3 times; DOM probe over `article[data-testid="tweet"]` (text, handle, `time[datetime]`, metrics from aria-labels), LLM fallback | the post page; replies below it | browser only | required: X redirects anonymous search to login, reported as `needs_login` |
+| facebook | `https://www.facebook.com/search/posts/?q=<q>`; schema-driven LLM extraction over visible text (the DOM is obfuscated) | the post page; comments below it | browser only | required; a checkpoint or CAPTCHA is `blocked` |
+| youtube | `search?part=snippet&type=video&q=&order=relevance|date&publishedAfter=` (posts = videos); comments = `commentThreads` for the top 3 videos | `commentThreads?videoId=` | YouTube Data API v3 with `YOUTUBE_API_KEY`; without it the platform is "not configured" | none |
+
+Behaviour (DECIDED):
+- `platforms` unset means every platform that `isConfigured()`: API platforms when their key is present or they need none; browser platforms when a browser session exists. A browser platform that lands on a login wall fails with `needs_login: true` and the message names `accounts connect <platform>`; the call still succeeds with the other platforms.
+- Merge: each platform returns at most `per_platform` items; the tool deduplicates by `url`, sorts (`engagement`: score descending with unknown scores last, then `created_at` descending; `recent`: `created_at` descending with unknown dates last) and cuts at `max_results`.
+- `url` mode (`mode: "thread"`): the platform is inferred from the host; other `platforms` entries are ignored with a caveat; `kind` is forced to `comments`; `items` are that thread's comments and the first item is the post itself with `kind: "post"`.
+- `summarize`: one `extractor`-role call over the items (ids, author, text, score), structured output, under a `CostMeter({ maxCostUsd: max_cost_usd })` shared with any LLM extraction the browser recipes did. When the LLM is unavailable the tool still returns items and adds a caveat.
+- Cache: 15 min per platform and query. Per-platform timeout: 15 s for API platforms, 60 s for browser platforms. Tool wall clock 180 s.
+- Browser platforms never post, like, follow, reply or message; the recipes only navigate, scroll and read.
+
+### 14.6 `search_reviews`
+
+Purpose: reviews of a place, business, product or app, from review sites, with the subject each site matched.
+
+Input:
+```ts
+{
+  subject: string;                // a name ("Hotel Lutetia Paris", "Sony WH-1000XM5", "Notion") or the URL of a product, place or app page; 1..300 chars
+  kind?: "place" | "business" | "product" | "app" | "any";   // default any; steers the default sources
+  location?: string;              // disambiguates places and businesses
+  sources?: ReviewSource[];       // "google_maps" | "trustpilot" | "app_store" | "google_play" | "amazon"
+  max_results?: number;           // merged total, default 30, max 100
+  per_source?: number;            // default 15, max 50
+  min_rating?: number;            // 1..5
+  max_rating?: number;            // 1..5
+  recency?: "day" | "week" | "month" | "year";
+  sort?: "relevance" | "recent" | "rating_low" | "rating_high";   // default relevance
+  app_store_country?: string;     // ISO 3166-1 alpha-2, default "us"
+  summarize?: boolean;            // default false; needs ANTHROPIC_API_KEY
+  max_cost_usd?: number;          // default 0.50
+}
+```
+
+Output:
+```ts
+{
+  query: { subject; kind; location?; sources: ReviewSource[]; max_results; per_source; min_rating?; max_rating?; recency?; sort; app_store_country };
+  subjects: Array<{               // what each source matched the subject to
+    source: ReviewSource; name: string; url?: string; rating_avg?: number; review_count?: number;
+    rating_distribution?: { "1": number; "2": number; "3": number; "4": number; "5": number };
+    address?: string; categories?: string[]; price_level?: string;
+  }>;
+  reviews: Array<{
+    id: string;                   // "<source>:<native id or 12-hex hash>"
+    source: ReviewSource;
+    url?: string;
+    author?: string;
+    rating?: number;              // 1..5, half steps allowed, normalised from the source's scale
+    title?: string;
+    text: string;                 // at most 2000 chars
+    truncated: boolean;
+    created_at?: string;          // ISO 8601 UTC; approximate when the site prints "2 months ago" (a caveat says so)
+    helpful_votes?: number;
+    verified?: boolean;           // verified purchase or stay when the site says
+    version?: string;             // app version reviewed
+    language?: string;
+    response?: { text: string; created_at?: string };   // the owner's or developer's reply
+  }>;
+  summary?: { text: string; themes: Array<{ theme: string; sentiment: "positive" | "negative" | "mixed" | "neutral"; item_ids: string[] }>; cost_usd: number };
+  sources_used: ReviewSource[];
+  sources_failed: Array<{ source: ReviewSource; error: string; needs_login: boolean }>;
+  fetched_at: string;
+  caveats: string[];
+}
+```
+
+Source access (DECIDED):
+
+| source | default for kind | how |
+|--------|------------------|-----|
+| google_maps | place, business, any | browser: `https://www.google.com/maps/search/<subject> <location>?hl=en`, first result, reviews tab, scroll at most 3 times; DOM probe over `div[data-review-id]` (rating from the `aria-label` "N stars", text, relative time), LLM fallback; consent and CAPTCHA handling as in flights |
+| trustpilot | business, product, any | `FetchService` in auto mode on `https://www.trustpilot.com/review/<domain>` (subject given as a URL, or a name resolved via `https://www.trustpilot.com/search?query=` through the browser); reviews are parsed from the page's embedded JSON (`__NEXT_DATA__` or JSON-LD), with LLM extraction over the Markdown as fallback. A WAF challenge on the fast path falls back to the browser automatically |
+| app_store | app, any | keyless: `itunes.apple.com/search?term=&entity=software&country=&limit=5` to find the app, then `itunes.apple.com/<country>/rss/customerreviews/id=<id>/sortBy=mostRecent/page=<n>/json`, pages 1 to 3 at most (50 reviews each) |
+| google_play | app, any | browser: `https://play.google.com/store/search?q=<subject>&c=apps` for the package id, then `/store/apps/details?id=<pkg>&hl=en&showAllReviews=true`; DOM probe, LLM fallback |
+| amazon | product, any | browser: `https://www.amazon.com/s?k=<subject>` first product, then `/product-reviews/<ASIN>`; Amazon shows a CAPTCHA or limits review pages to signed-in users, reported as `blocked` or `needs_login` |
+
+Behaviour (DECIDED): `sources` unset means the configured sources whose default kinds include `kind`. Each source returns one `subjects` entry and at most `per_source` reviews; the tool filters by rating and recency in code, sorts (`relevance` keeps each source's order and interleaves sources round-robin; `recent` by `created_at` descending; `rating_low`/`rating_high` by rating), cuts at `max_results`. Rating normalisation: a 10-point scale is halved; a percentage is divided by 20. `summarize` as in 14.5. Cache 1 h per source and subject. Per-source timeout 15 s for API and fetch sources, 60 s for browser sources. Tool wall clock 180 s.
+
+### 14.7 `accounts`
+
+Purpose: let the owner connect their own accounts to the server's browser profile so that browser-based platforms work through their session; see what is connected; disconnect.
+
+Input:
+```ts
+{
+  action: "list" | "connect" | "disconnect";
+  platform?: AccountPlatform;     // required for connect and disconnect: "reddit" | "x" | "facebook" | "instagram" | "google" | "amazon" | "linkedin"
+  wait_seconds?: number;          // connect only: how long to wait for the login to complete, 0..300, default 120
+}
+```
+
+Output, by action:
+```ts
+// list
+{ action: "list"; mode: "persistent" | "cdp"; profile_dir?: string;
+  accounts: Array<{ platform: AccountPlatform; connected: boolean; domains: string[]; used_by: string[]; checked_at: string; expires_at?: string }>;
+  caveats: string[] }
+// connect
+{ action: "connect"; platform; status: "connected" | "pending" | "already_connected"; login_url: string; waited_s: number; instructions: string; caveats: string[] }
+// disconnect
+{ action: "disconnect"; platform; status: "disconnected" | "not_connected"; cookies_cleared: number; caveats: string[] }
+```
+
+Behaviour (DECIDED):
+- Platform table in `src/core/accounts/platforms.ts`: for each platform its cookie domains, the session cookie names that prove a login (`reddit_session`; `auth_token` on x.com; `c_user` on facebook.com; `sessionid` on instagram.com; `SID` and `SAPISID` on google.com; `x-main` or `at-main` on amazon.com; `li_at` on linkedin.com), its login URL, and `used_by` (the tools and platforms that read through it: reddit by `social_search`; x by `social_search`; facebook by `social_search`; google by `search_hotels`, `search_reviews` (google_maps, google_play) and `search_flights` (consent and personalisation only; those work logged out too); amazon by `search_reviews`; instagram and linkedin by nothing yet, listed so the owner can log in ahead of future recipes).
+- `list` reads cookies through `BrowserSession.cookies()` (14.8), which launches the browser if needed; `connected` is true when every required session cookie is present and unexpired. Values are never logged or returned.
+- `connect`: in persistent mode with a display (headful), opens the login URL in a page held outside the pool, returns `already_connected` at once when the cookies are already there, otherwise polls the cookies every 2 s for up to `wait_seconds`; `connected` closes the page, `pending` leaves it open (closed automatically after 10 minutes, or by the next `connect`/`list` that finds the login done) and the instructions say to finish logging in and call `connect` again. In headless persistent mode it fails with `config` and the instructions name the two ways out: run the server where a display exists with `BROWSER_HEADLESS=false`, or set `BROWSER_CDP_URL` to the owner's own Chrome. In CDP mode it opens the login URL as a tab in the owner's Chrome and polls the same way.
+- `disconnect`: persistent mode clears the platform's cookies through `BrowserSession.clearCookies()` and reports how many; CDP mode refuses with `config` ("webrunner never changes the cookies of your own Chrome; log out there").
+- Logging into Google inside an automated Chromium is often refused by Google ("this browser may not be secure"); the caveat on `connect google` says so and recommends CDP attach. Facebook and X may show a verification checkpoint on a new browser; completing it in the window is fine, it is the owner's own session.
+- Tool wall clock 330 s (the longest wait plus margin). The tool never types into the page.
+
+### 14.8 Internal interface additions
+
+**4.3 `BrowserSession`** gains two methods (DECIDED; implemented by WP16, fakes in tests updated by WP16):
+```ts
+interface BrowserSession {
+  // ... as before
+  /** Cookies visible to the shared context, optionally only those sent to these URLs. Launches or attaches if needed. */
+  cookies(urls?: string[]): Promise<BrowserCookie[]>;
+  /** Remove cookies whose domain matches (exact, or a leading-dot parent). Persistent mode only; CDP mode throws. Returns how many were removed. */
+  clearCookies(filter: { domain: string }): Promise<number>;
+  /** A page that is not counted against the pool, for long-lived interactive use (login windows). Closed by `close()`. */
+  openUnpooledPage(): Promise<Page>;
+}
+interface BrowserCookie { name: string; domain: string; path: string; expires: number; httpOnly: boolean; secure: boolean; }   // no `value`, by design
+```
+
+**4.5 `RecipeContext`** is unchanged; recipes that need to say "login required" throw `RecipeError("blocked", ...)` with `needsLogin: true` (a new optional field on `RecipeErrorOptions`, added by WP15) so the owning tool can set `needs_login`.
+
+**New provider interfaces** (contracts, written by WP15 in `src/core/<area>/types.ts`; implementers do not change them):
+- `HotelProvider` (`src/core/hotels/types.ts`): `name`, `isConfigured()`, `search(query: NormalizedHotelsQuery, signal, hooks?: { caveats?: string[] }): Promise<HotelResult[]>`; errors are `HotelProviderError` with the flights error codes.
+- `MarketProvider` (`src/core/markets/types.ts`): `name`, `assetTypes`, `isConfigured()`, optional `lookup(query, signal): Promise<SymbolMatch[]>`, `quote(symbol, opts: { history?; currency }, signal): Promise<MarketQuote>`; errors are `MarketProviderError` with codes `provider | timeout | config | blocked | not_found | invalid_input`.
+- `SocialPlatformProvider` (`src/core/social/types.ts`): `name`, `access: "api" | "browser"`, `isConfigured()`, `search(q: SocialSearchQuery, signal, hooks?): Promise<SocialItem[]>`, `thread(url, q, signal, hooks?): Promise<SocialItem[]>`, `ownsUrl(url): boolean`; errors are `SocialProviderError` with `needsLogin`.
+- `ReviewSourceProvider` (`src/core/reviews/types.ts`): `name`, `defaultKinds`, `isConfigured()`, `search(q: NormalizedReviewsQuery, signal, hooks?): Promise<{ subject: ReviewSubject; reviews: Review[] }>`; errors are `ReviewSourceError` with `needsLogin`.
+- Hooks carry `caveats?: string[]` and `meter?: CostMeter` so a tool can pool LLM spend across sources under `max_cost_usd`.
+
+**Config (4.8)** gains, all optional: `REDDIT_CLIENT_ID` / `reddit_client_id`, `REDDIT_CLIENT_SECRET` / `reddit_client_secret`, `REDDIT_USER_AGENT` / `reddit_user_agent`, `YOUTUBE_API_KEY` / `youtube_api_key`, `FINNHUB_API_KEY` / `finnhub_api_key`. The secrets join the redaction list in `deps.ts`.
+
+**Wall-clock caps (`src/tools/guard.ts`)**: `search_hotels` 120 s, `market_quote` 30 s, `weather` 20 s, `exchange_rate` 20 s, `social_search` 180 s, `search_reviews` 180 s, `accounts` 330 s.
+
+### 14.9 Work breakdown, phase 5
+
+Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol applies. Every WP adds its tool to `TOOL_NAMES` and `registerTools` in `src/tools/index.ts` (one line each; the orchestrator resolves the trivial conflicts), a case to `test/unit/tools/envelope.test.ts` and a tool-list expectation where tests enumerate tools. Unit tests run offline; browser recipes are tested on real Chromium against local fixture pages, as the flights recipe is; anything that hits a real service is gated behind `RUN_INTEGRATION=1`.
+
+**WP15: Plan, contracts, config, caps** (orchestrator)
+- Deliver: this section; `src/schemas/{hotels,markets,weather,fx,social,reviews,accounts}.ts`; `src/core/{hotels,markets,social,reviews}/types.ts`; `needsLogin` on `RecipeErrorOptions`; the five config keys; the seven caps; tests for the new config keys and caps.
+
+**WP16: Browser cookies and the `accounts` tool** (parallel with all others)
+- Depends on: WP15.
+- Files: `src/core/browser/session.ts`, `src/core/browser/types.ts` (the three new methods and `BrowserCookie`), `src/core/accounts/{platforms,index}.ts`, `src/tools/accounts.ts`, every test fake of `BrowserSession` (`test/unit/tools/helpers.ts` and any other), new tests under `test/unit/accounts/` and `test/unit/browser/session.test.ts`.
+- Accept: on real Chromium with a local fixture server that sets a cookie named like a platform's session cookie on a fixture domain mapping (tests may inject the platform table), `list` reports connected, `disconnect` clears it and `list` reports not connected; `connect` with `wait_seconds: 0` returns `pending` and leaves a page open that `close()` cleans up; in a CDP-mode fake `disconnect` returns `config`; no cookie value appears in any result or log line (asserted). Headless persistent `connect` returns `config` with both instructions.
+
+**WP17: `search_hotels`** (parallel)
+- Depends on: WP15.
+- Files: `src/core/browser/recipes/google-hotels.ts`, `src/core/hotels/providers/{google-hotels,index}.ts`, `src/tools/search_hotels.ts`, `test/unit/hotels/**`, `test/fixtures/hotels/**`, one gated integration test.
+- Accept: fixture page built from a live Google Hotels results DOM (recorded by the implementer, hotel names kept, any personal data removed) yields at least 10 hotels with name, nightly price, rating and review count through the deterministic probe alone (no LLM call, asserted via a scripted LLM that fails if called); a page where the probe finds nothing goes to the LLM path and validates; filters and sorts behave per 14.1; blocked and empty pages map to `blocked` and to an empty list with a caveat. The PR records the live URL form that worked.
+
+**WP18a: `social_search` tool and API platforms** (parallel)
+- Depends on: WP15.
+- Files: `src/core/social/{index,merge,summary}.ts`, `src/core/social/platforms/{reddit,hackernews,bluesky,youtube,index}.ts`, `src/tools/social_search.ts`, `test/unit/social/**` (except browser platform tests), `test/fixtures/social/**`.
+- Accept: fixture-driven tests per platform map real or documented responses to `SocialItem[]` (Hacker News and Bluesky can be recorded live where the environment allows; Reddit and YouTube from docs); the Reddit provider's three-step fallback is tested with a fetch fake (API when keys present, `.json` otherwise, and a 403 from `.json` hands over to the browser platform when one is registered); thread mode infers the platform from the URL; merge, dedupe, sort and `max_results` are table-tested; `summarize` with a scripted LLM produces a `summary` whose `item_ids` all exist; an LLM failure still returns items plus a caveat; `platforms_failed` carries `needs_login` through from a `SocialProviderError`.
+
+**WP18b: `social_search` browser platforms** (parallel with WP18a)
+- Depends on: WP15.
+- Files: `src/core/browser/recipes/{x-search,facebook-search,reddit-search}.ts`, `src/core/social/platforms/{x,facebook,reddit-browser}.ts`, `test/unit/social/browser/**`, `test/fixtures/social/browser/**`, plus one line in `src/core/social/platforms/index.ts` registering the three (WP18a owns that file; the orchestrator merges the line).
+- Accept: on real Chromium against fixture pages: the X recipe extracts posts from `article[data-testid="tweet"]` markup with handle, text, time and metrics; a fixture that redirects to a login page yields `SocialProviderError` with `needsLogin: true`; the Facebook recipe reaches the LLM extraction path with a scripted model and validates; the old.reddit recipe parses search results and a thread's top-level comments; none of the recipes ever calls `fill`, `type` or `press` (asserted with a Playwright page spy).
+
+**WP19a: `search_reviews` tool, App Store and Trustpilot** (parallel)
+- Depends on: WP15.
+- Files: `src/core/reviews/{index,merge,summary}.ts`, `src/core/reviews/sources/{app-store,trustpilot,index}.ts`, `src/tools/search_reviews.ts`, `test/unit/reviews/**` (except browser source tests), `test/fixtures/reviews/**`.
+- Accept: the App Store source finds an app by name and maps a recorded RSS page to reviews with rating, version, title and text; the Trustpilot source parses a recorded page's embedded JSON and falls back to LLM extraction over Markdown with a scripted model; rating normalisation and filters are table-tested; `sources` defaulting by `kind` is tested; summary as in WP18a.
+
+**WP19b: `search_reviews` browser sources** (parallel with WP19a)
+- Depends on: WP15.
+- Files: `src/core/browser/recipes/{google-maps-reviews,google-play-reviews,amazon-reviews}.ts`, `src/core/reviews/sources/{google-maps,google-play,amazon}.ts`, `test/unit/reviews/browser/**`, `test/fixtures/reviews/browser/**`, plus one registration line in `src/core/reviews/sources/index.ts` (merged by the orchestrator).
+- Accept: on real Chromium against fixture pages: Google Maps reviews with star ratings, text and approximate dates from `div[data-review-id]` markup, with the consent dialog dismissed; Google Play reviews from the details page; an Amazon fixture showing a CAPTCHA maps to `blocked` and one showing the sign-in page to `needsLogin`; no recipe types into the page (spy-asserted).
+
+**WP20: `market_quote`, `weather`, `exchange_rate`** (parallel)
+- Depends on: WP15.
+- Files: `src/core/markets/providers/{yahoo,finnhub,coingecko,google-finance,index}.ts`, `src/core/markets/{index,resolve}.ts`, `src/core/browser/recipes/google-finance.ts`, `src/core/weather/{index,codes}.ts`, `src/core/fx/index.ts`, `src/tools/{market_quote,weather,exchange_rate}.ts`, tests and fixtures under `test/unit/{markets,weather,fx}/**` and `test/fixtures/{markets,weather,fx}/**`.
+- Accept: fixture mapping tests for each provider (CoinGecko and Frankfurter may be recorded live; Yahoo and Finnhub from docs; Open-Meteo geocoding live, forecast from docs); routing table-tested (crypto to CoinGecko first, equities to Yahoo then Finnhub then Google Finance, a 429 from Yahoo hands the symbol to the next source); name lookup with several matches quotes the first and lists the rest in caveats; the Google Finance recipe extracts price, change and currency from a fixture page; weather geocoding ambiguity produces the alternatives caveat; WMO code table covers every code the API documents; an unsupported currency is `invalid_input` listing the supported ones; cache TTLs per 14.2 to 14.4 asserted with an injected clock.
+
+**WP21: Integration, health, README, installers** (after WP16 to WP20)
+- Files: `src/tools/health.ts` (configured hotel sources, market sources, social platforms, review sources, connected account platforms by name), `scripts/install-*.sh` and `test/unit/scripts.test.ts` (the five new variables), `README.md` (one section per new tool with examples, an "Accounts" section with the Google-via-CDP recommendation, the per-platform terms-of-service paragraph, the new keys in the configuration table, costs), `CLAUDE.md` (one line on the opinion tools' rules), `.github/workflows/live.yml` (new gated suites), `PLAN.md` status line and decision log.
+- Accept: `health` lists the new names; a fresh clone passes lint, typecheck and tests; `tools/list` over stdio shows 14 tools; the README examples parse against the input schemas (a test).
+
+### 14.10 Decision log, phase 5
+
+- **2026-10-18, WP15**: phase 5 planned at the owner's request. Seven tools, three groups, same provider-and-recipe architecture as flights. Logged-in browsing is passive and account connection is explicit through the `accounts` tool. Keyless sources first. Browser session gains cookie access without ever exposing values. Caps, config keys and contracts fixed here so WP16 to WP20 run in parallel on disjoint files.

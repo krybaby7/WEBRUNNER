@@ -69,6 +69,13 @@ describe("wall-clock helpers", () => {
       fetch_page: 90_000,
       search_flights: 120_000,
       browse_task: 11 * 60_000,
+      search_hotels: 120_000,
+      market_quote: 30_000,
+      weather: 20_000,
+      exchange_rate: 20_000,
+      social_search: 180_000,
+      search_reviews: 180_000,
+      accounts: 330_000,
     });
   });
 
