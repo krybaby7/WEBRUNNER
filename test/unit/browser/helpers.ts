@@ -83,6 +83,7 @@ export function makeConfig(profileDir: string, browser: Partial<Config["browser"
   return {
     browser: { headless: true, profile_dir: profileDir, ...browser },
     research_max_cost_usd: 3,
+    research_max_ms: 900_000,
     cache_dir: join(profileDir, "cache"),
     log_level: "error",
     save_screenshots: false,

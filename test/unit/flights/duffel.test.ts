@@ -44,7 +44,8 @@ function respond(body: unknown, status = 200): typeof fetch {
 }
 
 function provider(fetchImpl: typeof fetch, extra: { timeoutMs?: number } = {}) {
-  return new DuffelProvider({ apiKey: "duffel_test_REDACTED", fetchImpl, ...extra });
+  // Retries are covered in duffel-retry.test.ts; here each call is one attempt.
+  return new DuffelProvider({ apiKey: "duffel_test_REDACTED", fetchImpl, retry: { retries: 0 }, ...extra });
 }
 
 afterEach(() => {

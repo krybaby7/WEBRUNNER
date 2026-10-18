@@ -9,6 +9,8 @@ export const BROWSER_ACCEPT =
 
 /** Hard cap on bytes read from any response body. */
 export const MAX_BODY_BYTES = 8 * 1024 * 1024;
+/** Hard cap on a PDF download. */
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
 export type FetchImpl = typeof fetch;
 
@@ -70,11 +72,35 @@ export function toFetchError(fetcher: FetchMethod, err: unknown, deadline: Deadl
   return new FetchError(fetcher, "provider", `${what} failed: ${detail}${cause}`, true);
 }
 
-/** Read a response body as bytes, refusing anything over MAX_BODY_BYTES. */
-export async function readBodyBytes(fetcher: FetchMethod, res: Response): Promise<Uint8Array> {
+export interface ReadBodyOptions {
+  /** Largest body to accept, in bytes. Default MAX_BODY_BYTES. */
+  maxBytes?: number;
+  /** What the body is, for the error message. Default "Response". */
+  label?: string;
+}
+
+function megabytes(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
+/** Read a response body as bytes, refusing anything over `maxBytes` (default MAX_BODY_BYTES). */
+export async function readBodyBytes(fetcher: FetchMethod, res: Response, options: ReadBodyOptions = {}): Promise<Uint8Array> {
+  const maxBytes = options.maxBytes ?? MAX_BODY_BYTES;
+  const label = options.label ?? "Response";
+  const tooLarge = (detail: string): FetchError =>
+    new FetchError(
+      fetcher,
+      "invalid_input",
+      options.maxBytes === undefined
+        ? detail
+        : `${label} is larger than the ${megabytes(maxBytes)} limit and was not downloaded in full`,
+      false,
+      res.status,
+    );
   const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-    throw new FetchError(fetcher, "invalid_input", `Response is too large (${declared} bytes)`, false, res.status);
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await res.body?.cancel().catch(() => undefined);
+    throw tooLarge(`${label} is too large (${declared} bytes)`);
   }
   if (!res.body) return new Uint8Array(await res.arrayBuffer());
   const reader = res.body.getReader();
@@ -84,9 +110,9 @@ export async function readBodyBytes(fetcher: FetchMethod, res: Response): Promis
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > MAX_BODY_BYTES) {
+    if (total > maxBytes) {
       await reader.cancel().catch(() => undefined);
-      throw new FetchError(fetcher, "invalid_input", `Response is larger than ${MAX_BODY_BYTES} bytes`, false, res.status);
+      throw tooLarge(`${label} is larger than ${maxBytes} bytes`);
     }
     chunks.push(value);
   }

@@ -9,6 +9,7 @@ import {
   type FlightSlice,
   type NormalizedFlightsQuery,
 } from "../../../schemas/flights.js";
+import { parseRetryAfter, withRetry, type RetryOptions } from "../../retry.js";
 import { FlightProviderError, type FlightProvider } from "../types.js";
 
 /**
@@ -45,6 +46,16 @@ export const DUFFEL_DEFAULT_TIMEOUT_MS = 30_000;
 export const ASSUMED_CHILD_AGE = 8;
 export const ASSUMED_INFANT_AGE = 1;
 
+/** A 429 from Duffel that carries the server's `Retry-After` in milliseconds, for `withRetry` to honor. */
+class DuffelRateLimitError extends FlightProviderError {
+  readonly retryAfterMs: number;
+
+  constructor(message: string, retryAfterMs: number, status: number) {
+    super(message, { provider: "duffel", code: "provider", retryable: true, status });
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 export interface DuffelProviderOptions {
   /** Duffel access token. Without it the provider is not configured. */
   apiKey?: string;
@@ -54,6 +65,8 @@ export interface DuffelProviderOptions {
   baseUrl?: string;
   /** Defaults to 30 s. */
   timeoutMs?: number;
+  /** Retry tuning (retries, delays, clock). Retries default to 2 and are capped at 2. */
+  retry?: Pick<RetryOptions, "retries" | "baseMs" | "maxMs" | "random" | "sleep">;
 }
 
 // ---------------------------------------------------------------------------
@@ -337,8 +350,10 @@ export class DuffelProvider implements FlightProvider {
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly retry: DuffelProviderOptions["retry"];
 
   constructor(options: DuffelProviderOptions = {}) {
+    this.retry = options.retry;
     const key = options.apiKey?.trim();
     this.apiKey = key ? key : undefined;
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
@@ -359,35 +374,48 @@ export class DuffelProvider implements FlightProvider {
       });
     }
     if (signal.aborted) throw this.abortError();
+    const apiKey = this.apiKey;
 
-    const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
-    const combined = AbortSignal.any([signal, timeoutSignal]);
     const supplierTimeout = Math.min(60_000, Math.max(2_000, this.timeoutMs - 5_000));
     const url = `${this.baseUrl}/air/offer_requests?return_offers=true&supplier_timeout=${supplierTimeout}`;
 
-    let bodyText: string;
-    let status: number;
-    try {
-      const res = await this.fetchImpl(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Duffel-Version": DUFFEL_VERSION,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(buildRequestBody(query)),
-        signal: combined,
-      });
-      status = res.status;
-      bodyText = await res.text();
-    } catch (err) {
-      throw this.transportError(err, signal, timeoutSignal);
-    }
+    const requestOnce = async (): Promise<string> => {
+      const timeoutSignal = AbortSignal.timeout(this.timeoutMs);
+      const combined = AbortSignal.any([signal, timeoutSignal]);
+      let bodyText: string;
+      let status: number;
+      let retryAfter: string | null;
+      try {
+        const res = await this.fetchImpl(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Duffel-Version": DUFFEL_VERSION,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(buildRequestBody(query)),
+          signal: combined,
+        });
+        status = res.status;
+        retryAfter = res.headers?.get("retry-after") ?? null;
+        bodyText = await res.text();
+      } catch (err) {
+        throw this.transportError(err, signal, timeoutSignal);
+      }
+      if (status < 200 || status >= 300) throw this.httpError(status, bodyText, retryAfter);
+      return bodyText;
+    };
 
-    if (status < 200 || status >= 300) {
-      throw this.httpError(status, bodyText);
-    }
+    // Retry transient failures (network errors, 429, 5xx) at most twice. A timeout is not retried: the
+    // attempt already used its budget and the tool's per-source deadline (45 s) covers all attempts.
+    const bodyText = await withRetry(requestOnce, {
+      ...this.retry,
+      isRetryable: (err) => err instanceof FlightProviderError && err.retryable && err.code !== "timeout",
+      signal,
+      log,
+      label: "flights:duffel",
+    });
 
     let json: unknown;
     try {
@@ -458,9 +486,13 @@ export class DuffelProvider implements FlightProvider {
     });
   }
 
-  private httpError(status: number, bodyText: string): FlightProviderError {
+  private httpError(status: number, bodyText: string, retryAfter: string | null = null): FlightProviderError {
     const detail = errorDetail(bodyText);
     const suffix = detail ? `: ${detail}` : "";
+    const retryAfterMs = status === 429 ? parseRetryAfter(retryAfter) : undefined;
+    if (retryAfterMs !== undefined) {
+      return new DuffelRateLimitError(`Duffel returned HTTP ${status}${suffix}`, retryAfterMs, status);
+    }
     if (status === 401 || status === 403) {
       return new FlightProviderError(`Duffel rejected the API key (HTTP ${status})${suffix}`, {
         provider: "duffel",

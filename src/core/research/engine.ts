@@ -140,6 +140,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       effort: opts.effort,
       maxTokens: opts.maxTokens,
       meter,
+      ...(deps.signal !== undefined && { signal: deps.signal }),
     });
     const checked = schema.safeParse(res.parsed);
     if (!checked.success) {
@@ -151,6 +152,24 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
   }
 
   const isBudgetError = (err: unknown): err is LlmError => err instanceof LlmError && err.code === "budget_exceeded";
+
+  /** True once the caller's signal (the tool's wall-clock cap) has aborted. */
+  const cancelled = (): boolean => deps.signal?.aborted === true;
+
+  /** Called between steps. A cancelled run produces no partial report: the tool reports `timeout`. */
+  function throwIfCancelled(): void {
+    if (cancelled()) {
+      throw new ResearchError("timeout", "Research was cancelled because it ran past its time limit.", true);
+    }
+  }
+
+  /** The gap line for a budget stop. The daily cap says so in its own words; the per-call cap names its amount. */
+  let budgetCause: string | undefined;
+  function noteBudgetCause(err: LlmError): void {
+    if ((err.details as { scope?: unknown } | undefined)?.scope === "daily") budgetCause = redact(err.message);
+  }
+  const budgetGapLine = (): string =>
+    `Research stopped early because ${budgetCause ?? `the cost cap of $${maxCostUsd.toFixed(2)} was reached`}, so some sub-questions were not researched.`;
 
   function fromLlmError(err: LlmError): ResearchError {
     return new ResearchError(err.code, redact(err.message), err.retryable, { kind: err.kind });
@@ -350,6 +369,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
   try {
     for (let iteration = 1; iteration <= budget.iterations; iteration++) {
       iterations = iteration;
+      throwIfCancelled();
 
       if (iteration === 1) {
         const first = await plan(1);
@@ -365,11 +385,14 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
         guardWriterReserve();
       }
 
+      throwIfCancelled();
+
       // -- search
       const queries = steps.slice(0, Math.max(0, budget.searches - searches));
       for (const s of queries) queriesRun.push(s.query);
       searches += queries.length;
       const outcomes = await Promise.all(queries.map((s) => runSearch(s.query)));
+      throwIfCancelled();
       const failures = outcomes.filter((o) => !o.ok);
       if (outcomes.length > 0 && failures.length === outcomes.length) {
         const codes = new Set(failures.map((f) => (f.ok ? "provider" : f.code)));
@@ -422,6 +445,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       let newClaims = 0;
       let budgetError: LlmError | undefined;
       while (readThisIteration < readCap && backlog.length > 0 && attempts < maxAttempts && budgetError === undefined) {
+        throwIfCancelled();
         const take = Math.min(READ_CONCURRENCY, readCap - readThisIteration, maxAttempts - attempts);
         const wave = backlog.splice(0, take);
         attempts += wave.length;
@@ -470,6 +494,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       if (stopped !== undefined) break;
 
       // -- reflect
+      throwIfCancelled();
       guardWriterReserve();
       const next = await plan(iteration + 1);
       openGaps = next.gaps;
@@ -480,8 +505,11 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       }
     }
   } catch (err) {
+    // A model call that failed because the run was cancelled is a timeout, not a partial result.
+    throwIfCancelled();
     if (isBudgetError(err)) {
       stopped = "budget";
+      noteBudgetCause(err);
     } else if (err instanceof LlmError) {
       if (notes.length === 0) throw fromLlmError(err);
       log.warn("research stopped early after a model call failed", { code: err.code, kind: err.kind });
@@ -494,9 +522,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
 
   stopped ??= "iterations";
   if (stopped === "budget") {
-    engineGaps.push(
-      `Research stopped early because the cost cap of $${maxCostUsd.toFixed(2)} was reached, so some sub-questions were not researched.`,
-    );
+    engineGaps.push(budgetGapLine());
   } else if (notes.length === 0) {
     stopped = "no_results";
   }
@@ -512,6 +538,7 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
 
   /** Writes the report, or builds one from the notes when the writer cannot. Ids in the draft are final. */
   async function writeReport(): Promise<{ draft: DraftReport; gaps: string[] }> {
+    throwIfCancelled();
     const fallback = (): { draft: DraftReport; gaps: string[] } => {
       const built = buildFallbackReport({ question: req.question, output: req.output, notes, gaps: openGaps });
       const renumbered = renumberCitations(built.report_markdown, built.findings, built.sources);
@@ -534,13 +561,13 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
         { effort: "high", maxTokens: WRITER_MAX_TOKENS },
       );
     } catch (err) {
+      throwIfCancelled();
       if (!(err instanceof LlmError)) throw err;
       if (err.code === "budget_exceeded") {
         if (stopped !== "budget") {
           stopped = "budget";
-          engineGaps.push(
-            `Research stopped early because the cost cap of $${maxCostUsd.toFixed(2)} was reached, so some sub-questions were not researched.`,
-          );
+          noteBudgetCause(err);
+          engineGaps.push(budgetGapLine());
         }
         engineGaps.push("The report is a list of extracted claims because the cost cap left no budget for a written summary.");
       } else {

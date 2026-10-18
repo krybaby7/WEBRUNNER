@@ -4,6 +4,8 @@ import { htmlToMarkdown } from "./extract.js";
 import {
   BROWSER_ACCEPT,
   BROWSER_USER_AGENT,
+  MAX_BODY_BYTES,
+  MAX_PDF_BYTES,
   fenceText,
   makeDeadline,
   nowIso,
@@ -21,6 +23,8 @@ import {
  */
 
 export const MAX_REDIRECTS = 10;
+/** Pages read from one PDF. A longer document is cut here and flagged `truncated`. */
+export const MAX_PDF_PAGES = 300;
 
 export interface DirectOptions {
   fetchImpl?: FetchImpl | undefined;
@@ -89,6 +93,74 @@ function classifyContent(contentType: string, bytes: Uint8Array): Kind {
   return { type: "unsupported", mime };
 }
 
+function mimeOf(contentType: string): string {
+  return contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+}
+
+/** Heading for a PDF with no title in its metadata: the file name in the URL, else a generic label. */
+function pdfFileName(url: string): string {
+  try {
+    const last = new URL(url).pathname.split("/").filter(Boolean).pop();
+    if (last !== undefined) return decodeURIComponent(last);
+  } catch {
+    // An unparseable URL or escape sequence: use the generic label.
+  }
+  return "PDF document";
+}
+
+interface PdfText {
+  title: string;
+  markdown: string;
+  truncated: boolean;
+}
+
+/**
+ * PDF text with `pdf-parse` (loaded on first use, so the server starts without
+ * pdf.js): `# <title or file name>`, then the text of each page with `---`
+ * between pages. Pages without text are skipped. A document with no text layer
+ * (scanned images) is `invalid_input`: there is nothing to return.
+ */
+async function pdfToMarkdown(bytes: Uint8Array, finalUrl: string, maxChars: number, status: number): Promise<PdfText> {
+  let pdfParse: typeof import("pdf-parse");
+  try {
+    pdfParse = await import("pdf-parse");
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new FetchError("direct", "provider", `The PDF reader could not be loaded: ${detail}`, false, status);
+  }
+  // Verbosity 0: pdf.js prints its warnings with console.log, which would corrupt the MCP stdout channel.
+  const parser = new pdfParse.PDFParse({ data: bytes, verbosity: pdfParse.VerbosityLevel.ERRORS });
+  try {
+    const info = await parser.getInfo();
+    const metaTitle = typeof info.info?.Title === "string" ? info.info.Title.trim() : "";
+    const total = info.total;
+    const pageCount = Math.min(total, MAX_PDF_PAGES);
+    const text = await parser.getText({ first: pageCount });
+    const pages = text.pages.map((p) => p.text.trim()).filter((t) => t !== "");
+    if (pages.length === 0) {
+      throw new FetchError(
+        "direct",
+        "invalid_input",
+        "The PDF has no extractable text (it may be scanned images, which are not supported)",
+        false,
+        status,
+      );
+    }
+    const title = metaTitle !== "" ? metaTitle : pdfFileName(finalUrl);
+    const overPageCap = total > pageCount;
+    const note = overPageCap ? `\n\n---\n\n_Only the first ${pageCount} of ${total} pages were read._` : "";
+    const full = `# ${title}\n\n${pages.join("\n\n---\n\n")}${note}`;
+    const cut = truncateMarkdown(full, maxChars);
+    return { title, markdown: cut.markdown, truncated: cut.truncated || overPageCap };
+  } catch (err) {
+    if (err instanceof FetchError) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new FetchError("direct", "invalid_input", `Could not read the PDF: ${detail}`, false, status);
+  } finally {
+    await parser.destroy().catch(() => undefined);
+  }
+}
+
 export class DirectFetcher implements Fetcher {
   readonly name = "direct" as const;
   private readonly fetchImpl: FetchImpl | undefined;
@@ -136,26 +208,41 @@ export class DirectFetcher implements Fetcher {
         current = next.toString();
       }
 
-      const contentType = res.headers.get("content-type") ?? "";
-      if (/^\s*application\/pdf\b/i.test(contentType)) {
-        await res.body?.cancel().catch(() => undefined);
-        throw new FetchError(
-          "direct",
-          "invalid_input",
-          "PDF is not supported in the fast path yet",
-          false,
-          res.status,
-        );
-      }
-      bytes = await readBodyBytes("direct", res);
+      // A PDF may be larger than other bodies. Without a content type the body is read up to the PDF
+      // limit too, since the bytes decide; a non-PDF over the ordinary limit is refused below.
+      const mime = mimeOf(res.headers.get("content-type") ?? "");
+      const isPdfMime = mime === "application/pdf";
+      bytes = await readBodyBytes(
+        "direct",
+        res,
+        isPdfMime
+          ? { maxBytes: MAX_PDF_BYTES, label: "PDF" }
+          : mime === "" || mime === "application/octet-stream"
+            ? { maxBytes: MAX_PDF_BYTES }
+            : {},
+      );
     } catch (err) {
       throw toFetchError("direct", err, deadline, "Direct fetch");
     }
 
     const contentType = res.headers.get("content-type") ?? "";
     const kind = classifyContent(contentType, bytes);
+    if (kind.type !== "pdf" && bytes.byteLength > MAX_BODY_BYTES) {
+      throw new FetchError("direct", "invalid_input", `Response is larger than ${MAX_BODY_BYTES} bytes`, false, res.status);
+    }
     if (kind.type === "pdf") {
-      throw new FetchError("direct", "invalid_input", "PDF is not supported in the fast path yet", false, res.status);
+      if (res.status < 200 || res.status >= 300) throw statusError("direct", res.status, false, current);
+      const pdf = await pdfToMarkdown(bytes, current, opts.maxChars, res.status);
+      return {
+        url,
+        final_url: current,
+        title: pdf.title,
+        markdown: pdf.markdown,
+        truncated: pdf.truncated,
+        method: "direct",
+        fetched_at: nowIso(),
+        botWall: false,
+      };
     }
 
     const text = kind.type === "unsupported" ? "" : decodeBody(bytes, contentType);

@@ -1,5 +1,7 @@
 import type { Cache } from "../cache/index.js";
 import type { Logger } from "../../log.js";
+import { createLimiter, DEFAULT_SEARCH_CONCURRENCY, type Limiter } from "../limit.js";
+import { withRetry, type RetryOptions } from "../retry.js";
 import {
   DEFAULT_MAX_RESULTS,
   WebSearchOutputSchema,
@@ -64,6 +66,10 @@ export interface SearchServiceDeps {
   now?: () => number;
   /** Secret values (API keys) to scrub from error messages and logs, on top of pattern-based scrubbing. */
   secrets?: string[];
+  /** Concurrent requests per provider; further calls queue FIFO. Default 4. */
+  concurrencyPerProvider?: number;
+  /** Retry tuning (retries, delays, clock). Retries default to 2 and are capped at 2. */
+  retry?: Pick<RetryOptions, "retries" | "baseMs" | "maxMs" | "random" | "sleep">;
 }
 
 /** Replace anything that looks like a credential in a message. */
@@ -111,17 +117,42 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
   const redact = makeRedactor(deps.secrets ?? []);
   const configured = deps.providers.filter((p) => p.isConfigured());
 
-  async function runProvider(provider: SearchProvider, q: SearchQuery): Promise<Outcome> {
+  const limiters = new Map<SearchProviderName, Limiter>();
+  function limiterFor(name: SearchProviderName): Limiter {
+    let limiter = limiters.get(name);
+    if (limiter === undefined) {
+      limiter = createLimiter(deps.concurrencyPerProvider ?? DEFAULT_SEARCH_CONCURRENCY);
+      limiters.set(name, limiter);
+    }
+    return limiter;
+  }
+
+  /** One request under the per-attempt timeout. The timer starts once the provider has a free slot. */
+  async function attemptProvider(provider: SearchProvider, q: SearchQuery): Promise<RawResult[]> {
     const name = provider.name;
     const signal = AbortSignal.timeout(timeoutMs);
     const timedOut = (): ProviderError =>
       new ProviderError({ provider: name, message: `${name} timed out`, retryable: true, aborted: true });
     const abort = whenAborted(signal, timedOut);
     try {
-      const results = await Promise.race([
-        Promise.resolve().then(() => provider.search(q, signal)),
-        abort.promise,
-      ]);
+      return await Promise.race([Promise.resolve().then(() => provider.search(q, signal)), abort.promise]);
+    } finally {
+      abort.dispose();
+    }
+  }
+
+  async function runProvider(provider: SearchProvider, q: SearchQuery): Promise<Outcome> {
+    const name = provider.name;
+    const limiter = limiterFor(name);
+    try {
+      // A slot is held per attempt, not across the backoff wait. A timeout (`aborted`) is not retried:
+      // it already used its whole budget.
+      const results = await withRetry(() => limiter.run(() => attemptProvider(provider, q)), {
+        ...deps.retry,
+        isRetryable: (err) => err instanceof ProviderError && err.retryable && !err.aborted,
+        log,
+        label: `search:${name}`,
+      });
       return { provider: name, ok: true, results };
     } catch (err) {
       if (err instanceof ProviderError && err.aborted) {
@@ -141,8 +172,6 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
         aborted: false,
         retryable: err instanceof ProviderError ? err.retryable : false,
       };
-    } finally {
-      abort.dispose();
     }
   }
 

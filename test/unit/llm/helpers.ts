@@ -12,6 +12,7 @@ export function makeConfig(overrides: Partial<Config> = {}): Config {
     anthropic_api_key: "test-key",
     browser: { profile_dir: "/tmp/webrunner-test/profile" },
     research_max_cost_usd: 3,
+    research_max_ms: 900_000,
     cache_dir: "/tmp/webrunner-test/cache",
     log_level: "error",
     save_screenshots: false,

@@ -198,3 +198,61 @@ describe("loadConfig", () => {
     });
   });
 });
+
+describe("WP14b keys", () => {
+  beforeEach(() => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+  });
+
+  describe("WEBRUNNER_RESEARCH_MAX_MS", () => {
+    it("defaults to 15 minutes", () => {
+      expect(load({}).research_max_ms).toBe(900_000);
+    });
+
+    it("is read from the environment", () => {
+      expect(load({ WEBRUNNER_RESEARCH_MAX_MS: "120000" }).research_max_ms).toBe(120_000);
+    });
+
+    it("is read from the config file, and the environment wins", () => {
+      writeConfigFile({ research_max_ms: 60_000 });
+      expect(load({}).research_max_ms).toBe(60_000);
+      expect(load({ WEBRUNNER_RESEARCH_MAX_MS: "90000" }).research_max_ms).toBe(90_000);
+    });
+
+    it("treats an empty value as unset", () => {
+      expect(load({ WEBRUNNER_RESEARCH_MAX_MS: " " }).research_max_ms).toBe(900_000);
+    });
+
+    it.each(["abc", "1.5", "999", "0", "-5"])("rejects %s with a readable message naming the variable", (value) => {
+      expect(() => load({ WEBRUNNER_RESEARCH_MAX_MS: value })).toThrow(ConfigError);
+      expect(() => load({ WEBRUNNER_RESEARCH_MAX_MS: value })).toThrow(/WEBRUNNER_RESEARCH_MAX_MS/);
+    });
+  });
+
+  describe("WEBRUNNER_DAILY_COST_CAP_USD", () => {
+    it("is off by default", () => {
+      const config = load({});
+      expect(config.daily_cost_cap_usd).toBeUndefined();
+      expect("daily_cost_cap_usd" in config).toBe(false);
+    });
+
+    it("is read from the environment", () => {
+      expect(load({ WEBRUNNER_DAILY_COST_CAP_USD: "7.50" }).daily_cost_cap_usd).toBe(7.5);
+    });
+
+    it("is read from the config file, and the environment wins", () => {
+      writeConfigFile({ daily_cost_cap_usd: 4 });
+      expect(load({}).daily_cost_cap_usd).toBe(4);
+      expect(load({ WEBRUNNER_DAILY_COST_CAP_USD: "9" }).daily_cost_cap_usd).toBe(9);
+    });
+
+    it("treats an empty value as unset", () => {
+      expect(load({ WEBRUNNER_DAILY_COST_CAP_USD: "" }).daily_cost_cap_usd).toBeUndefined();
+    });
+
+    it.each(["abc", "0", "-1"])("rejects %s with a readable message naming the variable", (value) => {
+      expect(() => load({ WEBRUNNER_DAILY_COST_CAP_USD: value })).toThrow(ConfigError);
+      expect(() => load({ WEBRUNNER_DAILY_COST_CAP_USD: value })).toThrow(/WEBRUNNER_DAILY_COST_CAP_USD/);
+    });
+  });
+});

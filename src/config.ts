@@ -53,6 +53,13 @@ export interface Config {
   };
   /** Default hard cost cap per deep_research call, in USD. */
   research_max_cost_usd: number;
+  /** Wall-clock cap for one deep_research call, in milliseconds. Default 900000 (15 minutes). */
+  research_max_ms: number;
+  /**
+   * Soft cap on LLM spend per UTC day across every tool and call of this
+   * machine, in USD. Unset means off. Tracked in a small file under cache_dir.
+   */
+  daily_cost_cap_usd?: number;
   cache_dir: string;
   log_level: LogLevel;
   /** Save browse_task screenshots under the run dir. */
@@ -82,6 +89,8 @@ const ENV_VARS = {
   browser_cdp_url: "BROWSER_CDP_URL",
   browser_headless: "BROWSER_HEADLESS",
   research_max_cost_usd: "RESEARCH_MAX_COST_USD",
+  research_max_ms: "WEBRUNNER_RESEARCH_MAX_MS",
+  daily_cost_cap_usd: "WEBRUNNER_DAILY_COST_CAP_USD",
   cache_dir: "WEBRUNNER_CACHE_DIR",
   log_level: "WEBRUNNER_LOG_LEVEL",
   browser_profile_dir: "WEBRUNNER_BROWSER_PROFILE_DIR",
@@ -126,6 +135,15 @@ const positiveNumber = z.preprocess(
     .finite({ error: "must be a finite number" }),
 );
 
+/** Whole milliseconds, at least one second. */
+const durationMs = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? Number(v) : v),
+  z
+    .number({ error: "must be a number of milliseconds, for example 900000" })
+    .int({ error: "must be a whole number of milliseconds" })
+    .min(1000, { error: "must be at least 1000 (one second)" }),
+);
+
 const nonEmptyString = z.string({ error: "must be a string" }).trim().min(1, { error: "must not be empty" });
 
 const logLevel = z.preprocess(
@@ -150,6 +168,8 @@ const ResolvedSchema = z.object({
     .optional(),
   browser_headless: booleanLike.optional(),
   research_max_cost_usd: positiveNumber.default(3),
+  research_max_ms: durationMs.default(15 * 60_000),
+  daily_cost_cap_usd: positiveNumber.optional(),
   cache_dir: nonEmptyString.optional(),
   log_level: logLevel.default("info"),
   browser_profile_dir: nonEmptyString.optional(),
@@ -271,6 +291,8 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
       profile_dir: profileDir,
     },
     research_max_cost_usd: r.research_max_cost_usd,
+    research_max_ms: r.research_max_ms,
+    ...(r.daily_cost_cap_usd !== undefined && { daily_cost_cap_usd: r.daily_cost_cap_usd }),
     cache_dir: cacheDir,
     log_level: r.log_level,
     save_screenshots: r.save_screenshots,
