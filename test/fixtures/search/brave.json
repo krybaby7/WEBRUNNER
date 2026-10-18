@@ -1,0 +1,95 @@
+{
+  "type": "search",
+  "query": {
+    "original": "rust async runtime comparison",
+    "show_strict_warning": false,
+    "is_navigational": false,
+    "is_news_breaking": false,
+    "spellcheck_off": false,
+    "country": "us",
+    "bad_results": false,
+    "should_fallback": false,
+    "postal_code": "",
+    "city": "",
+    "header_country": "",
+    "more_results_available": true
+  },
+  "web": {
+    "type": "search",
+    "results": [
+      {
+        "title": "Tokio vs async-std vs smol: choosing a Rust async runtime",
+        "url": "https://blog.example.dev/rust-async-runtimes",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "A benchmark-driven look at <strong>Rust</strong> <strong>async</strong> runtimes: Tokio, smol and async-std compared on throughput and latency.",
+        "page_age": "2025-03-11T17:00:00",
+        "profile": { "name": "Example Dev Blog", "url": "https://blog.example.dev", "long_name": "blog.example.dev", "img": "https://imgs.search.brave.com/EXAMPLE" },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "article",
+        "is_live": false,
+        "meta_url": { "scheme": "https", "netloc": "blog.example.dev", "hostname": "blog.example.dev", "favicon": "https://imgs.search.brave.com/EXAMPLE", "path": "› rust-async-runtimes" },
+        "age": "2 weeks ago"
+      },
+      {
+        "title": "Async runtimes - Asynchronous Programming in Rust",
+        "url": "https://rust-lang.github.io/async-book/08_ecosystem/00_chapter.html",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "The Rust standard library does not ship an executor. Here&#x27;s how the ecosystem fills the gap &amp; what to pick.",
+        "profile": { "name": "Rust Lang", "url": "https://rust-lang.github.io", "long_name": "rust-lang.github.io", "img": "https://imgs.search.brave.com/EXAMPLE" },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "generic",
+        "is_live": false,
+        "meta_url": { "scheme": "https", "netloc": "rust-lang.github.io", "hostname": "rust-lang.github.io", "favicon": "https://imgs.search.brave.com/EXAMPLE", "path": "› async-book › 08_ecosystem" }
+      },
+      {
+        "title": "smol-rs/smol: A small and fast async runtime",
+        "url": "https://github.com/smol-rs/smol",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "A small and fast async runtime. Contribute to smol-rs/smol development by creating an account on GitHub.",
+        "page_age": "Mar 3, 2025",
+        "profile": { "name": "GitHub", "url": "https://github.com", "long_name": "github.com", "img": "https://imgs.search.brave.com/EXAMPLE" },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "software",
+        "is_live": false,
+        "meta_url": { "scheme": "https", "netloc": "github.com", "hostname": "github.com", "favicon": "https://imgs.search.brave.com/EXAMPLE", "path": "› smol-rs › smol" },
+        "age": "March 3, 2025"
+      },
+      {
+        "title": "Which Rust async runtime should I use? : r/rust",
+        "url": "https://www.reddit.com/r/rust/comments/EXAMPLE/which_rust_async_runtime_should_i_use/",
+        "is_source_local": false,
+        "is_source_both": false,
+        "description": "Long thread on picking between Tokio and smol for a new service.",
+        "page_age": "yesterday-ish",
+        "profile": { "name": "Reddit", "url": "https://www.reddit.com", "long_name": "reddit.com", "img": "https://imgs.search.brave.com/EXAMPLE" },
+        "language": "en",
+        "family_friendly": true,
+        "type": "search_result",
+        "subtype": "qa",
+        "is_live": false,
+        "meta_url": { "scheme": "https", "netloc": "reddit.com", "hostname": "www.reddit.com", "favicon": "https://imgs.search.brave.com/EXAMPLE", "path": "› r › rust" }
+      }
+    ],
+    "family_friendly": true
+  },
+  "mixed": {
+    "type": "mixed",
+    "main": [
+      { "type": "web", "index": 0, "all": false },
+      { "type": "web", "index": 1, "all": false },
+      { "type": "web", "index": 2, "all": false },
+      { "type": "web", "index": 3, "all": false }
+    ],
+    "top": [],
+    "side": []
+  }
+}
