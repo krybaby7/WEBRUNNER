@@ -104,19 +104,24 @@ webrunner/
       search_flights.ts
     core/
       search/
-        types.ts              SearchProvider interface
-        fusion.ts             dedupe + reciprocal rank fusion
+        types.ts              SearchProvider interface, ProviderError
+        normalize.ts          published_at normalization
+        canonical.ts          URL canonicalization (WP2)
+        fusion.ts             dedupe + reciprocal rank fusion (WP2)
+        index.ts              SearchService (WP2)
         providers/
           brave.ts
           exa.ts
           tavily.ts
           perplexity.ts
       fetch/
-        types.ts              Fetcher interface
-        fast.ts               Firecrawl / Jina / direct+readability
-        browser.ts            Playwright page → Markdown
-        index.ts              auto mode selection
+        types.ts              Fetcher interface, FetchError
+        botwall.ts            bot-wall signatures, isThin(), visibleText()
+        fast/                 firecrawl.ts, jina.ts, direct.ts, extract.ts, shared.ts, index.ts (buildFastFetchers, runFastChain)
+        browser.ts            Playwright page → Markdown (BrowserFetcher)
+        index.ts              auto mode selection (WP5)
       browser/
+        types.ts              BrowserSession, Snapshot, pool stats
         session.ts            persistent context / CDP attach
         snapshot.ts           accessibility tree + screenshot
         agent.ts              generic step loop for browse_task
@@ -195,7 +200,8 @@ Output:
 Behavior:
 - Query all requested providers in parallel with a per-provider timeout (default 8 s). A failed provider is reported, not fatal. If all fail, return the error envelope.
 - Dedupe by canonical URL, fuse with reciprocal rank fusion (k = 60), then truncate.
-- Cache by `(query, recency, domains, providers)` for 1 hour.
+- Cache by `(query, recency, domains, providers, max_results)` for 1 hour.
+- Brave, Tavily and Perplexity return at most 20 results per call and are not paginated, so `max_results` above 20 may return fewer rows. A provider cut off by the per-provider timeout appears in `providers_failed` with a message containing "timed out".
 
 ### 3.2 `fetch_page`
 
@@ -228,7 +234,8 @@ Output:
 Behavior:
 - `fast`: try configured fast fetchers in order (Firecrawl, Jina, then direct HTTP + Readability + Turndown). Stop at the first that returns more than 500 chars of body text.
 - `browser`: open in the browser engine, wait for network idle or `wait_for`, extract main content, convert to Markdown.
-- `auto`: `fast`, then fall back to `browser` if fast returns under 500 chars, a bot-wall signature (Cloudflare challenge, "enable JavaScript"), or HTTP 403/429.
+- `auto`: `fast`, then fall back to `browser` when any of these holds: the fast result has `botWall: true` (a wall served with HTTP 200), the fast result is thin (`isThin`, 500 visible characters or fewer), or the fast chain threw `FetchError` with code `blocked` (a wall served with 403/429/503). The browser fetcher never returns `botWall: true`; it throws `blocked`, which auto mode surfaces as the error envelope.
+- PDFs are not supported by the fast path (`FetchError` code `invalid_input`). Until a PDF path exists (WP14), `fetch_page` returns that error unchanged.
 - Cache by `final_url` for 24 hours; `browser` results cache for 1 hour.
 
 ### 3.3 `deep_research`
@@ -411,7 +418,7 @@ interface RawResult { url: string; title: string; snippet: string; publishedAt?:
 
 URL canonicalization (used for dedupe and cache keys): lowercase scheme and host, strip `www.`, strip fragment, strip tracking params (`utm_*`, `fbclid`, `gclid`, `ref`), strip trailing slash, sort remaining query params.
 
-`published_at` normalization (DECIDED): providers return dates in many shapes. A mapper converts anything `Date.parse` accepts to ISO 8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`); a date-only value becomes midnight UTC; anything unparseable is omitted, never passed through raw.
+`published_at` normalization (DECIDED, implemented in `normalize.ts`): a mapper converts anything `Date.parse` accepts to ISO 8601 UTC (`YYYY-MM-DDTHH:mm:ss.sssZ`); a date-only or zone-less value is read as UTC; numbers are epoch seconds (values of 1e12 and above are milliseconds); strings without a 4-digit year and anything unparseable are omitted, never passed through raw.
 
 ### 4.2 `Fetcher`
 
@@ -423,7 +430,7 @@ interface Fetcher {
 }
 ```
 
-`FetchResult` matches the `fetch_page` output minus `cached`. Each fetcher must classify bot walls: a result with `botWall: true` triggers browser fallback in auto mode.
+`FetchResult` matches the `fetch_page` output minus `cached`. Each fetcher classifies bot walls: a wall served with HTTP 200 is returned with `botWall: true`; a wall served with a non-2xx status throws `FetchError` code `blocked`. `FetchOpts.waitFor` applies to the browser fetcher only. `max_chars` defaults live in the tool, not in `FetchOpts`. `runFastChain` returns the best available result when no fetcher produced a good one and throws only when every fetcher threw (the last error wins).
 
 ### 4.3 `BrowserSession`
 
@@ -440,7 +447,11 @@ DECIDED behavior:
 - Optional: `BROWSER_CDP_URL` set means attach to the owner's running Chrome via `chromium.connectOverCDP`. Documented in README with the `--remote-debugging-port` flag.
 - Headful by default when a display exists, headless otherwise. `BROWSER_HEADLESS` overrides.
 - One context, pages pooled, max 3 concurrent pages.
-- Every page gets a realistic viewport, the system locale and timezone, and no automation-flag overrides beyond what Playwright does by default. No stealth plugins. If that is not enough for a site, the recipe reports `blocked`.
+- Every page gets a realistic viewport (1366x768), the system locale and timezone, set at context level in persistent mode. In CDP mode the owner's Chrome settings apply, so recipes must not assume a viewport. No automation-flag overrides beyond Playwright defaults. No stealth plugins. If that is not enough for a site, the recipe reports `blocked`.
+- Headful detection: macOS and Windows always count as having a display; Linux requires `DISPLAY` or `WAYLAND_DISPLAY`.
+- `BROWSER_CDP_URL` takes the form `http://127.0.0.1:9222`. In CDP mode `release()` closes pages this tool opened and `close()` only disconnects; the owner's Chrome keeps running.
+- One `BrowserSession` is created lazily in `buildDeps` and shared through `Deps.browser`; the server's shutdown path must call `close()` so Chromium is never orphaned (WP5 wires this).
+- Pages opened by clicks (popups) are not tracked by the pool; `close()` on the context still kills them.
 
 ### 4.4 `Snapshot` (for the generic browse agent)
 
@@ -454,6 +465,8 @@ interface Snapshot {
 ```
 
 The generic agent works primarily from the accessibility tree and refs, and requests a screenshot only when needed. This is cheaper and more reliable than a pure vision loop.
+
+Implemented shape (WP4): the tree comes from Playwright's `ariaSnapshot()` parsed into nested nodes; `Snapshot` also carries `refs: Map<string, Locator>` (role-plus-name locators, `getByText` for text-only nodes) and `refInfo: Map<string, {role, name}>`. Refs are deterministic for an unchanged page but go stale after any DOM change, so the agent takes a fresh snapshot after every action and prefers interactive refs. Iframe content is not in the tree. Names are truncated to 120 characters in the text but locators use the full name. The tree is capped at 400 lines; nodes past the cap have no ref. A screenshot is taken only when requested, or when the tree is empty and a `screenshotDir` was given.
 
 ### 4.5 `Recipe`
 
@@ -500,7 +513,9 @@ Implementer notes for the Anthropic SDK (verify against the current SDK README b
 - Enable server-side refusal fallbacks by default: beta `server-side-fallback-2026-07-01` with `fallbacks: "default"`. Check `stop_reason === "refusal"` before reading content.
 - Stream any call with `max_tokens` above roughly 16k and use `finalMessage()`.
 - Put stable content (system prompt, tool list) first and use `cache_control` breakpoints; the research loop re-sends large contexts and caching matters for cost.
-- Track `usage` on every response and compute cost from a price table in `models.ts`. Prices as of 2026-10: Opus 5.5 $4/$20 per MTok, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50.
+- Track `usage` on every response and compute cost from a price table in `models.ts`. Prices as of 2026-10: Opus 5.5 $4/$20 per MTok, Sonnet 5.5 $2/$10, Haiku 5.5 $0.10/$0.50 (doubles above 100K prompt tokens, so scorer batches stay under that).
+
+Implemented shape (WP6, `src/core/llm/`): `Usage` is camelCase (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`); `LlmResponse` adds `model` (the serving model) and `stopReason`; `LlmRequest` adds optional `meter` and `signal`; `LlmError` carries `code` (maps onto the envelope) and `kind` (`refusal | rate_limit | api | network | not_configured | schema`). Budgets: create one `CostMeter({ maxCostUsd })` per `deep_research` or `browse_task` call and pass it as `req.meter` on every call; the client checks it before each request so overshoot is at most one call. `max_tokens` includes adaptive-thinking tokens: planner and reflect calls at `high` effort must pass `maxTokens: 16000` (the streaming threshold) rather than the 8192 default or structured JSON gets truncated. There is no tool-use path by design (forced `tool_choice` returns 400 on these models); the browse agent's one-action-per-step decision uses structured output with a discriminated union.
 
 ### 4.7 `Cache`
 
@@ -589,9 +604,9 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 - Deliver: `BrowserSession` with persistent profile and optional CDP attach; page pool; `browser` fetcher that waits for load, extracts main content via Readability on the live DOM, converts to Markdown. `Snapshot` module producing a compact accessibility tree with refs.
 - Accept: integration test (gated) fetches a known JS-rendered page and returns body text over 500 chars. Unit test for snapshot formatting on a saved DOM. Session reuses the profile directory across two launches (cookie persists).
 
-**WP5: `fetch_page` tool with auto mode** (after WP3, WP4)
-- Depends on: WP3, WP4.
-- Deliver: `core/fetch/index.ts` implementing auto fallback order; the tool; cache.
+**WP5: `fetch_page` tool with auto mode** (after WP2, WP3, WP4)
+- Depends on: WP2 (cache), WP3, WP4.
+- Deliver: `core/fetch/index.ts` implementing the auto fallback rules in 3.2; the tool; cache (24 h for fast results keyed on `final_url`, 1 h for browser results); `Deps.fetch` and `Deps.browser` (lazy `BrowserSession`) with `close()` wired into the server shutdown path; drop the `X-Return-Format: markdown` header from the Jina fetcher (live calls showed it returns full page chrome; the default output is cleaner) with a fixture update.
 - Accept: with a fixture fast fetcher returning a bot wall, auto mode calls the browser fetcher. Mode `fast` never touches the browser (asserted via spy).
 
 ### Phase 2: Deep research
@@ -640,7 +655,7 @@ Each WP is one implementer session. "Parallel with" lists WPs that can run at th
 - Accept: both scripts are idempotent. A fresh Claude Code session lists all five tools. A fresh Codex session lists all five tools.
 
 **WP14: Hardening**
-- Deliver: global per-call timeouts, concurrency limits per provider, retry with jitter on 429/5xx (max 2), cost cap enforcement across all tools, graceful browser shutdown on SIGTERM, structured error envelope everywhere, a `health` tool reporting configured providers and browser status, a `tsconfig.test.json` so `npm run typecheck` covers `test/`, and a written evaluation of migrating to MCP SDK v2 (`@modelcontextprotocol/server`).
+- Deliver: global per-call timeouts, concurrency limits per provider, retry with jitter on 429/5xx (max 2), cost cap enforcement across all tools, graceful browser shutdown on SIGTERM, structured error envelope everywhere, a `health` tool reporting configured providers and browser status, a `tsconfig.test.json` so `npm run typecheck` covers `test/`, PDF text extraction in `fetch_page` (`pdf-parse` or equivalent; the fast path currently returns `invalid_input` for PDFs), a CI job that runs the browser tests with Chromium installed, and a written evaluation of migrating to MCP SDK v2 (`@modelcontextprotocol/server`).
 - Accept: fault-injection tests for each failure mode return the correct `error.code`. Killing the server mid-browse leaves no orphan Chromium.
 
 ### Dependency graph
@@ -761,4 +776,5 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 
 ## 13. Decision log
 
+- **2026-10-18, after WP1/WP3/WP4/WP6**: recorded the implemented shapes for search normalization, bot-wall semantics (returned vs thrown), the browser session and snapshot contracts, and the LLM client (`Usage`, `LlmError`, per-run `CostMeter`, `maxTokens: 16000` for planner calls). WP5 now depends on WP2 for the cache and owns wiring the shared `BrowserSession` into `Deps` and shutdown. Jina's `X-Return-Format` header is dropped in WP5. PDF extraction and a Chromium CI job were added to WP14. Playwright is pinned to 1.56.1 to match the Chromium build shipped with the dev environment; the README (WP13) must say to run `npx playwright install chromium` elsewhere. `vitest.config.ts` includes `test/integration/**` only when `RUN_INTEGRATION=1`.
 - **2026-10-18, after WP0**: added `src/deps.ts`, `src/schemas/result.ts`, `src/tools/index.ts` and the tool wiring convention; moved `ping` to `src/tools/ping.ts`. Added config keys for browser profile dir, screenshots, currency and per-role model overrides so WP4, WP6, WP10 and WP11 do not each edit `config.ts`. Pinned MCP SDK to the 1.32.x line for v1. Made `ANTHROPIC_API_KEY` optional at startup. Fixed `published_at` normalization. All raised by the WP0 implementer's report.
