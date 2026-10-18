@@ -102,6 +102,7 @@ describe("stdio server smoke test", () => {
     expect(list?.tools.map((t) => t.name)).toContain("search_flights");
     expect(list?.tools.map((t) => t.name)).toContain("social_search");
     expect(list?.tools.map((t) => t.name)).toContain("search_hotels");
+    expect(list?.tools.map((t) => t.name)).toContain("search_reviews");
     expect(list?.tools.map((t) => t.name)).toContain("deep_research");
     expect(list?.tools.map((t) => t.name)).toContain("accounts");
     expect(list?.tools.map((t) => t.name)).toContain("health");
