@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>London to New York | Google Flights</title>
+<!--
+  Hand-written stand-in for a Google Flights results page (round trip LHR to JFK,
+  depart 2026-12-01, return 2026-12-08, USD). It mimics what was observed live on
+  2026-10-18: a consent dialog first, then <ul role="list"> rows whose empty
+  div[role=link] carries the whole itinerary in its aria-label, a "More flights"
+  expander, and the passenger and cabin controls. The labels are copied from real ones.
+  Results are rendered only after the consent dialog is dismissed, so the recipe
+  must click it. Rows added by "View more flights" are not in the DOM until clicked.
+-->
+<style>
+  body { font-family: sans-serif; margin: 16px; }
+  [hidden] { display: none !important; }
+  #consent { position: fixed; inset: 20% 20%; background: #fff; border: 1px solid #888; padding: 24px; z-index: 10; }
+  li { list-style: none; border-bottom: 1px solid #ddd; padding: 8px 0; position: relative; }
+</style>
+</head>
+<body>
+<div id="consent" role="dialog" aria-label="Before you continue to Google">
+  <h1>Before you continue to Google</h1>
+  <p>We use cookies and data to deliver and maintain Google services.</p>
+  <button id="reject" type="button">Reject all</button>
+  <button id="accept" type="button">Accept all</button>
+</div>
+
+<main>
+  <h2>Flight search</h2>
+  <div>
+    <button type="button" aria-label="Round trip">Round trip</button>
+    <button type="button" aria-label="1 passenger, change number of passengers.">1</button>
+    <button type="button" aria-label="Economy, Change seating class.">Economy</button>
+    <span>London LHR</span> <span>New York JFK</span>
+  </div>
+  <div>Filters <button type="button">All filters</button> <button type="button">Stops</button> <button type="button">Airlines</button></div>
+  <h2>Search results</h2>
+  <div id="results" hidden>
+    <div>Best Cheapest from Fetching results</div>
+    <h3>Top departing flights</h3>
+    <p>Prices include required taxes + fees for 1 adult. Optional charges and bag fees may apply.</p>
+    <ul id="top" role="list"></ul>
+    <h3>Other departing flights</h3>
+    <ul id="other" role="list"></ul>
+    <button id="more" type="button">View more flights</button>
+  </div>
+</main>
+
+<template id="row-vs">
+  <li><div role="link" tabindex="0" aria-label="From 661 US dollars round trip total. Nonstop flight with Virgin Atlantic. Leaves Heathrow Airport at 3:50 PM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 7:10 PM on Tuesday, December 1. Total duration 8 hr 20 min.   Select flight"></div>
+    <span>3:50 PM – 7:10 PM</span> <span>Virgin Atlantic</span> <span>8 hr 20 min</span> <span>LHR–JFK</span> <span>Nonstop</span> <span>$661</span> <span>round trip</span></li>
+</template>
+<template id="row-dl">
+  <li><div role="link" tabindex="0" aria-label="From 661 US dollars round trip total. Nonstop flight with Delta. Leaves Heathrow Airport at 4:35 PM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 8:00 PM on Tuesday, December 1. Total duration 8 hr 25 min.   Select flight"></div>
+    <span>4:35 PM – 8:00 PM</span> <span>Delta</span> <span>8 hr 25 min</span> <span>LHR–JFK</span> <span>Nonstop</span> <span>$661</span> <span>round trip</span></li>
+</template>
+<template id="row-aa">
+  <li><div role="link" tabindex="0" aria-label="From 665 US dollars round trip total. Nonstop flight with American. Leaves Heathrow Airport at 3:35 PM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 6:40 PM on Tuesday, December 1. Total duration 8 hr 5 min.   Select flight"></div>
+    <span>3:35 PM – 6:40 PM</span> <span>American</span> <span>8 hr 5 min</span> <span>LHR–JFK</span> <span>Nonstop</span> <span>$665</span> <span>round trip</span></li>
+</template>
+<template id="row-ba">
+  <li><div role="link" tabindex="0" aria-label="From 665 US dollars round trip total. Nonstop flight with British Airways. Leaves Heathrow Airport at 4:40 PM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 7:50 PM on Tuesday, December 1. Total duration 8 hr 10 min.   Select flight"></div>
+    <span>4:40 PM – 7:50 PM</span> <span>British Airways</span> <span>8 hr 10 min</span> <span>LHR–JFK</span> <span>Nonstop</span> <span>$665</span> <span>round trip</span></li>
+</template>
+<template id="row-os">
+  <li><div role="link" tabindex="0" aria-label="From 616 US dollars round trip total. 1 stop flight with Austrian. Leaves Heathrow Airport at 6:00 AM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 2:15 PM on Tuesday, December 1. Total duration 13 hr 15 min. Layover (1 of 1) is a 1 hr 40 min layover at Vienna International Airport in Vienna. Select flight"></div>
+    <span>6:00 AM – 2:15 PM</span> <span>Austrian</span> <span>13 hr 15 min</span> <span>LHR–JFK</span> <span>1 stop</span> <span>1 hr 40 min VIE</span> <span>$616</span> <span>round trip</span></li>
+</template>
+<template id="row-lx1">
+  <li><div role="link" tabindex="0" aria-label="From 611 US dollars round trip total. 1 stop flight with SWISS. Leaves Heathrow Airport at 6:00 AM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 1:15 PM on Tuesday, December 1. Total duration 12 hr 15 min. Layover (1 of 1) is a 1 hr 15 min layover at Zurich Airport in Zürich. Select flight"></div>
+    <span>6:00 AM – 1:15 PM</span> <span>SWISS</span> <span>12 hr 15 min</span> <span>LHR–JFK</span> <span>1 stop</span> <span>1 hr 15 min ZRH</span> <span>$611</span> <span>round trip</span></li>
+</template>
+<template id="row-ay">
+  <li><div role="link" tabindex="0" aria-label="From 639 US dollars round trip total. 1 stop flight with Finnair. Leaves Heathrow Airport at 10:20 AM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 7:05 PM on Tuesday, December 1. Total duration 13 hr 45 min. Layover (1 of 1) is a 1 hr 35 min layover at Helsinki Airport in Helsinki. Select flight"></div>
+    <span>10:20 AM – 7:05 PM</span> <span>Finnair</span> <span>13 hr 45 min</span> <span>LHR–JFK</span> <span>1 stop</span> <span>1 hr 35 min HEL</span> <span>$639</span> <span>round trip</span></li>
+</template>
+<template id="row-lx2">
+  <li><div role="link" tabindex="0" aria-label="From 611 US dollars round trip total. 1 stop flight with SWISS. Leaves Heathrow Airport at 8:05 PM on Tuesday, December 1 and arrives at John F. Kennedy International Airport at 1:15 PM on Wednesday, December 2. Total duration 22 hr 10 min. Layover (1 of 1) is a 11 hr 10 min layover at Zurich Airport in Zürich. Select flight"></div>
+    <span>8:05 PM – 1:15 PM+1</span> <span>SWISS</span> <span>22 hr 10 min</span> <span>LHR–JFK</span> <span>1 stop</span> <span>11 hr 10 min ZRH</span> <span>$611</span> <span>round trip</span></li>
+</template>
+
+<script>
+  function add(listId, ids) {
+    var list = document.getElementById(listId);
+    ids.forEach(function (id) {
+      list.appendChild(document.getElementById("row-" + id).content.cloneNode(true));
+    });
+  }
+  var clicks = 0;
+  function dismiss(choice) {
+    document.documentElement.setAttribute("data-consent", choice);
+    document.getElementById("consent").hidden = true;
+    setTimeout(function () {
+      document.getElementById("results").hidden = false;
+      add("top", ["vs", "dl", "aa", "ba", "os"]);
+    }, 200);
+  }
+  document.getElementById("reject").addEventListener("click", function () { dismiss("rejected"); });
+  document.getElementById("accept").addEventListener("click", function () { dismiss("accepted"); });
+  document.getElementById("more").addEventListener("click", function () {
+    clicks++;
+    setTimeout(function () {
+      if (clicks === 1) add("other", ["lx1", "ay"]);
+      if (clicks === 2) { add("other", ["lx2"]); document.getElementById("more").hidden = true; }
+    }, 150);
+  });
+</script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import type { Deps } from "../deps.js";
 import { registerBrowseTaskTool } from "./browse_task.js";
 import { registerPingTool } from "./ping.js";
 import { registerFetchPageTool } from "./fetch_page.js";
+import { registerSearchFlightsTool } from "./search_flights.js";
 import { registerWebSearchTool } from "./web_search.js";
 
 /** Wire every tool. Each work package adds exactly one line here. */
@@ -11,4 +12,5 @@ export function registerTools(server: McpServer, deps: Deps): void {
   registerWebSearchTool(server, deps);
   registerFetchPageTool(server, deps);
   registerBrowseTaskTool(server, deps);
+  registerSearchFlightsTool(server, deps);
 }
