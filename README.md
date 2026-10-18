@@ -7,7 +7,7 @@ The server calls the Claude API itself for research and extraction, so the clien
 | Tool | What it does | Keys it needs |
 |------|--------------|---------------|
 | `web_search` | Queries every configured search engine in parallel and returns one merged, deduplicated, ranked list. | At least one of `BRAVE_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `PERPLEXITY_API_KEY` |
-| `fetch_page` | Turns a URL into Markdown: fast fetchers first, a real Chromium when the page is bot-walled or empty. | None. `JINA_API_KEY` and `FIRECRAWL_API_KEY` are optional; browser mode needs Chromium |
+| `fetch_page` | Turns a URL into Markdown (PDFs included): fast fetchers first, a real Chromium when the page is bot-walled or empty. | None. `JINA_API_KEY` and `FIRECRAWL_API_KEY` are optional; browser mode needs Chromium |
 | `deep_research` | Plans, searches, reads, reflects and writes a cited Markdown report, with depth chosen by the caller. | `ANTHROPIC_API_KEY` and at least one search key |
 | `browse_task` | A Claude-driven agent that clicks and reads through a live page toward a goal; read and extract only. | `ANTHROPIC_API_KEY`, plus Chromium |
 | `search_flights` | Exact fares and schedules from Google Flights (read through the browser) and, optionally, Duffel. | Google Flights: `ANTHROPIC_API_KEY` plus Chromium. Duffel: `DUFFEL_API_KEY` |
@@ -121,6 +121,8 @@ webrunner reads environment variables first, then `~/.config/webrunner/config.js
 | `WEBRUNNER_SAVE_SCREENSHOTS` | `save_screenshots` | `false` | `browse_task` saves screenshots under `<cache dir>/runs/<run id>/` and lists them in `screenshots`. |
 | `WEBRUNNER_CURRENCY` | `currency` | `USD` | Default ISO 4217 currency for `search_flights`. |
 | `RESEARCH_MAX_COST_USD` | `research_max_cost_usd` | `3` | Default hard cost cap per `deep_research` call, in US dollars. |
+| `WEBRUNNER_RESEARCH_MAX_MS` | `research_max_ms` | `900000` | Wall-clock cap for one `deep_research` call (15 minutes). Past it the tool returns `timeout`. |
+| `WEBRUNNER_DAILY_COST_CAP_USD` | `daily_cost_cap_usd` | unset | Optional soft cap on total LLM spend per UTC day across every tool and every server process, tracked in `<cache dir>/daily-cost.json`. When reached, `deep_research` and `browse_task` return `budget_exceeded` until the next day. |
 | `WEBRUNNER_CACHE_DIR` | `cache_dir` | `~/.cache/webrunner` | Disk cache for search and fetch results, and the `runs/` directory. |
 | `WEBRUNNER_LOG_LEVEL` | `log_level` | `info` | `debug`, `info`, `warn` or `error`. Logs go to stderr as JSON lines. |
 | `WEBRUNNER_MODEL_PLANNER` | `model_planner` | `claude-opus-5-5` | Model for planning and reflection in `deep_research`. |
@@ -237,7 +239,7 @@ Optional arguments: `include_domains`, `exclude_domains`, and `providers` (a sub
 }
 ```
 
-`mode` is `auto` (default), `fast` (never opens a browser) or `browser` (always renders; `wait_for` takes a CSS selector to wait for). In auto mode the browser is used when the fast result is a bot wall or nearly empty. `method` reports which fetcher produced the page. Truncation is always flagged in `truncated`. Fast results are cached for 24 hours and browser results for 1 hour. PDFs are not supported yet.
+`mode` is `auto` (default), `fast` (never opens a browser) or `browser` (always renders; `wait_for` takes a CSS selector to wait for). In auto mode the browser is used when the fast result is a bot wall or nearly empty. `method` reports which fetcher produced the page. Truncation is always flagged in `truncated`. Fast results are cached for 24 hours and browser results for 1 hour. PDFs are extracted to text by the direct fetcher (title, then page text with `---` between pages; 25 MB and 300 pages maximum; scanned PDFs with no text layer return `invalid_input`). Each call is capped at 90 seconds and returns a `timeout` error past that.
 
 ### deep_research
 
@@ -396,6 +398,8 @@ Rough, owner-facing figures using the default model routing and 2026-10 prices (
 | `browse_task`, 15 steps | $0.20 to $0.60 |
 
 `deep_research` reports its actual spend in `stats.cost_usd`. That figure is **LLM spend only**: search and fetch provider fees (Brave, Exa, Firecrawl and so on) are billed by those providers and are not metered here. `max_cost_usd` is a hard stop on the same LLM spend: the server checks the running total before every model call, so the overshoot is at most one call. When the cap is reached the tool returns what it has, `stats.stopped_reason` is `budget`, and `gaps` explains the cutoff. The server keeps an estimate of the writer's cost in reserve so a report can still be produced. The default cap comes from `RESEARCH_MAX_COST_USD` (3.00); `max_cost_usd` on a call overrides it. `browse_task` has its own `max_cost_usd` (default 1.00).
+
+Two more limits apply everywhere. Every tool has a wall-clock cap (`web_search` 30 s, `fetch_page` 90 s, `search_flights` 120 s, `browse_task` 10 min, `deep_research` 15 min via `WEBRUNNER_RESEARCH_MAX_MS`) and returns a retryable `timeout` error when it is hit. Setting `WEBRUNNER_DAILY_COST_CAP_USD` adds a soft daily ceiling on LLM spend shared by all server processes: the call that crosses it completes, the next LLM-dependent call is refused with `budget_exceeded` naming the variable and the day's spend. Upstream calls to search providers, fast fetchers and Duffel are retried at most twice with jitter on retryable failures, honoring `Retry-After` on 429, and are limited to a few concurrent requests per provider so a wide research run cannot flood one API.
 
 ## Evals
 

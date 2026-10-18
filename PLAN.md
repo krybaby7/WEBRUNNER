@@ -238,7 +238,7 @@ Behavior:
 - Thin without wall evidence is not an error: when the fast result is merely thin and the browser is unavailable or fails, the thin fast result is returned. When the browser result is also thin and has less than twice the fast result's visible text, the fast result wins (the page is simply short). When the fast result is a bot wall and the browser fails for any reason, the tool returns `blocked`, never wall text.
 - Jina Reader executes JavaScript, so a JS-rendered page is usually served by the fast path; the browser fallback matters mostly for sites that block Jina and direct fetches.
 - Cache: keyed on the canonical request URL plus `mode`, `max_chars` and `wait_for`; a second alias entry is written under `final_url` when it differs. Thin and bot-walled results are never cached.
-- PDFs are not supported by the fast path (`FetchError` code `invalid_input`). Until a PDF path exists (WP14), `fetch_page` returns that error unchanged.
+- PDFs are extracted by the direct fetcher (WP14b, `pdf-parse` with pdf.js verbosity set to errors so nothing reaches stdout): `# <title or file name>` then page text with `---` separators, 25 MB and 300 page caps, `invalid_input` for corrupt PDFs or PDFs without a text layer. Jina and Firecrawl PDF text passes through.
 - Cache by `final_url` for 24 hours; `browser` results cache for 1 hour.
 
 ### 3.3 `deep_research`
@@ -563,6 +563,8 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | WEBRUNNER_MODEL_SCORER  | no       | override scorer model; default claude-haiku-5-5 |
 | WEBRUNNER_MODEL_EXTRACTOR | no     | override extractor model; default claude-sonnet-5-5 |
 | WEBRUNNER_MODEL_WRITER  | no       | override writer model; default claude-opus-5-5 |
+| WEBRUNNER_RESEARCH_MAX_MS | no     | wall-clock cap per deep_research call; default 900000 |
+| WEBRUNNER_DAILY_COST_CAP_USD | no  | soft cap on LLM spend per UTC day across processes; default unset (off) |
 | RESEARCH_MAX_COST_USD   | no       | default 3.00 per deep_research call      |
 | WEBRUNNER_CACHE_DIR  | no       | default ~/.cache/webrunner            |
 | WEBRUNNER_LOG_LEVEL  | no       | default info                             |
@@ -797,10 +799,13 @@ Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.co
 3. **M3, live data**: WP10 to WP12 merged. `search_flights` returns real fares for three routes the owner picks.
 4. **M4, done**: WP13 and WP14 merged. Both clients configured by script. README complete.
 
+Status on 2026-10-18: all fourteen work packages are merged (WP14 as WP14a and WP14b). M1, M3 and M4 are met as far as can be verified without API keys: a fresh clone passes lint, typecheck over `src/` and `test/`, and 1380 tests; all seven tools list over stdio; CI including the Chromium job is green; Google Flights returned 27 live offers for LHR to JFK from the development environment. M2's quality bar and the live halves of M3 and M4 (a Google Flights run with the real extractor, Codex against a live session, the eval set at standard depth, the Perplexity side-by-side) need the owner's keys and are the first things to do after install.
+
 ---
 
 ## 13. Decision log
 
+- **2026-10-18, after WP14a/WP14b, close-out**: hardening merged. Retries with jitter and `Retry-After` on search, fast fetch and Duffel; per-provider concurrency limits; wall-clock caps per tool; PDF extraction; a SIGTERM test proving no orphaned Chromium (the shutdown path now bounds browser close at 6 s and exits 1 on a forced exit); an optional daily LLM spend cap shared across processes; the `health` tool; typecheck over tests; a Chromium CI job and a weekly live canary; the MCP SDK v2 evaluation (stay on 1.32.x for the first release, migrate in one change before v1 support ends). `search_flights` keeps both the wall-clock guard and a catch-all so no error leaves a handler unwrapped. Follow-ups not done: a clearer error when two server processes share one browser profile directory; `child_ages` for flights; recording live provider fixtures once keys exist.
 - **2026-10-18, after WP13**: README, CLAUDE.md and install scripts merged; Claude Code registration verified against the real CLI, Codex block written per the Codex docs but not run against a live Codex. Plan corrected to match code: config-file keys drop the `WEBRUNNER_` prefix; `browse_task` takes `max_cost_usd` (default 1.00). Two clients sharing one profile directory cannot both launch Chromium; a clearer error is a follow-up.
 - **2026-10-18, after WP8**: all six tools are on main. WP14 split into WP14a (quality gates) and WP14b (resilience) and started in parallel with WP13, since the three touch disjoint files. Two config keys are added by WP14b: `WEBRUNNER_RESEARCH_MAX_MS` and `WEBRUNNER_DAILY_COST_CAP_USD`.
 - **2026-10-18, after WP11**: recorded the live Google Flights findings (rate limiting, query-text cabin and passenger clauses, code-side resolution and cross-checks) in 3.5 and the risk table. WP13 started in parallel with WP8 since the README only needs the 3.3 contract for `deep_research`.
