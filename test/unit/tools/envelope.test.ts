@@ -13,6 +13,7 @@ import { registerTools, TOOL_NAMES } from "../../../src/tools/index.js";
 import { registerPingTool } from "../../../src/tools/ping.js";
 import { registerSearchFlightsTool } from "../../../src/tools/search_flights.js";
 import { registerSocialSearchTool } from "../../../src/tools/social_search.js";
+import { registerSearchHotelsTool } from "../../../src/tools/search_hotels.js";
 import { registerWebSearchTool } from "../../../src/tools/web_search.js";
 import { makeConfig } from "../llm/helpers.js";
 import { recordingLogger, scriptedLlm } from "../research/helpers.js";
@@ -98,6 +99,16 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
     register: (server, deps) =>
       registerSocialSearchTool(server, deps, {
         platforms: () => {
+          throw boom();
+        },
+      }),
+  },
+  search_hotels: {
+    args: { destination: "Paris", check_in: "2030-01-15", check_out: "2030-01-18" },
+    // The provider factory throws before any source is called: nothing per-source can catch it.
+    register: (server, deps) =>
+      registerSearchHotelsTool(server, deps, {
+        providers: () => {
           throw boom();
         },
       }),
