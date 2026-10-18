@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Snapshot Fixture</title></head>
+<body>
+  <div class="wrapper"><div class="inner"><span class="deco"></span>
+    <header>
+      <h1>Flight Search</h1>
+      <nav aria-label="Main">
+        <a href="/deals">Deals</a>
+        <a href="/help">Help</a>
+        <a href="/help">Help</a>
+      </nav>
+    </header>
+    <main>
+      <form aria-label="Search form" action="/search">
+        <label for="from">From</label>
+        <input id="from" type="text" value="SFO">
+        <label for="to">To</label>
+        <input id="to" type="text">
+        <label><input type="checkbox" checked> Flexible dates</label>
+        <button type="submit">Search flights</button>
+        <button type="button" disabled>Reset</button>
+      </form>
+      <h2>Popular routes</h2>
+      <ul>
+        <li>West coast
+          <ul>
+            <li><a href="/r/sfo-lax">SFO to LAX</a></li>
+            <li><a href="/r/sea-pdx">SEA to PDX</a></li>
+          </ul>
+        </li>
+        <li>East coast
+          <ul>
+            <li><a href="/r/jfk-bos">JFK to BOS</a></li>
+          </ul>
+        </li>
+      </ul>
+    </main>
+  </div></div>
+</body>
+</html>
