@@ -1,0 +1,782 @@
+[
+  {
+    "id": "recent-nodejs-latest-release",
+    "question": "As of today, what is the most recent stable Node.js release, when was it published, and what are its headline changes? Which Node.js release lines are in Active LTS right now?",
+    "type": "recent_event",
+    "depth": "quick",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the version number and publication date of the most recent stable Node.js release, matching what its cited source shows.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites an official Node.js source for that release (nodejs.org release or blog page, or the nodejs/node GitHub releases or changelog).",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Cites at least one source published within the 60 days before today (2026-10-18) and says how recent the newest evidence is.",
+        "kind": "must_cite",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Identifies which release lines are in Active LTS and which are in Maintenance as of today, per the official release schedule.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not present a release dated after today (2026-10-18) as shipped, and does not call a release the latest if its own cited sources show a newer one.",
+        "kind": "must_not_claim",
+        "weight": 2
+      },
+      {
+        "id": "c6",
+        "criterion": "Notes the date the information was current, or that a newer patch release may have shipped since.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "A great answer is short and exact: one version, one date, two or three real headline changes taken from the official changelog (not a rewrite of marketing copy), and a correct LTS picture from the release schedule table. Penalize answers that describe an older release as the latest because a stale blog post ranked first."
+  },
+  {
+    "id": "recent-fomc-latest-decision",
+    "question": "As of today, what did the US Federal Reserve most recently decide on its policy interest rate, when was that meeting, and what did the statement and projections signal about the next meeting?",
+    "type": "recent_event",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the date of the most recent FOMC meeting that has already happened as of 2026-10-18 and the decision on the federal funds target range.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the Federal Reserve's own statement or press release (federalreserve.gov) for the decision.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Cites at least one source published within the 60 days before today (2026-10-18) and says how recent the newest evidence is.",
+        "kind": "must_cite",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Summarizes the forward guidance or projections from that meeting, attributing them to the statement or the Summary of Economic Projections.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not report a decision from an FOMC meeting that has not yet taken place as of today, and does not present market expectations as an announced decision.",
+        "kind": "must_not_claim",
+        "weight": 3
+      },
+      {
+        "id": "c6",
+        "criterion": "Separates what the Fed announced from what markets or commentators expect next, and flags that the next decision is not yet known.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "The trap here is mixing up announced decisions with expectations, and reporting a meeting that has not happened. A great answer names the meeting date, quotes or closely paraphrases the official statement, names the next scheduled meeting date if the Fed calendar is cited, and labels forecasts as forecasts."
+  },
+  {
+    "id": "recent-eu-ees-etias-status",
+    "question": "As of today, what is the status of the EU Entry/Exit System (EES) and ETIAS for a US citizen planning a Schengen trip next month, and what should they do before travelling?",
+    "type": "recent_event",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the current rollout status of EES and of ETIAS as of today, including any dates the sources give.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites an official EU source (for example the European Commission, travel-europe.europa.eu or an EU agency page) for the status of each system.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Cites at least one source published within the 60 days before today (2026-10-18) and says how recent the newest evidence is.",
+        "kind": "must_cite",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Does not state that ETIAS authorization is mandatory today, or give its fee or start date, unless a cited official source supports it as of today.",
+        "kind": "must_not_claim",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Gives concrete traveller guidance, such as what to expect at the border and where to check official updates.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c6",
+        "criterion": "Flags that start dates and phase-in details have changed before and may change again, and tells the traveller to verify with official sources before departure.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "Rollout details of both systems have shifted repeatedly, so a good answer is dated, official-sourced, and honest about what is confirmed versus announced. Penalize confident ETIAS fee or deadline claims that trace back to blogs or travel sites instead of EU sources."
+  },
+  {
+    "id": "recent-ai-releases-last-60-days",
+    "question": "As of today, which significant AI model or product releases did Anthropic, OpenAI and Google announce in the last 60 days, and how do their vendor-reported benchmark claims compare with independent evaluations?",
+    "type": "recent_event",
+    "depth": "deep",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Lists at least one release per vendor where one exists in the last 60 days (since 2026-08-19), each with an announcement date, and says so explicitly when a vendor had no notable release in that window.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites each vendor's own announcement or documentation page for the releases it lists.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Cites at least one independent evaluation, leaderboard or third-party review, not only vendor pages.",
+        "kind": "must_cite",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Does not present vendor-reported benchmark numbers as independently verified, and does not list releases dated outside the 60-day window as recent.",
+        "kind": "must_not_claim",
+        "weight": 3
+      },
+      {
+        "id": "c5",
+        "criterion": "Flags that benchmarks are contested or vendor-selected, and that independent evaluations of very new releases may not exist yet.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "This is a freshness stress test. A great answer builds the timeline from primary announcements, keeps vendor claims and independent results in separate columns or paragraphs, and admits gaps where no independent data exists yet. Penalize releases pulled from memory instead of dated sources."
+  },
+  {
+    "id": "cmp-sqlite-vs-postgres-local-first",
+    "question": "SQLite or PostgreSQL for a single-user, local-first desktop app that may later sync to a server: when should I pick each, and what are the concrete trade-offs in concurrency, durability, deployment and tooling?",
+    "type": "technical_comparison",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Compares the two on concurrency model and write behaviour (for example single-writer WAL mode versus multi-process MVCC), stating which fits a single-user local app.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the official SQLite documentation and the official PostgreSQL documentation for the claims it makes about each.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Covers deployment and operational cost: an embedded file versus running and upgrading a server process.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Addresses the later-sync scenario and names at least one realistic path, such as a sync layer over SQLite or migrating to Postgres, with its caveats.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Says where the right choice depends on the app's data volume, concurrency or sync needs, rather than declaring one universal winner.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "A great answer ends with a decision rule the owner can apply, not a feature table alone. It should be honest that SQLite is the default for this case, explain the exceptions, and rely on official docs for behaviour claims."
+  },
+  {
+    "id": "cmp-playwright-puppeteer-selenium",
+    "question": "For a new TypeScript project in 2026 that needs reliable browser automation, how do Playwright, Puppeteer and Selenium compare on browser support, auto-waiting, tooling, maintenance activity and ecosystem?",
+    "type": "technical_comparison",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Compares browser and language support for the three tools, naming which browser engines each drives.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites each project's official documentation or repository for the capabilities it attributes to that project.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Gives at least one concrete maintenance signal per project, such as latest release date or release cadence, taken from a cited source and dated.",
+        "kind": "must_quantify",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Compares waiting and flakiness handling, and states a recommendation for a new TypeScript project with the reasoning.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not claim a feature exists in a tool without a cited source, and does not present stale popularity numbers as current without a date.",
+        "kind": "must_not_claim",
+        "weight": 1
+      }
+    ],
+    "notes": "A great answer separates durable architectural differences (protocol, auto-wait model, browser coverage) from perishable numbers (stars, downloads, release dates), dates the perishable ones, and recommends one tool for the stated context."
+  },
+  {
+    "id": "cmp-llm-search-apis",
+    "question": "I am building an LLM agent that needs web search. Compare the Brave Search API, Exa and Tavily on pricing, result freshness, content extraction features, rate limits and licensing for use in AI applications.",
+    "type": "technical_comparison",
+    "depth": "deep",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Covers all three providers on the same dimensions, stating explicitly when a dimension could not be established for one of them.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites each provider's own pricing or documentation page for its pricing and feature claims.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Gives concrete per-request or per-month prices and free-tier limits for each provider, with the source and an as-of date.",
+        "kind": "must_quantify",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Explains how the providers differ in kind (for example keyword index versus neural search versus agent-oriented extraction) and what that implies for an LLM agent.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Flags that pricing and plans change often and that numbers must be re-checked against the live pricing pages.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "Pricing pages are the canonical sources, and third-party roundups go stale quickly. A great answer quotes current plan numbers with their source, does not blend plans together, and says plainly where a page was unreadable or ambiguous."
+  },
+  {
+    "id": "cmp-heat-pump-vs-gas-furnace",
+    "question": "For heating a typical house in a cold climate, how does a modern air-source heat pump compare with a high-efficiency gas furnace on efficiency, running cost, upfront cost and incentives?",
+    "type": "technical_comparison",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Explains efficiency using the standard metrics (COP or HSPF2 for heat pumps, AFUE for furnaces) and how heat pump efficiency changes at low outdoor temperatures.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites authoritative sources such as the US Department of Energy, ENERGY STAR, NREL or equivalent government or laboratory pages.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Gives a worked or ranged running-cost comparison and states the energy price assumptions it uses.",
+        "kind": "must_quantify",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Covers upfront cost and incentives, and states that availability depends on jurisdiction and date.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Says that the cost winner depends on local electricity and gas prices, climate and house, and that incentive programs change.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "A great answer shows its arithmetic, names the assumptions, and does not announce a winner without the local-price caveat. Penalize incentive claims that are not tied to a dated official source."
+  },
+  {
+    "id": "num-ss-wage-base-401k-limit-2026",
+    "question": "What are the Social Security taxable maximum (contribution and benefit base) and the 401(k) employee elective deferral limit for 2026, and have the corresponding 2027 figures been announced yet as of today?",
+    "type": "numeric_fact",
+    "depth": "quick",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States both 2026 figures, labeled with the year, and states clearly whether 2027 figures have been announced as of today.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the Social Security Administration for the taxable maximum and the IRS for the deferral limit.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Does not give a figure for the wrong year, and does not state a 2027 figure unless an official source for it is cited.",
+        "kind": "must_not_claim",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Mentions the related catch-up contribution rule or notes that it is outside the question, without conflating it with the base limit.",
+        "kind": "must_state",
+        "weight": 1
+      }
+    ],
+    "notes": "Canonical sources are SSA.gov and IRS.gov. A great answer gives exact figures with the year attached and treats announced 2027 numbers carefully, since the announcement timing falls near today's date."
+  },
+  {
+    "id": "num-bls-cpi-latest-reading",
+    "question": "What is the most recent 12-month change in the US Consumer Price Index for All Urban Consumers (CPI-U) published by the Bureau of Labor Statistics as of today, which month does it cover, and when was it released?",
+    "type": "numeric_fact",
+    "depth": "quick",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the 12-month percent change, the reference month, and the release date, all consistent with the cited BLS release.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the BLS CPI release or data page (bls.gov) as the source of the figure.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Does not report data for a month that BLS has not yet released as of 2026-10-18, and does not substitute the seasonally adjusted monthly change for the 12-month change.",
+        "kind": "must_not_claim",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Notes the next scheduled CPI release date if the BLS schedule is cited.",
+        "kind": "must_state",
+        "weight": 1
+      }
+    ],
+    "notes": "The BLS release is canonical, and news summaries sometimes confuse monthly and annual changes or report the wrong month. A great answer matches the figure to a specific release and says which series it used."
+  },
+  {
+    "id": "num-tls-cert-max-validity",
+    "question": "What is the maximum validity period allowed for publicly trusted TLS certificates today under the CA/Browser Forum Baseline Requirements, and what is the scheduled timeline for further reductions?",
+    "type": "numeric_fact",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the maximum validity in effect as of today and the dates and values of each scheduled future reduction.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the CA/Browser Forum Baseline Requirements or the ballot that set the schedule, rather than only blog posts.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Does not present a future step-down as already in effect, and does not mix up certificate validity with domain-validation reuse periods.",
+        "kind": "must_not_claim",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Mentions at least one practical consequence for operators, such as the need to automate renewal.",
+        "kind": "must_state",
+        "weight": 1
+      }
+    ],
+    "notes": "The canonical source is the Baseline Requirements and its ballot history. A great answer lays out the schedule as a dated table, marks which step applies today, and keeps validity period distinct from other time limits in the same document."
+  },
+  {
+    "id": "hop-llm-api-price-comparison",
+    "question": "As of today, compare the list price per million input and output tokens of the flagship models from Anthropic, OpenAI and Google, then compute the cost of one request with 50,000 input tokens and 5,000 output tokens on each.",
+    "type": "multi_hop",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Names the flagship model for each of the three vendors and gives its input and output list price per million tokens.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites each vendor's official pricing page for that vendor's prices.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Shows the per-request cost calculation for each vendor, and the arithmetic is consistent with the stated prices.",
+        "kind": "must_quantify",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Notes pricing tiers or modifiers (such as long-context pricing, caching or batch discounts) that change the result, and states which price tier it used.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not mix pricing from different dates or models without saying so.",
+        "kind": "must_not_claim",
+        "weight": 1
+      }
+    ],
+    "notes": "Two hops: find three prices, then compute. The judge should recompute the arithmetic from the numbers the report states. A great answer is explicit about which model counts as flagship and why, and flags any vendor whose page could not be read."
+  },
+  {
+    "id": "hop-japan-trip-april-next-year",
+    "question": "I am planning a 10-day trip to Japan next April from the US West Coast covering Tokyo, Kyoto and Osaka. What airfares should I expect, when does cherry blossom season typically peak in each city, and does a Japan Rail Pass make sense for that itinerary?",
+    "type": "multi_hop",
+    "depth": "deep",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Gives a typical round-trip airfare range from the US West Coast to Japan for April, with the basis for the range and a date for the data.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Gives typical peak-bloom timing for each of the three cities, from a meteorological or official tourism source, framed as typical rather than as a forecast for next year.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c3",
+        "criterion": "Cites the official JR Pass or JR operator price page and a source for bloom timing.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Compares the cost of the pass against point-to-point tickets for the stated Tokyo-Kyoto-Osaka itinerary, showing the numbers.",
+        "kind": "must_quantify",
+        "weight": 3
+      },
+      {
+        "id": "c5",
+        "criterion": "States that bloom dates vary year to year and that fares and pass prices change, so figures need to be re-checked closer to the trip.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "Three sub-questions that need three kinds of source. A great answer reaches a clear recommendation on the pass with its arithmetic, and does not invent a bloom forecast for a year that has not started."
+  },
+  {
+    "id": "hop-cloud-egress-10tb",
+    "question": "Among AWS, Google Cloud and Microsoft Azure, which has the lowest internet egress price for the first 10 TB per month in a major US region today, and what would 10 TB of monthly egress cost on each?",
+    "type": "multi_hop",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "States the per-GB internet egress price used for each of the three providers, naming the region and tier it applies to.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites each provider's official pricing page.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Computes the monthly cost of 10 TB of egress for each provider, stating the TB-to-GB convention and any free allowance applied, and the arithmetic is consistent.",
+        "kind": "must_quantify",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Names the provider with the lowest cost under the stated assumptions, or says why no clear winner exists.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Flags that pricing varies by region and tier and that free allowances or committed-use discounts change the outcome.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "Cloud pricing pages are dense and region-dependent. A great answer is explicit about its assumptions (region, tier, free allowance, 1,000 versus 1,024 GB per TB) so the owner can reproduce the numbers."
+  },
+  {
+    "id": "hop-eu-ai-act-status",
+    "question": "As of today, which obligations of the EU AI Act already apply, which apply next and when, and have any proposed delays or simplifications actually been adopted or only proposed?",
+    "type": "multi_hop",
+    "depth": "deep",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Lists which obligations already apply as of today and which are scheduled next, with dates, distinguishing prohibited practices, general-purpose AI model obligations and high-risk system requirements.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the Official Journal text (EUR-Lex) or official European Commission pages for the dates and obligations.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Distinguishes legislative proposals from adopted law for any delay or simplification package, stating the current status of each.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c4",
+        "criterion": "Does not present a proposed amendment as law, and does not state an application date as final if the cited sources say it is subject to pending legislation.",
+        "kind": "must_not_claim",
+        "weight": 3
+      },
+      {
+        "id": "c5",
+        "criterion": "Flags that the legislative status may have changed since the newest source and says which source is the newest.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 2
+      }
+    ],
+    "notes": "Legal timelines are a classic place for hallucinated precision. A great answer builds the timeline from the regulation's own text, then overlays proposals and keeps the adopted/proposed distinction visible throughout."
+  },
+  {
+    "id": "howto-npm-esm-provenance",
+    "question": "How do I set up a Node.js TypeScript project to publish an ESM-only package to npm with provenance from GitHub Actions? Give the concrete configuration steps.",
+    "type": "how_to",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Gives ordered steps covering package.json fields for ESM (type, exports, files), the TypeScript build configuration, and the publish workflow.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the official npm documentation on provenance and GitHub's documentation for OIDC permissions, or the equivalent official pages.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Specifies the GitHub Actions workflow permissions and the publish command or flag needed to generate provenance.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Does not recommend steps that are deprecated or contradicted by its own cited documentation.",
+        "kind": "must_not_claim",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Notes any step that depends on the npm or GitHub plan, repository visibility or package settings.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "A great answer is a runnable checklist with config snippets that agree with the current official docs, in the right order, and with the prerequisites (such as a public repo or trusted publisher settings) called out."
+  },
+  {
+    "id": "howto-postgres-major-upgrade",
+    "question": "How do I upgrade a self-hosted PostgreSQL server to the latest stable major version with minimal downtime, and what are the trade-offs between the available methods?",
+    "type": "how_to",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Describes at least two upgrade methods (for example pg_upgrade and logical replication, or dump and restore) with an ordered procedure for the recommended one.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the official PostgreSQL documentation for the upgrade procedures and for the current supported versions.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Names the pre-upgrade and post-upgrade steps that are easy to miss, such as taking a backup, checking extension compatibility, and refreshing planner statistics.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Compares downtime and risk across the methods.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c5",
+        "criterion": "Tells the reader to rehearse on a copy and notes that exact steps depend on version pair, extensions and hosting setup.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "The official docs are canonical. A great answer picks the latest stable major from the PostgreSQL versioning page rather than from memory, and gives a procedure an operator could follow with rollback in mind."
+  },
+  {
+    "id": "howto-lost-us-passport",
+    "question": "How do I replace a lost US passport, including the forms and fees, and how long does it take right now? What if I am travelling within a few weeks?",
+    "type": "how_to",
+    "depth": "quick",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Gives the ordered procedure, including reporting the loss and the correct form for a lost passport, and what to bring.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites the US Department of State (travel.state.gov) for forms, fees and processing times.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "States the current fees and processing times as of an explicit date, and covers the expedited and urgent-travel options.",
+        "kind": "must_quantify",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "Does not give fees or processing times without attributing them to a dated official page.",
+        "kind": "must_not_claim",
+        "weight": 1
+      },
+      {
+        "id": "c5",
+        "criterion": "Notes that processing times change and should be checked on the official page before relying on them.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 1
+      }
+    ],
+    "notes": "Fees and processing times are perishable, so they must be attributed to a dated official page. A great answer branches clearly on whether travel is imminent and says what to do in that case."
+  },
+  {
+    "id": "contested-coffee-mortality",
+    "question": "Does moderate coffee consumption reduce the risk of death from any cause, or is that association mostly confounded? What does the evidence actually support?",
+    "type": "controversial_or_contested",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Presents the evidence for an association and the main counterarguments (confounding, reverse causation, self-reported intake) as distinct positions.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites primary or secondary research, such as cohort studies, meta-analyses or systematic reviews, and not only news coverage.",
+        "kind": "must_cite",
+        "weight": 3
+      },
+      {
+        "id": "c3",
+        "criterion": "Separates observational findings from causal claims, and says whether any randomized evidence exists.",
+        "kind": "must_state",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "States what remains uncertain and rates the strength of the evidence, without giving personal medical advice as certainty.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 3
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not state that coffee causes longer life, or that it is harmful, as established fact.",
+        "kind": "must_not_claim",
+        "weight": 2
+      }
+    ],
+    "notes": "A great answer shows the disagreement honestly, with named study types, and lands on a calibrated conclusion such as 'association is consistent, causation is not established'. Penalize one-sided summaries and single-study headlines."
+  },
+  {
+    "id": "contested-mortgage-payoff-vs-invest",
+    "question": "For someone with stable income, a 6% fixed mortgage and extra cash each month, is it better to pay down the mortgage early or invest the difference in broad index funds?",
+    "type": "controversial_or_contested",
+    "depth": "standard",
+    "rubric": [
+      {
+        "id": "c1",
+        "criterion": "Presents both positions fairly and states the break-even logic, comparing the guaranteed mortgage rate with uncertain expected market returns.",
+        "kind": "must_state",
+        "weight": 3
+      },
+      {
+        "id": "c2",
+        "criterion": "Cites sources for the historical return and risk figures it uses and for any tax or retirement-account considerations.",
+        "kind": "must_cite",
+        "weight": 2
+      },
+      {
+        "id": "c3",
+        "criterion": "Includes a worked example with stated assumptions, such as rate, horizon and return scenarios.",
+        "kind": "must_quantify",
+        "weight": 2
+      },
+      {
+        "id": "c4",
+        "criterion": "States that future returns are uncertain and that the answer depends on risk tolerance, liquidity needs, tax situation and the existence of an emergency fund.",
+        "kind": "must_acknowledge_uncertainty",
+        "weight": 3
+      },
+      {
+        "id": "c5",
+        "criterion": "Does not promise a guaranteed outcome for either path or give a single universal answer without conditions.",
+        "kind": "must_not_claim",
+        "weight": 3
+      }
+    ],
+    "notes": "Genuinely contested and personal. A great answer lays out when each side wins, shows the arithmetic, names the behavioural and liquidity factors, and avoids telling the owner what to do without their facts."
+  }
+]
