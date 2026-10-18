@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Caching Strategies for Web Services | Example Engineering</title>
+  <style>nav a { color: blue; }</style>
+  <script>window.analytics = { track: function () {} };</script>
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="/">Home</a>
+    <a href="/pricing">Pricing</a>
+    <a href="/careers">Careers</a>
+    <a href="/login">Sign in</a>
+  </nav>
+  <div class="layout">
+    <aside class="sidebar">
+      <h3>Trending now</h3>
+      <ul>
+        <li><a href="/posts/sidebar-one">Sidebar story one</a></li>
+        <li><a href="/posts/sidebar-two">Sidebar story two</a></li>
+      </ul>
+      <p>Subscribe to our newsletter for weekly sidebar updates.</p>
+    </aside>
+    <main>
+      <article>
+        <h1>Caching Strategies for Web Services</h1>
+        <p class="byline">By Jordan Lee, March 3, 2026</p>
+        <p>Caching is the cheapest way to make a service faster, but it is also an easy way to serve stale data. This article compares the common approaches and shows how to pick between them. For a longer treatment see the <a href="https://example.com/docs/caching-guide">full caching guide</a>, and for background on HTTP semantics read <a href="/docs/http-basics">HTTP basics</a>.</p>
+        <h2>Choosing a strategy</h2>
+        <p>The right strategy depends on how often the data changes, how costly a miss is, and how much staleness your users will tolerate. Start by measuring your hit ratio before you add any complexity, because many services find that a small time-to-live on a single layer is all they need.</p>
+        <ul>
+          <li>Cache-aside keeps the application in control of reads and writes.</li>
+          <li>Write-through updates the cache and the store together.</li>
+          <li>Write-behind batches writes for throughput at the cost of durability.</li>
+        </ul>
+        <h2>Comparison</h2>
+        <table>
+          <thead>
+            <tr><th>Strategy</th><th>Read latency</th><th>Durability</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Cache-aside</td><td>Low</td><td>High</td></tr>
+            <tr><td>Write-through</td><td>Low</td><td>High</td></tr>
+            <tr><td>Write-behind</td><td>Lowest</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+        <h2>Example</h2>
+        <p>A minimal cache-aside lookup looks like this. Notice that the cache is only populated on a miss, which keeps rarely used keys out of memory.</p>
+        <pre><code class="language-python">def get_user(user_id):
+    cached = cache.get(user_id)
+    if cached is not None:
+        return cached
+    user = db.load(user_id)
+    cache.set(user_id, user, ttl=60)
+    return user</code></pre>
+        <p>Finally, remember to monitor evictions. A cache that evicts constantly is a cache that is too small, and no amount of clever invalidation will fix that.</p>
+      </article>
+    </main>
+  </div>
+  <footer class="site-footer">
+    <p>Copyright 2026 Example Corp. All rights reserved.</p>
+    <a href="/privacy">Privacy policy</a>
+  </footer>
+</body>
+</html>

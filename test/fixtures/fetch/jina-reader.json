@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "status": 20000,
+  "data": {
+    "title": "Caching Strategies for Web Services",
+    "description": "",
+    "url": "https://www.example.com/blog/caching/",
+    "content": "# Caching Strategies for Web Services\n\nCaching is the cheapest way to make a service faster, but it is also an easy way to serve stale data. This article compares the common approaches and shows how to pick between them. For a longer treatment see the [full caching guide](https://example.com/docs/caching-guide).\n\n## Choosing a strategy\n\nThe right strategy depends on how often the data changes, how costly a miss is, and how much staleness your users will tolerate. Start by measuring your hit ratio before you add any complexity, because many services find that a small time-to-live on a single layer is all they need.\n\n- Cache-aside keeps the application in control of reads and writes.\n- Write-through updates the cache and the store together.\n- Write-behind batches writes for throughput at the cost of durability.\n\nFinally, remember to monitor evictions. A cache that evicts constantly is a cache that is too small, and no amount of clever invalidation will fix that.\n",
+    "publishedTime": "Tue, 03 Mar 2026 09:00:00 GMT",
+    "metadata": { "lang": "en" },
+    "httpStatus": 200,
+    "httpStatusText": "OK",
+    "usage": { "tokens": 190 }
+  },
+  "meta": { "usage": { "tokens": 190 } }
+}

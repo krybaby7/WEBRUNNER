@@ -1,0 +1,17 @@
+{
+  "description": "A redirect chain recorded as two responses: the first request is redirected, the second returns the page.",
+  "responses": [
+    {
+      "url": "http://example.com/old-path",
+      "status": 301,
+      "headers": { "location": "https://www.example.com/new/final-path" },
+      "body": ""
+    },
+    {
+      "url": "https://www.example.com/new/final-path",
+      "status": 200,
+      "headers": { "content-type": "text/html; charset=utf-8" },
+      "body": "<!doctype html><html><head><title>Final Destination</title></head><body><main><article><h1>Final Destination</h1><p>You arrived at the final page after one redirect. This paragraph is deliberately long enough for Readability to treat it as the main content of the document: redirects are common on the web, and the fetcher must report the URL it actually ended up on rather than the one it was asked for, so that caches and citations point at the right address. Relative links such as <a href=\"/docs\">the docs</a> must also resolve against the final URL, not the original one, which is why the final URL is passed to the extractor as the base.</p><p>A second paragraph keeps the article comfortably above the minimum length that Readability needs in order to prefer it over the surrounding page chrome.</p></article></main></body></html>"
+    }
+  ]
+}
