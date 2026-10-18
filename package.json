@@ -24,7 +24,8 @@
     "lint": "eslint .",
     "pretest": "npm run build",
     "test": "vitest run",
-    "dev": "tsc -p tsconfig.json --watch"
+    "dev": "tsc -p tsconfig.json --watch",
+    "eval:research": "RUN_EVALS=1 node --import tsx test/evals/research/cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -42,6 +43,7 @@
     "@types/node": "^22.20.5",
     "@types/turndown": "^5.0.6",
     "eslint": "^10.13.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.5"

@@ -1,0 +1,42 @@
+{
+  "question": "As of today, what did the US Federal Reserve most recently decide on its policy interest rate?",
+  "report_markdown": "# Latest FOMC decision\n\nAt its most recent meeting the committee left the target range unchanged [1]. The statement signalled patience on further changes [7]. Market pricing implies a cut at the next meeting.\n",
+  "findings": [
+    {
+      "claim": "The committee left the target range unchanged at its most recent meeting.",
+      "confidence": "high",
+      "source_ids": [1]
+    },
+    {
+      "claim": "The statement signalled patience on further changes.",
+      "confidence": "medium",
+      "source_ids": [7]
+    }
+  ],
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+      "title": "Federal Reserve issues FOMC statement",
+      "accessed_at": "2026-10-18T09:10:00.000Z",
+      "used_for": "The rate decision."
+    },
+    {
+      "id": 2,
+      "url": "https://example.com/markets/rate-cut-odds",
+      "title": "Rate cut odds climb",
+      "accessed_at": "2026-10-18T09:10:20.000Z",
+      "used_for": "Market expectations for the next meeting."
+    }
+  ],
+  "gaps": [],
+  "stats": {
+    "searches": 8,
+    "pages_read": 11,
+    "iterations": 2,
+    "input_tokens": 90000,
+    "output_tokens": 6100,
+    "cost_usd": 0.74,
+    "elapsed_ms": 61000
+  }
+}

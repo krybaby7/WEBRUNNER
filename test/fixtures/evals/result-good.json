@@ -1,0 +1,42 @@
+{
+  "question": "As of today, what is the most recent stable Node.js release?",
+  "report_markdown": "# Latest stable Node.js release\n\nThe most recent stable release as of the access date is v99.1.0, published on 2026-10-06 [1]. Its headline changes are a faster module loader and a new permission flag for network access [1][2].\n\nRelease lines: v99 is Current, v98 is Active LTS and v96 is in Maintenance, per the official release schedule [2].\n\n## Gaps\n\n- Whether a newer patch release has shipped since the access date could not be established.\n",
+  "findings": [
+    {
+      "claim": "Node.js v99.1.0 is the most recent stable release, published 2026-10-06.",
+      "confidence": "high",
+      "source_ids": [1]
+    },
+    {
+      "claim": "v98 is Active LTS and v96 is in Maintenance.",
+      "confidence": "medium",
+      "source_ids": [2]
+    }
+  ],
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://nodejs.org/en/blog/release/v99.1.0",
+      "title": "Node.js v99.1.0 (Current)",
+      "accessed_at": "2026-10-18T09:00:00.000Z",
+      "used_for": "Version, publication date and headline changes."
+    },
+    {
+      "id": 2,
+      "url": "https://github.com/nodejs/Release",
+      "title": "Node.js release schedule",
+      "accessed_at": "2026-10-18T09:00:05.000Z",
+      "used_for": "Release line status (Current, Active LTS, Maintenance)."
+    }
+  ],
+  "gaps": ["Whether a newer patch release has shipped since the access date could not be established."],
+  "stats": {
+    "searches": 4,
+    "pages_read": 6,
+    "iterations": 1,
+    "input_tokens": 41000,
+    "output_tokens": 3200,
+    "cost_usd": 0.21,
+    "elapsed_ms": 38000
+  }
+}
