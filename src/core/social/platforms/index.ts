@@ -3,6 +3,7 @@ import type { BrowserSession } from "../../browser/types.js";
 import type { LlmClient } from "../../llm/types.js";
 import type { SocialPlatformProvider } from "../types.js";
 import { BlueskyProvider } from "./bluesky.js";
+import { buildBrowserSocialPlatforms } from "./browser.js";
 import { HackerNewsProvider } from "./hackernews.js";
 import { RedditProvider } from "./reddit.js";
 import { YouTubeProvider } from "./youtube.js";
@@ -28,12 +29,14 @@ export interface SocialPlatformDeps {
 export function buildAllSocialPlatforms(config: Config, deps: SocialPlatformDeps): SocialPlatformProvider[] {
   const fetchImpl = deps.fetchImpl;
 
-  // WP18b: x, facebook and the reddit browser fallback are registered here
-  // (XProvider, FacebookProvider and RedditBrowserProvider under ./x.js,
-  // ./facebook.js and ./reddit-browser.js, each built only when deps.browser
-  // is set; the Reddit browser provider becomes `redditFallback`).
-  const redditFallback: SocialPlatformProvider | undefined = undefined;
-  const browserPlatforms: SocialPlatformProvider[] = [];
+  // Browser platforms (WP18b) exist only when there is a browser session; the
+  // Reddit browser recipe is the API provider's fallback for 403/429 (PLAN.md 14.5).
+  const browserBuilt =
+    deps.browser !== undefined
+      ? buildBrowserSocialPlatforms({ browser: deps.browser, ...(deps.llm !== undefined && { llm: deps.llm }) })
+      : undefined;
+  const redditFallback: SocialPlatformProvider | undefined = browserBuilt?.redditBrowser;
+  const browserPlatforms: SocialPlatformProvider[] = browserBuilt !== undefined ? [browserBuilt.x, browserBuilt.facebook] : [];
 
   return [
     new RedditProvider({
