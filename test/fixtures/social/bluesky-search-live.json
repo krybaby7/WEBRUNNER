@@ -1,13 +1,13 @@
 {
-  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=rust%20programming&limit=3&sort=top. The same query on public.api.bsky.app answered HTTP 403 with an HTML page. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Public posts; handles and texts are as published.",
+  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=rust%20programming&limit=3&sort=top. The same query on public.api.bsky.app answered HTTP 403 with an HTML page. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Handles, DIDs and display names replaced by placeholders (poster-a..., did:plc:aaaa...); texts, record keys, counts and timestamps as recorded.",
   "posts": [
     {
-      "uri": "at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q",
+      "uri": "at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/app.bsky.feed.post/3my67x6gk462q",
       "cid": "bafyreie4do65tyjnl5btxpjeumczh3alklzif7mopqgdwjftcthecjtorm",
       "author": {
-        "did": "did:plc:5ujaiwdzii5kb6ilzs4tadoz",
-        "handle": "compute.yee.nu",
-        "displayName": "Every Day Your Computer Does A Computation"
+        "did": "did:plc:aaaaaaaaaaaaaaaaaaaaaaaa",
+        "handle": "poster-a.example.com",
+        "displayName": "Poster A"
       },
       "record": {
         "$type": "app.bsky.feed.post",
@@ -24,12 +24,12 @@
       "indexedAt": "2026-10-18T18:22:19.160Z"
     },
     {
-      "uri": "at://did:plc:cvz7fadldr3x5an34slkkqmc/app.bsky.feed.post/3my63elp6jc2e",
+      "uri": "at://did:plc:bbbbbbbbbbbbbbbbbbbbbbbb/app.bsky.feed.post/3my63elp6jc2e",
       "cid": "bafyreigvhsi2b3ar7nr4uqb3fpkfmpdtvqvmmebz6fj6ah3pwzatg67vpy",
       "author": {
-        "did": "did:plc:cvz7fadldr3x5an34slkkqmc",
-        "handle": "fronkongames.bsky.social",
-        "displayName": "Fronkon Games"
+        "did": "did:plc:bbbbbbbbbbbbbbbbbbbbbbbb",
+        "handle": "poster-b.bsky.social",
+        "displayName": "Poster B"
       },
       "record": {
         "$type": "app.bsky.feed.post",
@@ -46,12 +46,12 @@
       "indexedAt": "2026-10-18T17:00:22.956Z"
     },
     {
-      "uri": "at://did:plc:sqd4qv5ovqoit3zua3fj35jt/app.bsky.feed.post/3my73febq3c2u",
+      "uri": "at://did:plc:cccccccccccccccccccccccc/app.bsky.feed.post/3my73febq3c2u",
       "cid": "bafyreiallpynimodpdahdi5ghkbjmbpsj44wziv2mdi2km4dppuavlynzy",
       "author": {
-        "did": "did:plc:sqd4qv5ovqoit3zua3fj35jt",
-        "handle": "koldinium.com",
-        "displayName": "uncle kold"
+        "did": "did:plc:cccccccccccccccccccccccc",
+        "handle": "poster-c.example.com",
+        "displayName": "Poster C"
       },
       "record": {
         "$type": "app.bsky.feed.post",
