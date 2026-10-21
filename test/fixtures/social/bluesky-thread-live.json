@@ -1,14 +1,14 @@
 {
-  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q&depth=1. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Public posts; handles and texts are as published.",
+  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/app.bsky.feed.post/3my67x6gk462q&depth=1. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Handles, DIDs and display names replaced by placeholders (poster-a..., did:plc:aaaa...); texts, record keys, counts and timestamps as recorded.",
   "thread": {
     "$type": "app.bsky.feed.defs#threadViewPost",
     "post": {
-      "uri": "at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q",
+      "uri": "at://did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/app.bsky.feed.post/3my67x6gk462q",
       "cid": "bafyreie4do65tyjnl5btxpjeumczh3alklzif7mopqgdwjftcthecjtorm",
       "author": {
-        "did": "did:plc:5ujaiwdzii5kb6ilzs4tadoz",
-        "handle": "compute.yee.nu",
-        "displayName": "Every Day Your Computer Does A Computation"
+        "did": "did:plc:aaaaaaaaaaaaaaaaaaaaaaaa",
+        "handle": "poster-a.example.com",
+        "displayName": "Poster A"
       },
       "record": {
         "$type": "app.bsky.feed.post",
@@ -28,12 +28,12 @@
       {
         "$type": "app.bsky.feed.defs#threadViewPost",
         "post": {
-          "uri": "at://did:plc:jhke75n4qayjfdqohk3hqqfk/app.bsky.feed.post/3my67z3zqb22q",
+          "uri": "at://did:plc:dddddddddddddddddddddddd/app.bsky.feed.post/3my67z3zqb22q",
           "cid": "bafyreigo4qdloocszqsk7pqgyjbhn54jidhb6kz4y3cc2rukghazm3iw4a",
           "author": {
-            "did": "did:plc:jhke75n4qayjfdqohk3hqqfk",
-            "handle": "pupgirlcrystal.bsky.social",
-            "displayName": "Goth Bimbuppy Girl Crystal (Bimbotober Event) | Unit D0GG1E"
+            "did": "did:plc:dddddddddddddddddddddddd",
+            "handle": "poster-d.bsky.social",
+            "displayName": "Poster D"
           },
           "record": {
             "$type": "app.bsky.feed.post",
