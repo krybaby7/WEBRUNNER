@@ -33,6 +33,11 @@ ENV_NAMES=(
   FIRECRAWL_API_KEY
   JINA_API_KEY
   DUFFEL_API_KEY
+  REDDIT_CLIENT_ID
+  REDDIT_CLIENT_SECRET
+  REDDIT_USER_AGENT
+  YOUTUBE_API_KEY
+  FINNHUB_API_KEY
   BROWSER_CDP_URL
   BROWSER_HEADLESS
   RESEARCH_MAX_COST_USD
@@ -252,7 +257,8 @@ cat <<EOF
 Verify:
   codex mcp list             # webrunner should be listed
 Then start a new Codex session; the tools are ping, web_search, fetch_page,
-deep_research, browse_task and search_flights.
+deep_research, browse_task, search_flights, search_hotels, market_quote, weather,
+exchange_rate, social_search, search_reviews, accounts and health.
 
 tool_timeout_sec is $TOOL_TIMEOUT_SEC because Codex's default (60 s) is shorter than a deep_research call.
 To remove it: scripts/uninstall.sh

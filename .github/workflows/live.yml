@@ -1,16 +1,29 @@
 name: Live integration
 
 # Weekly canary against the real services, so a provider API change or a Google
-# Flights layout change shows up as a red run instead of a surprise. Not part of
-# the pull request checks: it needs repository secrets and the network.
+# page layout change shows up as a red run instead of a surprise. Not part of
+# the pull request checks: it needs the network and, for some suites, secrets.
+#
+# Suites under test/integration and what each needs:
+#   search, fetch, fetch_page, llm, research, browser, google-flights, duffel  (v0.1)
+#   google-hotels         Chromium; ANTHROPIC_API_KEY only for the LLM fallback
+#   markets-weather-fx    keyless (CoinGecko, Frankfurter, Open-Meteo, Yahoo); FINNHUB_API_KEY widens it
+#   social                Hacker News, Bluesky and Reddit's public endpoints keyless;
+#                         REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET for the Reddit API, YOUTUBE_API_KEY for YouTube
+#   social-browser        Chromium on a logged-out profile: X, Facebook and old.reddit answer blocked, needs_login
+#                         or config (Facebook needs ANTHROPIC_API_KEY); items need a connected account, which CI has none of
+#   reviews               keyless (App Store, Trustpilot)
 #
 # Repository secrets (Settings > Secrets and variables > Actions), all optional,
 # each test skips itself when its key is missing:
-#   ANTHROPIC_API_KEY    LLM client, deep research, Google Flights extraction
+#   ANTHROPIC_API_KEY    LLM client, deep research, Google Flights extraction, hotel and review LLM fallbacks
 #   BRAVE_API_KEY, EXA_API_KEY, TAVILY_API_KEY, PERPLEXITY_API_KEY   search providers
 #   FIRECRAWL_API_KEY    Firecrawl fetcher
 #   DUFFEL_API_KEY       a Duffel sandbox key (duffel_test_...)
-# With none of them set, the job reports that and skips the test steps.
+#   REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET   Reddit API (app-only OAuth); REDDIT_USER_AGENT is optional
+#   YOUTUBE_API_KEY      YouTube Data API v3 (each search spends 100 quota units)
+#   FINNHUB_API_KEY      Finnhub stock quotes
+# The keyless suites run on every schedule; the summary says which secrets were set.
 
 on:
   schedule:
@@ -23,7 +36,7 @@ permissions:
 jobs:
   live:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
@@ -32,13 +45,17 @@ jobs:
       PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
       FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
       DUFFEL_API_KEY: ${{ secrets.DUFFEL_API_KEY }}
+      REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+      REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+      REDDIT_USER_AGENT: ${{ secrets.REDDIT_USER_AGENT }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
     steps:
       - name: Check which secrets are set
-        id: gate
         run: |
           present=""
           missing=""
-          for name in ANTHROPIC_API_KEY BRAVE_API_KEY EXA_API_KEY TAVILY_API_KEY PERPLEXITY_API_KEY FIRECRAWL_API_KEY DUFFEL_API_KEY; do
+          for name in ANTHROPIC_API_KEY BRAVE_API_KEY EXA_API_KEY TAVILY_API_KEY PERPLEXITY_API_KEY FIRECRAWL_API_KEY DUFFEL_API_KEY REDDIT_CLIENT_ID REDDIT_CLIENT_SECRET YOUTUBE_API_KEY FINNHUB_API_KEY; do
             if [ -n "${!name}" ]; then present="$present $name"; else missing="$missing $name"; fi
           done
           {
@@ -46,28 +63,21 @@ jobs:
             echo
             echo "- Secrets set:${present:- none}"
             echo "- Secrets missing (their tests skip):${missing:- none}"
+            echo "- Keyless suites (Hacker News, Bluesky, Reddit public endpoints, CoinGecko, Frankfurter, Open-Meteo, Yahoo, App Store, Trustpilot, Google Hotels) always run."
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -z "$present" ]; then
-            echo "::notice title=Live tests skipped::No API-key secrets are configured for this repository, so there is nothing to test. Add ANTHROPIC_API_KEY and at least one search key under Settings > Secrets and variables > Actions."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Only keyless suites ran::No API-key secrets are configured for this repository. Add ANTHROPIC_API_KEY and at least one search key under Settings > Secrets and variables > Actions to cover search, research and the LLM fallbacks."
           fi
 
       - uses: actions/checkout@v4
-        if: steps.gate.outputs.run == 'true'
       - uses: actions/setup-node@v4
-        if: steps.gate.outputs.run == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-        if: steps.gate.outputs.run == 'true'
-      # The browser and Google Flights canaries drive a real Chromium.
+      # The browser, Google Flights, Google Hotels, Google Finance and social-browser canaries drive a real Chromium.
       - run: npx playwright install --with-deps chromium
-        if: steps.gate.outputs.run == 'true'
       - name: Integration tests
-        if: steps.gate.outputs.run == 'true'
         run: npx vitest run test/integration
         env:
           RUN_INTEGRATION: "1"
