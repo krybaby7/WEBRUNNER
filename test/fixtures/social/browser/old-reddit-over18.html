@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  SYNTHETIC fixture (WP18b): old.reddit's over-18 interstitial (/over18?dest=...),
+  as the site renders it: a form whose button[name=over18][value=yes] continues to
+  `dest`. The fixture server answers the POST with a 302 to that destination.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>over 18?</title></head>
+<body class="over18-page">
+<div class="content" role="main">
+  <div class="interstitial">
+    <img class="interstitial-image" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+    <div class="interstitial-message md">
+      <h3>You must be 18+ to view this community</h3>
+      <p>You must be at least eighteen years old to view this content. Are you over eighteen and willing to see adult content?</p>
+    </div>
+    <form method="post" action="/over18?dest=__DEST__" class="buttons">
+      <input type="hidden" name="uh" value="">
+      <button type="submit" class="c-btn c-btn-primary" name="over18" value="yes">YES</button>
+      <button type="submit" class="c-btn c-btn-primary" name="over18" value="no">NO</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  Login-wall fixture for X (WP18b). Live on 2026-10-18 the search URL answered a
+  307 to /i/jf/onboarding/web?redirect_after_login=...&mode=login (curl) and the
+  login flow itself answered 403 with an empty body to headless Chromium, so
+  this page is SYNTHETIC: what X's login step looks like (title, "Sign in to X",
+  a username field and no password field yet). The recipe detects it by URL.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Log in to X / X</title></head>
+<body>
+<main role="main">
+<div role="dialog" aria-modal="true">
+  <h1>Sign in to X</h1>
+  <button role="button">Sign in with Google</button>
+  <button role="button">Sign in with Apple</button>
+  <div>or</div>
+  <label>Phone, email, or username <input type="text" name="text" autocomplete="username"></label>
+  <button role="button" data-testid="LoginForm_Login_Button">Next</button>
+  <a href="/i/flow/password_reset">Forgot password?</a>
+  <p>Don't have an account? <a href="/i/flow/signup">Sign up</a></p>
+</div>
+</main>
+</body>
+</html>

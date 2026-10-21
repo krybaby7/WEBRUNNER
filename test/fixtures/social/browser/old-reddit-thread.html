@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  Fixture (WP18b): an old.reddit.com comments page loaded with ?limit=..&depth=1&sort=top.
+  SYNTHETIC (see old-reddit-search.html for why): reproduces old.reddit's stable
+  thread markup, #siteTable .thing.link for the post and
+  .commentarea .sitetable.nestedlisting > .thing.comment for top-level comments
+  (.score.unvoted carries the exact count in title, a.numchildren the "(n children)"
+  count, a deleted comment has class "deleted"). A nested reply is included to prove
+  only top-level comments are read. Usernames are invented.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Claude Code rewrote my entire test suite in an afternoon : ClaudeAI</title></head>
+<body class="comments-page">
+<div id="header"><a href="/r/ClaudeAI/">ClaudeAI</a></div>
+<div class="content" role="main">
+  <div id="siteTable" class="sitetable linklisting">
+    <div class="thing id-t3_1g7abcd link self" data-fullname="t3_1g7abcd" data-type="link" data-subreddit="ClaudeAI" data-author="throwaway_dev_42"
+         data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/">
+      <div class="midcol unvoted"><div class="score dislikes">1841</div><div class="score unvoted" title="1842">1.8k</div><div class="score likes">1843</div></div>
+      <div class="entry unvoted">
+        <p class="title"><a class="title may-blank" href="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/">Claude Code rewrote my entire test suite in an afternoon</a> <span class="domain">(self.ClaudeAI)</span></p>
+        <p class="tagline">submitted <time datetime="2026-10-15T08:12:33+00:00" class="live-timestamp">3 days ago</time> by <a href="https://old.reddit.com/user/throwaway_dev_42" class="author may-blank">throwaway_dev_42</a></p>
+        <div class="expando">
+          <form class="usertext"><div class="usertext-body may-blank-within md-container"><div class="md"><p>Posted the diff below. It kept every fixture but renamed half the helper functions, which I did not love. Net result: 40 fewer flaky tests.</p></div></div></form>
+        </div>
+        <ul class="flat-list buttons"><li class="first"><a href="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/" class="bylink comments may-blank">312 comments</a></li></ul>
+      </div>
+    </div>
+  </div>
+  <div class="commentarea">
+    <div class="panestack-title"><span class="title">top 200 comments</span></div>
+    <div class="menuarea">sorted by: <span class="dropdown">top</span></div>
+    <div class="sitetable nestedlisting">
+      <div class="thing id-t1_lx1aaaa comment" data-fullname="t1_lx1aaaa" data-type="comment" data-author="pytest_enjoyer"
+           data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/lx1aaaa/">
+        <div class="midcol unvoted"></div>
+        <div class="entry unvoted">
+          <p class="tagline"><a href="javascript:void(0)" class="expand">[–]</a> <a href="https://old.reddit.com/user/pytest_enjoyer" class="author may-blank">pytest_enjoyer</a>
+            <span class="score dislikes">419 points</span><span class="score unvoted" title="420">420 points</span><span class="score likes">421 points</span>
+            <time datetime="2026-10-15T09:01:10+00:00" class="live-timestamp">3 days ago</time> <a href="javascript:void(0)" class="numchildren">(14 children)</a></p>
+          <form class="usertext"><div class="usertext-body may-blank-within md-container"><div class="md"><p>Renaming helpers is the tell. It optimises for its own readability, not yours. Did you ask it to keep names?</p></div></div></form>
+        </div>
+        <div class="child">
+          <div class="sitetable listing">
+            <div class="thing id-t1_lx1bbbb comment" data-fullname="t1_lx1bbbb" data-type="comment" data-author="throwaway_dev_42"
+                 data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/lx1bbbb/">
+              <div class="entry unvoted">
+                <p class="tagline"><a href="https://old.reddit.com/user/throwaway_dev_42" class="author may-blank">throwaway_dev_42</a> <span class="score unvoted" title="88">88 points</span> <time datetime="2026-10-15T09:30:00+00:00">3 days ago</time></p>
+                <form class="usertext"><div class="usertext-body"><div class="md"><p>I did not. Second run with that instruction kept them.</p></div></div></form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="thing id-t1_lx1cccc comment" data-fullname="t1_lx1cccc" data-type="comment" data-author="ci_cd_carla"
+           data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/lx1cccc/">
+        <div class="entry unvoted">
+          <p class="tagline"><a href="https://old.reddit.com/user/ci_cd_carla" class="author may-blank">ci_cd_carla</a>
+            <span class="score unvoted" title="203">203 points</span>
+            <time datetime="2026-10-15T10:15:45+00:00" class="live-timestamp">3 days ago</time> <a href="javascript:void(0)" class="numchildren">(3 children)</a></p>
+          <form class="usertext"><div class="usertext-body"><div class="md"><p>40 fewer flaky tests could also mean 40 deleted tests. Check the assertion count before and after.</p></div></div></form>
+        </div>
+      </div>
+      <div class="thing id-t1_lx1dddd comment deleted" data-fullname="t1_lx1dddd" data-type="comment" data-author=""
+           data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/lx1dddd/">
+        <div class="entry unvoted">
+          <p class="tagline"><span class="author">[deleted]</span> <span class="score unvoted" title="12">12 points</span> <time datetime="2026-10-15T11:00:00+00:00">3 days ago</time></p>
+          <form class="usertext"><div class="usertext-body"><div class="md"><p>[removed]</p></div></div></form>
+        </div>
+      </div>
+      <div class="thing id-t1_lx1eeee comment" data-fullname="t1_lx1eeee" data-type="comment" data-author="skeptical_sre"
+           data-permalink="/r/ClaudeAI/comments/1g7abcd/claude_code_rewrote_my_entire_test_suite_in_an/lx1eeee/">
+        <div class="entry unvoted">
+          <p class="tagline"><a href="https://old.reddit.com/user/skeptical_sre" class="author may-blank">skeptical_sre</a>
+            <span class="score unvoted" title="">[score hidden]</span>
+            <time datetime="2026-10-18T07:45:00+00:00" class="live-timestamp">2 hours ago</time> <a href="javascript:void(0)" class="numchildren">(0 children)</a></p>
+          <form class="usertext"><div class="usertext-body"><div class="md"><p>Which model and which plan? The $20 one rate-limits me before lunch.</p></div></div></form>
+        </div>
+      </div>
+      <div class="thing morechildren" data-fullname="t1__" data-type="more"><a href="javascript:void(0)">load more comments</a> (280 replies)</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
