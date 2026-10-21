@@ -73,8 +73,9 @@ describe.skipIf(!RUN)(`fetch_page through buildDeps${RUN ? "" : " (set RUN_INTEG
     const env = process.env;
     deps = buildDeps({
       ...makeConfig(dir),
-      ...(env["FIRECRAWL_API_KEY"] !== undefined && { firecrawl_api_key: env["FIRECRAWL_API_KEY"] }),
-      ...(env["JINA_API_KEY"] !== undefined && { jina_api_key: env["JINA_API_KEY"] }),
+      // The live workflow passes unset secrets as empty strings, which mean "no key".
+      ...(env["FIRECRAWL_API_KEY"] ? { firecrawl_api_key: env["FIRECRAWL_API_KEY"] } : {}),
+      ...(env["JINA_API_KEY"] ? { jina_api_key: env["JINA_API_KEY"] } : {}),
     });
   }, 30_000);
 
