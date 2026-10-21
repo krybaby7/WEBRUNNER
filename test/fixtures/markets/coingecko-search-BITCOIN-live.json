@@ -1,0 +1,95 @@
+{
+  "_note": "Recorded live from api.coingecko.com/api/v3/search?query=BITCOIN on 2026-10-21 (HTTP 200) from a Claude Code cloud session. Trimmed to the first 10 coins (the token whose symbol is BITCOIN is among them) and the coins key only; no redaction needed, all fields are public.",
+  "coins": [
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "api_symbol": "bitcoin",
+      "symbol": "BTC",
+      "market_cap_rank": 1,
+      "thumb": "https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png",
+      "large": "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png"
+    },
+    {
+      "id": "bitcoin-cash",
+      "name": "Bitcoin Cash",
+      "api_symbol": "bitcoin-cash",
+      "symbol": "BCH",
+      "market_cap_rank": 22,
+      "thumb": "https://coin-images.coingecko.com/coins/images/780/thumb/bitcoin-cash-circle.png",
+      "large": "https://coin-images.coingecko.com/coins/images/780/large/bitcoin-cash-circle.png"
+    },
+    {
+      "id": "bitcoin-cash-sv",
+      "name": "Bitcoin SV",
+      "api_symbol": "bitcoin-cash-sv",
+      "symbol": "BSV",
+      "market_cap_rank": 128,
+      "thumb": "https://coin-images.coingecko.com/coins/images/6799/thumb/BSV.png",
+      "large": "https://coin-images.coingecko.com/coins/images/6799/large/BSV.png"
+    },
+    {
+      "id": "dog-go-to-the-moon-rune",
+      "name": "Dog (Bitcoin)",
+      "api_symbol": "dog-go-to-the-moon-rune",
+      "symbol": "DOG",
+      "market_cap_rank": 303,
+      "thumb": "https://coin-images.coingecko.com/coins/images/37352/thumb/DOGGOTOTHEMOON.png",
+      "large": "https://coin-images.coingecko.com/coins/images/37352/large/DOGGOTOTHEMOON.png"
+    },
+    {
+      "id": "fractal-bitcoin",
+      "name": "Fractal Bitcoin",
+      "api_symbol": "fractal-bitcoin",
+      "symbol": "FB",
+      "market_cap_rank": 529,
+      "thumb": "https://coin-images.coingecko.com/coins/images/40049/thumb/Fractal_LogoMark_Round.png",
+      "large": "https://coin-images.coingecko.com/coins/images/40049/large/Fractal_LogoMark_Round.png"
+    },
+    {
+      "id": "ishares-bitcoin-trust-ondo-tokenized",
+      "name": "iShares Bitcoin Trust (Ondo Tokenized)",
+      "api_symbol": "ishares-bitcoin-trust-ondo-tokenized",
+      "symbol": "IBITON",
+      "market_cap_rank": 803,
+      "thumb": "https://coin-images.coingecko.com/coins/images/102172420/thumb/ibiton_160x160.png",
+      "large": "https://coin-images.coingecko.com/coins/images/102172420/large/ibiton_160x160.png"
+    },
+    {
+      "id": "harrypotterobamasonic10in",
+      "name": "HarryPotterObamaSonic10Inu (ETH)",
+      "api_symbol": "harrypotterobamasonic10in",
+      "symbol": "BITCOIN",
+      "market_cap_rank": 983,
+      "thumb": "https://coin-images.coingecko.com/coins/images/30323/thumb/hpos10i_logo_casino_night-dexview.png",
+      "large": "https://coin-images.coingecko.com/coins/images/30323/large/hpos10i_logo_casino_night-dexview.png"
+    },
+    {
+      "id": "bob-build-on-bitcoin",
+      "name": "BOB (Build on Bitcoin)",
+      "api_symbol": "bob-build-on-bitcoin",
+      "symbol": "BOB",
+      "market_cap_rank": 984,
+      "thumb": "https://coin-images.coingecko.com/coins/images/54720/thumb/BOB_symbol_colour.png",
+      "large": "https://coin-images.coingecko.com/coins/images/54720/large/BOB_symbol_colour.png"
+    },
+    {
+      "id": "magic-internet-money-runes",
+      "name": "MAGIC•INTERNET•MONEY (Bitcoin)",
+      "api_symbol": "magic-internet-money-runes",
+      "symbol": "MIM",
+      "market_cap_rank": 1133,
+      "thumb": "https://coin-images.coingecko.com/coins/images/54456/thumb/MIM_LOGO_2.png",
+      "large": "https://coin-images.coingecko.com/coins/images/54456/large/MIM_LOGO_2.png"
+    },
+    {
+      "id": "the-bitcoin-bull",
+      "name": "The Bitcoin Bull",
+      "api_symbol": "the-bitcoin-bull",
+      "symbol": "TBB",
+      "market_cap_rank": 1494,
+      "thumb": "https://coin-images.coingecko.com/coins/images/102174811/thumb/IMG_7890.jpeg",
+      "large": "https://coin-images.coingecko.com/coins/images/102174811/large/IMG_7890.jpeg"
+    }
+  ]
+}

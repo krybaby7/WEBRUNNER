@@ -102,19 +102,40 @@ describe("coingecko (fixtures recorded live 2026-10-18)", () => {
     expect(nearestInterval(4 * 1440)).toBe("1wk");
   });
 
-  it("lookup ranks exact symbol, then exact name, then market-cap rank", async () => {
+  it("lookup ranks exact matches (id, symbol, name) by market-cap rank, then the rest by rank", async () => {
     const coins = [
       { id: "a", symbol: "ZZZ", name: "Bitcoin Thing", market_cap_rank: 5 },
       { id: "bitcoin", symbol: "BTC", name: "Bitcoin", market_cap_rank: 1 },
       { id: "b", symbol: "BITCOIN", name: "Fake", market_cap_rank: null },
       { id: "c", symbol: "QQQ", name: "Other", market_cap_rank: 3 },
     ];
-    expect(rankCoins(coins, "bitcoin").map((c) => c.id)).toEqual(["b", "bitcoin", "c", "a"]);
+    // A ticker is not unique: the unranked "BITCOIN" token must not beat Bitcoin itself.
+    expect(rankCoins(coins, "bitcoin").map((c) => c.id)).toEqual(["bitcoin", "b", "c", "a"]);
+    const same = [
+      { id: "x-name", symbol: "XN", name: "pepe", market_cap_rank: 7 },
+      { id: "pepe", symbol: "P", name: "P", market_cap_rank: 7 },
+      { id: "x-sym", symbol: "PEPE", name: "S", market_cap_rank: 7 },
+    ];
+    expect(rankCoins(same, "pepe").map((c) => c.id)).toEqual(["pepe", "x-sym", "x-name"]);
     const f = fakeFetch(respond);
     const out = await new CoinGeckoProvider({ fetchImpl: f.fetchImpl }).lookup("bitcoin", signal());
     expect(out[0]).toEqual({ symbol: "BTC", name: "Bitcoin", asset_type: "crypto", source: "coingecko" });
     expect(out).toHaveLength(6);
     expect(new URL(f.calls[0]?.url ?? "").searchParams.get("query")).toBe("bitcoin");
+  });
+
+  it("resolves BITCOIN to Bitcoin, not the unrelated token whose ticker is BITCOIN (live search, 2026-10-21)", async () => {
+    const live = loadFixture("coingecko-search-BITCOIN-live");
+    const f = fakeFetch((call) => {
+      const url = new URL(call.url);
+      if (url.pathname === "/api/v3/search") return jsonResponse(live);
+      if (url.pathname === "/api/v3/simple/price") return jsonResponse({ bitcoin: { usd: 84583, last_updated_at: 1792604370 } });
+      return new Response("nope", { status: 404 });
+    });
+    const p = new CoinGeckoProvider({ fetchImpl: f.fetchImpl });
+    expect(await p.resolveId("BITCOIN", signal())).toEqual({ id: "bitcoin", symbol: "BTC", name: "Bitcoin" });
+    const q = await p.quote("BITCOIN-USD", BASE_OPTS, signal());
+    expect(q).toMatchObject({ symbol: "BTC", name: "Bitcoin", price: 84583 });
   });
 
   it("splitPair and 429 handling", async () => {

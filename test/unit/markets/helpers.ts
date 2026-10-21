@@ -103,6 +103,8 @@ export async function startMarketsServer(): Promise<MarketsServer> {
     };
     if (path === "/quote/AAPL:NASDAQ") html(readHtmlFixture("google-finance-aapl.html"));
     else if (path === "/quote/VOD:LON") html(readHtmlFixture("google-finance-vod.html"));
+    else if (path === "/quote/.INX:INDEXSP") html(readHtmlFixture("google-finance-inx-live.html"));
+    else if (path === "/quote/BRK.B:NYSE") html(readHtmlFixture("google-finance-brkb-live.html"));
     else if (path === "/quote/NOPRICE:NASDAQ") html(readHtmlFixture("google-finance-aapl.html").replace(">$343.46<", ">—<"));
     else if (path === "/quote/BLOCK:NASDAQ") html(readHtmlFixture("google-finance-blocked.html"));
     else if (path === "/quote/STALL:NASDAQ") html("<!doctype html><title>Google Finance</title><body><p>Loading</p></body>");

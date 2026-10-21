@@ -57,8 +57,20 @@ describe("google finance: listings and URLs (AAPL:NASDAQ and VOD:LON verified li
     [{ symbol: "^GSPC" }, [[".INX", "INDEXSP"]]],
     [{ symbol: "^FTSE" }, [["UKX", "INDEXFTSE"]]],
     [{ symbol: "MSFT" }, [["MSFT", "NASDAQ"], ["MSFT", "NYSE"], ["MSFT", "NYSEARCA"]]],
+    // Share classes, as checked live on 2026-10-21: a dot in the US and London, the hyphen kept in Stockholm and Copenhagen.
+    [{ symbol: "BRK-B" }, [["BRK.B", "NASDAQ"], ["BRK.B", "NYSE"], ["BRK.B", "NYSEARCA"]]],
+    [{ symbol: "BT-A.L" }, [["BT.A", "LON"]]],
+    [{ symbol: "VOLV-B.ST" }, [["VOLV-B", "STO"]]],
+    [{ symbol: "NOVO-B.CO" }, [["NOVO-B", "CPH"]]],
   ])("candidateListings(%j)", (params, expected) => {
     expect(candidateListings(params).map((l) => [l.symbol, l.exchange])).toEqual(expected);
+  });
+
+  it("index listings name the currency the page does not print", () => {
+    expect(candidateListings({ symbol: "^GSPC" })[0]?.currency).toBe("USD");
+    expect(candidateListings({ symbol: "^FTSE" })[0]?.currency).toBe("GBP");
+    expect(candidateListings({ symbol: "^N225" })[0]?.currency).toBe("JPY");
+    expect(candidateListings({ symbol: "AAPL" })[0]?.currency).toBeUndefined();
   });
 });
 
@@ -71,6 +83,10 @@ describe("google finance: text parsing", () => {
     expect(parseMoney("₹2,500.00")).toEqual({ amount: 2500, currency: "INR" });
     expect(parseMoney("+0.43%")).toBeUndefined();
     expect(parseMoney("Apple Inc")).toBeUndefined();
+    // The live index page's name line: not an amount in a currency called "S&P".
+    expect(parseMoney("S&P 500")).toBeUndefined();
+    expect(parseMoney("R$ 58.03")).toEqual({ amount: 58.03, currency: "BRL" });
+    expect(parseMoney("£12.10")).toEqual({ amount: 12.1, currency: "GBP" });
   });
 
   it("parseCompact expands K, M, B and T", () => {
@@ -91,6 +107,11 @@ describe("google finance: text parsing", () => {
     expect(parseStatusLine("Open: Oct 19, 10:12 AM GMT-4 · USD")?.market_state).toBe("regular");
     expect(parseStatusLine("Add to list")).toBeUndefined();
     expect(parseStatusLine("After hours · 7:59 PM")).toBeUndefined();
+    // Index pages print the time alone (live .INX:INDEXSP, 2026-10-21).
+    expect(parseStatusLine("Oct 21, 1:40:21\u202fPM GMT-4")).toEqual({ as_of_text: "Oct 21, 1:40:21 PM GMT-4" });
+    expect(parseStatusLine("Closed: Oct 21, 4:00:01 PM GMT-4")).toEqual({ market_state: "closed", as_of_text: "Oct 21, 4:00:01 PM GMT-4" });
+    expect(parseStatusLine("S&P 500")).toBeUndefined();
+    expect(parseStatusLine("7,766.42")).toBeUndefined();
   });
 
   it("parseAsOf converts the page time to UTC and infers the year", () => {
@@ -157,8 +178,8 @@ describe.skipIf(!probe.available)(`google-finance recipe in Chromium${probe.avai
     complete: () => Promise.reject(new LlmError("config", "not_configured", "no LLM in this test", { retryable: false })),
   };
 
-  async function runRecipe(symbol: string, llm: LlmClient = failingLlm, over: Partial<RecipeContext> = {}) {
-    const recipe = createGoogleFinanceRecipe({ baseUrl: `${server.url}/quote`, pollMs: 50, maxWaitMs: 4000, now: () => NOW });
+  async function runRecipe(symbol: string, llm: LlmClient = failingLlm, over: Partial<RecipeContext> = {}, nowMs: number = NOW) {
+    const recipe = createGoogleFinanceRecipe({ baseUrl: `${server.url}/quote`, pollMs: 50, maxWaitMs: 4000, now: () => nowMs });
     const log = makeLogger();
     const caveats: string[] = [];
     const page = await session.acquire();
@@ -206,6 +227,23 @@ describe.skipIf(!probe.available)(`google-finance recipe in Chromium${probe.avai
     expect(r.error).toBeUndefined();
     expect(r.quote).toMatchObject({ symbol: "VOD", exchange: "LON", currency: "GBX", price: 120.79, change: 0.59, change_pct: 0.49 });
     expect(r.quote?.market_state).toBeUndefined();
+  }, 30_000);
+
+  it("reads the live index page: no currency printed, so the listing's; the name is not a price", async () => {
+    const r = await runRecipe("^GSPC", failingLlm, {}, Date.parse("2026-10-21T18:00:00Z"));
+    expect(r.error).toBeUndefined();
+    expect(r.quote).toMatchObject({
+      symbol: ".INX", exchange: "INDEXSP", name: "S&P 500", currency: "USD", price: 7766.42, change: 53.85, change_pct: 0.7,
+      open: 7736.43, day_high: 7768.25, day_low: 7709.34, as_of: "2026-10-21T17:55:07.000Z", extracted_by: "dom",
+    });
+  }, 30_000);
+
+  it("resolves a Yahoo-style share class to Google's dotted form and reads the live page", async () => {
+    server.hits.length = 0;
+    const r = await runRecipe("BRK-B");
+    expect(r.error).toBeUndefined();
+    expect(server.hits).toEqual(["/quote/BRK.B:NASDAQ", "/quote/BRK.B:NYSE"]);
+    expect(r.quote).toMatchObject({ symbol: "BRK.B", exchange: "NYSE", name: "Berkshire Hathaway Inc Class B", currency: "USD", price: 542.2, change: 1.73, change_pct: 0.32 });
   }, 30_000);
 
   it("tries NASDAQ then NYSE then NYSEARCA for a bare ticker and reports not found", async () => {
