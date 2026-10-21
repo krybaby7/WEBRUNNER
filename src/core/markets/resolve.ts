@@ -22,6 +22,20 @@ const KNOWN_CRYPTO = new Set<string>([
   "apt", "aptos", "arb", "arbitrum", "op", "optimism", "fil", "filecoin", "aave", "sui", "pepe", "wif", "bonk",
 ]);
 
+/**
+ * Coin names in KNOWN_CRYPTO to their tickers, so a name is routed as the coin's
+ * symbol ("bitcoin" -> BTC-USD). Live on 2026-10-21, routing the upper-cased
+ * name ("BITCOIN-USD") made CoinGecko quote an unrelated token whose ticker is
+ * literally "BITCOIN" ($0.015), and Yahoo knows no "BITCOIN-USD".
+ */
+const CRYPTO_NAME_SYMBOLS: Readonly<Record<string, string>> = {
+  bitcoin: "BTC", ethereum: "ETH", ether: "ETH", tether: "USDT", solana: "SOL", ripple: "XRP", cardano: "ADA",
+  dogecoin: "DOGE", tron: "TRX", toncoin: "TON", avalanche: "AVAX", polkadot: "DOT", chainlink: "LINK",
+  polygon: "POL", litecoin: "LTC", "bitcoin cash": "BCH", "shiba inu": "SHIB", stellar: "XLM", uniswap: "UNI",
+  cosmos: "ATOM", monero: "XMR", "ethereum classic": "ETC", aptos: "APT", arbitrum: "ARB", optimism: "OP",
+  filecoin: "FIL",
+};
+
 const PAIR_RE = /^([A-Za-z0-9.]{2,10})-([A-Za-z]{3})$/;
 
 export const ROUTES: Readonly<Record<AssetKind, readonly MarketSource[]>> = {
@@ -73,11 +87,17 @@ export function providerOrder(kind: AssetKind, configured: readonly MarketSource
   return ROUTES[kind].filter((s) => configured.includes(s) && (requested === undefined || requested.includes(s)));
 }
 
-/** Crypto goes to every source as `BASE-CUR` (Yahoo's form; CoinGecko splits it itself); anything else is passed through. */
+/** A known coin name's ticker ("bitcoin" -> "BTC"); anything else upper-cased. */
+export function canonicalCryptoSymbol(input: string): string {
+  const s = input.trim();
+  return CRYPTO_NAME_SYMBOLS[s.toLowerCase()] ?? s.toUpperCase();
+}
+
+/** Crypto goes to every source as `BASE-CUR` (Yahoo's form; CoinGecko splits it itself), names as their ticker; anything else is passed through. */
 export function symbolForSource(_source: MarketSource, symbol: string, kind: AssetKind, currency: string): string {
   if (kind !== "crypto") return symbol;
   const pair = splitCryptoPair(symbol);
-  const base = (pair?.base ?? symbol).toUpperCase();
+  const base = canonicalCryptoSymbol(pair?.base ?? symbol);
   const quote = pair?.quote ?? currency.toUpperCase();
   return `${base}-${quote}`;
 }

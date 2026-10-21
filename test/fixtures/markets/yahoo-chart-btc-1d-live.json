@@ -1,0 +1,103 @@
+{
+  "_source": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session with Node fetch and the provider's User-Agent (curl from the same network got HTTP 429): https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?range=1d&interval=1d&includePrePost=false. Unmodified apart from this note; all values are public market data.",
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "BTC-USD",
+          "exchangeName": "CCC",
+          "fullExchangeName": "CCC",
+          "instrumentType": "CRYPTOCURRENCY",
+          "firstTradeDate": 1410912000,
+          "regularMarketTime": 1792604370,
+          "hasPrePostMarketData": false,
+          "gmtoffset": 0,
+          "timezone": "UTC",
+          "exchangeTimezoneName": "UTC",
+          "regularMarketPrice": 84583.43,
+          "regularMarketChangePercent": 2.235,
+          "fulldayPrice": 84583.43,
+          "fulldayChange": 1848.828,
+          "fulldayChangePercent": 2.235,
+          "fiftyTwoWeekHigh": 116273.31,
+          "fiftyTwoWeekLow": 57747.766,
+          "regularMarketDayHigh": 84835.48,
+          "regularMarketDayLow": 82565.87,
+          "regularMarketVolume": 27829958656,
+          "longName": "Bitcoin USD",
+          "shortName": "Bitcoin USD",
+          "chartPreviousClose": 82940.14,
+          "priceHint": 2,
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "UTC",
+              "start": 1792540800,
+              "end": 1792540800,
+              "gmtoffset": 0
+            },
+            "regular": {
+              "timezone": "UTC",
+              "start": 1792540800,
+              "end": 1792627140,
+              "gmtoffset": 0
+            },
+            "post": {
+              "timezone": "UTC",
+              "start": 1792627140,
+              "end": 1792627140,
+              "gmtoffset": 0
+            }
+          },
+          "dataGranularity": "1d",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ]
+        },
+        "timestamp": [
+          1792604370
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "volume": [
+                27829958656
+              ],
+              "close": [
+                84583.4296875
+              ],
+              "high": [
+                84835.4765625
+              ],
+              "open": [
+                82940.140625
+              ],
+              "low": [
+                82565.8671875
+              ]
+            }
+          ],
+          "adjclose": [
+            {
+              "adjclose": [
+                84583.4296875
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}

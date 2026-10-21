@@ -95,12 +95,19 @@ type Coin = z.infer<typeof SearchResponse>["coins"][number];
 /** A search hit with its market-cap rank (the market service uses the rank to tell a real coin from a junk token). */
 export type RankedCoin = Coin;
 
-/** Best match first: exact symbol, then exact name, then market-cap rank (unranked last). */
+/**
+ * Best match first: exact matches (id, symbol or name) before the rest, each
+ * group by market-cap rank (unranked last); equal ranks prefer id, then symbol,
+ * then name. Rank decides among exact matches because tickers are not unique:
+ * live (2026-10-21) `/search?query=BITCOIN` returned Bitcoin (id "bitcoin",
+ * rank 1) and an unrelated token whose symbol is "BITCOIN" (rank 983).
+ */
 export function rankCoins(coins: readonly Coin[], query: string): Coin[] {
   const q = query.trim().toLowerCase();
-  const score = (c: Coin): number => (c.symbol.toLowerCase() === q ? 0 : c.name.toLowerCase() === q ? 1 : 2);
+  const kind = (c: Coin): number => (c.id === q ? 0 : c.symbol.toLowerCase() === q ? 1 : c.name.toLowerCase() === q ? 2 : 3);
+  const exact = (c: Coin): number => (kind(c) < 3 ? 0 : 1);
   const rank = (c: Coin): number => c.market_cap_rank ?? Number.MAX_SAFE_INTEGER;
-  return [...coins].sort((a, b) => score(a) - score(b) || rank(a) - rank(b));
+  return [...coins].sort((a, b) => exact(a) - exact(b) || rank(a) - rank(b) || kind(a) - kind(b));
 }
 
 /** Nearest supported interval to a bar size in minutes; ties go to the coarser one. */
@@ -139,8 +146,12 @@ export class CoinGeckoProvider implements MarketProvider {
   readonly assetTypes = ["crypto"] as const;
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
-  /** symbol (upper) or lower-cased name -> id, filled by lookups in this process. */
-  private readonly ids = new Map<string, string>();
+  /**
+   * Lower-cased query -> the coin it resolved to, filled by searches in this
+   * process. Only the query's own best exact match is kept: every other coin a
+   * search returns may share a ticker with a bigger coin ("BITCOIN").
+   */
+  private readonly ids = new Map<string, { id: string; symbol: string; name: string }>();
 
   constructor(options: CoinGeckoProviderOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((...args) => fetch(...args));
@@ -164,9 +175,10 @@ export class CoinGeckoProvider implements MarketProvider {
   private async search(query: string, signal: AbortSignal): Promise<Coin[]> {
     const body = await this.get("/api/v3/search", new URLSearchParams({ query }), SearchResponse, signal);
     const ranked = rankCoins(body.coins, query);
-    for (const c of ranked) {
-      if (!this.ids.has(c.symbol.toUpperCase())) this.ids.set(c.symbol.toUpperCase(), c.id);
-      this.ids.set(c.name.toLowerCase(), c.id);
+    const q = query.trim().toLowerCase();
+    const top = ranked[0];
+    if (top !== undefined && (top.id === q || top.symbol.toLowerCase() === q || top.name.toLowerCase() === q)) {
+      this.ids.set(q, { id: top.id, symbol: top.symbol.toUpperCase(), name: top.name });
     }
     return ranked;
   }
@@ -185,8 +197,10 @@ export class CoinGeckoProvider implements MarketProvider {
   async resolveId(symbolOrName: string, signal: AbortSignal): Promise<{ id: string; symbol: string; name?: string }> {
     const key = symbolOrName.trim();
     const upper = key.toUpperCase();
-    const known = KNOWN_COIN_IDS[upper] ?? this.ids.get(upper) ?? this.ids.get(key.toLowerCase());
+    const known = KNOWN_COIN_IDS[upper];
     if (known !== undefined) return { id: known, symbol: upper };
+    const seen = this.ids.get(key.toLowerCase());
+    if (seen !== undefined) return seen;
     const coins = await this.search(key, signal);
     const exact = coins.find(
       (c) => c.symbol.toLowerCase() === key.toLowerCase() || c.name.toLowerCase() === key.toLowerCase() || c.id === key.toLowerCase(),

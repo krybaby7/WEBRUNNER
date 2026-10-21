@@ -1,0 +1,10 @@
+{
+  "_source": "Recorded live on 2026-10-21 (HTTP 404) from a Claude Code cloud session with Node fetch and the provider's User-Agent (curl from the same network got HTTP 429): https://query1.finance.yahoo.com/v8/finance/chart/ZZZZQQ?range=1d&interval=1d&includePrePost=false. Unmodified apart from this note; all values are public market data.",
+  "chart": {
+    "result": null,
+    "error": {
+      "code": "Not Found",
+      "description": "No data found, symbol may be delisted"
+    }
+  }
+}

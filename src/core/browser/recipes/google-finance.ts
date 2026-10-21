@@ -107,12 +107,19 @@ export class GoogleFinanceNotFoundError extends RecipeError {
 export interface Listing {
   symbol: string;
   exchange: string;
+  /** Currency to report when the page prints none (index pages quote points with no currency). */
+  currency?: string;
 }
 
 /**
- * Yahoo-style exchange suffixes to Google Finance exchange codes. Only
- * LON (VOD.L) and the suffix-less NASDAQ case were verified live; the rest
- * follow Google Finance's documented exchange list and are marked unverified.
+ * Yahoo-style exchange suffixes to Google Finance exchange codes. Verified live
+ * (a quote page read deterministically): LON (VOD.L) and the suffix-less NASDAQ
+ * case on 2026-10-18; ETR (SAP.DE), EPA (MC.PA), TYO (7203.T), TSE (RY.TO),
+ * ASX (BHP.AX), HKG (0700.HK), NSE (RELIANCE.NS), AMS (ASML.AS), SWX
+ * (NESN.SW), BME (ITX.MC), BIT (ENEL.MI), STO (VOLV-B.ST), CPH (NOVO-B.CO),
+ * KRX (005930.KS), SHA (600519.SS), BVMF (PETR4.SA), SGX (D05.SI) and the
+ * suffix-less NYSEARCA (SPY) and NYSE (BRK-B) cases on 2026-10-21. The rest
+ * follow Google Finance's documented exchange list.
  */
 export const SUFFIX_EXCHANGES: Readonly<Record<string, string>> = {
   L: "LON", PA: "EPA", DE: "ETR", F: "FRA", AS: "AMS", BR: "EBR", MI: "BIT", MC: "BME", SW: "SWX", VI: "VIE",
@@ -121,27 +128,45 @@ export const SUFFIX_EXCHANGES: Readonly<Record<string, string>> = {
   SI: "SGX", JO: "JSE", SA: "BVMF", MX: "BMV", SR: "TADAWUL", TA: "TLV", IS: "IST", JK: "IDX", BK: "BKK", KL: "KLSE",
 };
 
-/** Yahoo-style index tickers to Google Finance listings (unverified live). */
+/**
+ * Yahoo-style index tickers to Google Finance listings. Index pages print the
+ * level with no currency sign and a status line with no currency
+ * (".INX:INDEXSP" live on 2026-10-21: "7,763.96" and "Oct 21, 1:40:21 PM GMT-4"),
+ * so each entry names the currency to report, the one Yahoo uses for the index.
+ */
 export const INDEX_LISTINGS: Readonly<Record<string, Listing>> = {
-  "^GSPC": { symbol: ".INX", exchange: "INDEXSP" },
-  "^SPX": { symbol: ".INX", exchange: "INDEXSP" },
-  "^DJI": { symbol: ".DJI", exchange: "INDEXDJX" },
-  "^IXIC": { symbol: ".IXIC", exchange: "INDEXNASDAQ" },
-  "^NDX": { symbol: "NDX", exchange: "INDEXNASDAQ" },
-  "^RUT": { symbol: "RUT", exchange: "INDEXRUSSELL" },
-  "^VIX": { symbol: "VIX", exchange: "INDEXCBOE" },
-  "^FTSE": { symbol: "UKX", exchange: "INDEXFTSE" },
-  "^GDAXI": { symbol: "DAX", exchange: "INDEXDB" },
-  "^FCHI": { symbol: "PX1", exchange: "INDEXEURO" },
-  "^STOXX50E": { symbol: "SX5E", exchange: "INDEXSTOXX" },
-  "^N225": { symbol: "NI225", exchange: "INDEXNIKKEI" },
-  "^HSI": { symbol: "HSI", exchange: "INDEXHANGSENG" },
-  "^AXJO": { symbol: "XJO", exchange: "INDEXASX" },
-  "^GSPTSE": { symbol: "OSPTX", exchange: "INDEXTSI" },
+  "^GSPC": { symbol: ".INX", exchange: "INDEXSP", currency: "USD" },
+  "^SPX": { symbol: ".INX", exchange: "INDEXSP", currency: "USD" },
+  "^DJI": { symbol: ".DJI", exchange: "INDEXDJX", currency: "USD" },
+  "^IXIC": { symbol: ".IXIC", exchange: "INDEXNASDAQ", currency: "USD" },
+  "^NDX": { symbol: "NDX", exchange: "INDEXNASDAQ", currency: "USD" },
+  "^RUT": { symbol: "RUT", exchange: "INDEXRUSSELL", currency: "USD" },
+  "^VIX": { symbol: "VIX", exchange: "INDEXCBOE", currency: "USD" },
+  "^FTSE": { symbol: "UKX", exchange: "INDEXFTSE", currency: "GBP" },
+  "^GDAXI": { symbol: "DAX", exchange: "INDEXDB", currency: "EUR" },
+  "^FCHI": { symbol: "PX1", exchange: "INDEXEURO", currency: "EUR" },
+  "^STOXX50E": { symbol: "SX5E", exchange: "INDEXSTOXX", currency: "EUR" },
+  "^N225": { symbol: "NI225", exchange: "INDEXNIKKEI", currency: "JPY" },
+  "^HSI": { symbol: "HSI", exchange: "INDEXHANGSENG", currency: "HKD" },
+  "^AXJO": { symbol: "XJO", exchange: "INDEXASX", currency: "AUD" },
+  "^GSPTSE": { symbol: "OSPTX", exchange: "INDEXTSI", currency: "CAD" },
 };
+
 
 /** US exchanges tried, in order, for a ticker with no exchange and no suffix. */
 export const DEFAULT_US_EXCHANGES = ["NASDAQ", "NYSE", "NYSEARCA"] as const;
+
+/**
+ * Yahoo writes share classes with a hyphen ("BRK-B", "BT-A.L", "VOLV-B.ST").
+ * Google Finance uses a dot on US exchanges and in London ("BRK.B:NYSE",
+ * "BF.B:NYSE", "BT.A:LON") but keeps the hyphen in Stockholm and Copenhagen
+ * ("VOLV-B:STO", "NOVO-B:CPH"); all checked live on 2026-10-21.
+ */
+const DOT_CLASS_EXCHANGES: ReadonlySet<string> = new Set<string>(["LON", ...DEFAULT_US_EXCHANGES]);
+
+function googleShareClass(symbol: string, exchange: string): string {
+  return DOT_CLASS_EXCHANGES.has(exchange) ? symbol.replace(/^([A-Z]{1,6})-([A-Z])$/, "$1.$2") : symbol;
+}
 
 /** Google Finance listings to try for an input, best guess first. */
 export function candidateListings(params: GoogleFinanceParams): Listing[] {
@@ -154,9 +179,9 @@ export function candidateListings(params: GoogleFinanceParams): Listing[] {
   const suffix = /^([A-Z0-9-]+)\.([A-Z]{1,2})$/.exec(raw);
   if (suffix !== null) {
     const exchange = SUFFIX_EXCHANGES[suffix[2] as string];
-    if (exchange !== undefined) return [{ symbol: suffix[1] as string, exchange }];
+    if (exchange !== undefined) return [{ symbol: googleShareClass(suffix[1] as string, exchange), exchange }];
   }
-  return DEFAULT_US_EXCHANGES.map((exchange) => ({ symbol: raw, exchange }));
+  return DEFAULT_US_EXCHANGES.map((exchange) => ({ symbol: googleShareClass(raw, exchange), exchange }));
 }
 
 export function buildGoogleFinanceUrl(listing: Listing, baseUrl: string = GOOGLE_FINANCE_BASE_URL): string {
@@ -180,9 +205,9 @@ export function parseMoney(text: string): { amount: number; currency?: string } 
   let m = /^([A-Z]{3}) ?(-?\d[\d,]*(?:\.\d+)?)$/.exec(t);
   if (m !== null) return { amount: Number((m[2] as string).replaceAll(",", "")), currency: m[1] as string };
   m = /^([^\d\s-]{1,3}) ?(-?\d[\d,]*(?:\.\d+)?)$/.exec(t);
-  if (m !== null) {
-    const sign = m[1] as string;
-    const currency = CURRENCY_SIGNS[sign];
+  // Only a known sign or a currency symbol counts: an index name such as "S&P 500" is not "500 in S&P" (live 2026-10-21).
+  if (m !== null && (CURRENCY_SIGNS[m[1] as string] !== undefined || /\p{Sc}/u.test(m[1] as string))) {
+    const currency = CURRENCY_SIGNS[m[1] as string];
     return { amount: Number((m[2] as string).replaceAll(",", "")), ...(currency !== undefined && { currency }) };
   }
   m = /^(-?\d[\d,]*(?:\.\d+)?)$/.exec(t);
@@ -229,13 +254,19 @@ export interface StatusLine {
   as_of_text?: string;
 }
 
-/** "Closed: Oct 16, 4:00:01 PM GMT-4 · USD", "Oct 16, 5:00:13 PM GMT+1 · GBX", "Open: ...", "Pre-market: ...". */
+/**
+ * "Closed: Oct 16, 4:00:01 PM GMT-4 · USD", "Oct 16, 5:00:13 PM GMT+1 · GBX", "Open: ...", "Pre-market: ...".
+ * Index pages print the time alone ("Oct 21, 1:40:21 PM GMT-4"): accepted when the
+ * text after an optional state prefix is a timestamp, with no currency.
+ */
 export function parseStatusLine(text: string): StatusLine | undefined {
   const t = cleanLine(text);
   const parts = t.split(/\s*·\s*/);
-  if (parts.length < 2) return undefined;
-  const currency = (parts[parts.length - 1] as string).trim();
-  if (!/^[A-Z]{3}$/.test(currency)) return undefined;
+  let currency: string | undefined;
+  if (parts.length >= 2) {
+    currency = (parts[parts.length - 1] as string).trim();
+    if (!/^[A-Z]{3}$/.test(currency)) return undefined;
+  }
   let head = (parts[0] as string).trim();
   let state: StatusLine["market_state"];
   const prefix = /^(Closed|Market closed|Open|Market open|Pre-market|After hours|Post-market):?\s*/i.exec(head);
@@ -244,7 +275,8 @@ export function parseStatusLine(text: string): StatusLine | undefined {
     state = p.includes("closed") ? "closed" : p.includes("pre") ? "pre" : p.includes("after") || p.includes("post") ? "post" : "regular";
     head = head.slice(prefix[0].length);
   }
-  return { ...(state !== undefined && { market_state: state }), currency, ...(head !== "" && { as_of_text: head }) };
+  if (currency === undefined && (parts.length !== 1 || parseAsOf(head) === undefined)) return undefined;
+  return { ...(state !== undefined && { market_state: state }), ...(currency !== undefined && { currency }), ...(head !== "" && { as_of_text: head }) };
 }
 
 const SYMBOL_LINE_RE = /^([A-Z0-9.^-]{1,15}):([A-Z0-9.]{2,15})$/;
@@ -534,7 +566,7 @@ export function createGoogleFinanceRecipe(options: GoogleFinanceRecipeOptions = 
         const url = buildGoogleFinanceUrl(listing, baseUrl);
         tried.push(`${listing.symbol}:${listing.exchange}`);
         await navigate(page, url, ctx, checkTime);
-        const outcome = await waitForQuote(page, ctx, { maxWaitMs, pollMs, caveat, checkTime, now });
+        const outcome = await waitForQuote(page, ctx, { maxWaitMs, pollMs, caveat, checkTime, now, ...(listing.currency !== undefined && { fallbackCurrency: listing.currency }) });
         if (outcome.kind === "not_found") continue;
         if (outcome.kind === "quote") return outcome.quote;
         // Header present but unreadable: schema-driven LLM extraction over the visible text.
@@ -568,7 +600,7 @@ export function createGoogleFinanceRecipe(options: GoogleFinanceRecipeOptions = 
   async function waitForQuote(
     page: Page,
     ctx: RecipeContext,
-    o: { maxWaitMs: number; pollMs: number; caveat: (m: string) => void; checkTime: (w: string) => void; now: () => number },
+    o: { maxWaitMs: number; pollMs: number; caveat: (m: string) => void; checkTime: (w: string) => void; now: () => number; fallbackCurrency?: string },
   ): Promise<Outcome> {
     const start = Date.now();
     const until = start + Math.max(500, Math.min(o.maxWaitMs, ctx.deadline - start - 500));
@@ -590,7 +622,8 @@ export function createGoogleFinanceRecipe(options: GoogleFinanceRecipeOptions = 
         const header = parseQuoteText(probe.headerLines.length > 1 ? probe.headerLines : probe.bodyLines, o.now());
         if (header !== undefined) {
           const withStats = header.stats.open === undefined ? parseQuoteText(probe.bodyLines, o.now()) : undefined;
-          const merged: ParsedHeader = withStats !== undefined ? { ...header, stats: { ...withStats.stats, ...header.stats } } : header;
+          const merged: ParsedHeader = withStats !== undefined ? { ...header, stats: { ...withStats.stats, ...header.stats } } : { ...header };
+          if (merged.currency === undefined && o.fallbackCurrency !== undefined) merged.currency = o.fallbackCurrency;
           const quote = toQuote(merged, probe.url, "dom");
           if (quote !== undefined) return { kind: "quote", quote };
           headerSeenAt ??= Date.now();
@@ -643,7 +676,7 @@ export function createGoogleFinanceRecipe(options: GoogleFinanceRecipeOptions = 
       symbol: x.symbol ?? listing.symbol,
       exchange: x.exchange ?? listing.exchange,
       ...(x.name !== null && { name: x.name }),
-      currency: (x.currency ?? "").toUpperCase(),
+      currency: (x.currency ?? listing.currency ?? "").toUpperCase(),
       price: x.price,
       ...(x.change !== null && { change: x.change }),
       ...(x.change_pct !== null && { change_pct: x.change_pct }),

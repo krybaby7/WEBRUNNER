@@ -128,11 +128,22 @@ describe("market service: name lookup", () => {
     expect(b.yahoo.quote.mock.calls[0]?.[0]).toBe("FRT");
   });
 
-  it("a known coin name needs no lookup at all", async () => {
+  it("a known coin name needs no lookup at all and is routed as its ticker", async () => {
     const cg = fakeProvider("coingecko", async (s) => quoteFor("coingecko", s), { lookup: async () => [] });
-    await service([cg]).quote(req(["bitcoin"]), signal());
+    await service([cg]).quote(req(["bitcoin", "Bitcoin Cash", "ethereum"]), signal());
     expect(cg.lookup).not.toHaveBeenCalled();
-    expect(cg.quote.mock.calls[0]?.[0]).toBe("BITCOIN-USD");
+    // Not "BITCOIN-USD": live, CoinGecko has an unrelated token whose ticker is BITCOIN, and Yahoo has no such pair.
+    expect(cg.quote.mock.calls.map((c) => c[0])).toEqual(["BTC-USD", "BCH-USD", "ETH-USD"]);
+  });
+
+  it("a coin name falls back to Yahoo as the Yahoo pair", async () => {
+    const cg = fakeProvider("coingecko", async () => {
+      throw new MarketProviderError("coingecko returned HTTP 503", { provider: "coingecko", code: "provider", retryable: true });
+    });
+    const yahoo = fakeProvider("yahoo", async (s) => quoteFor("yahoo", s));
+    const out = await service([cg, yahoo]).quote(req(["solana"]), signal());
+    expect(yahoo.quote.mock.calls[0]?.[0]).toBe("SOL-USD");
+    expect(out.quotes[0]?.source).toBe("yahoo");
   });
 
   it("a name no source can resolve is unresolved", async () => {
