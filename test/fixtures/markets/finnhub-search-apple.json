@@ -1,0 +1,10 @@
+{
+  "_source": "built from the Finnhub /api/v1/search documentation (https://finnhub.io/docs/api/symbol-search). UNVERIFIED live.",
+  "count": 4,
+  "result": [
+    { "description": "APPLE INC", "displaySymbol": "AAPL", "symbol": "AAPL", "type": "Common Stock" },
+    { "description": "APPLE INC", "displaySymbol": "AAPL.SW", "symbol": "AAPL.SW", "type": "Common Stock" },
+    { "description": "APPLE HOSPITALITY REIT INC", "displaySymbol": "APLE", "symbol": "APLE", "type": "REIT" },
+    { "description": "DIREXION DAILY AAPL BULL 2X", "displaySymbol": "AAPU", "symbol": "AAPU", "type": "ETP" }
+  ]
+}

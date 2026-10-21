@@ -1,0 +1,7 @@
+{
+  "_source": "built from the documented Yahoo Finance v8 chart error shape for an unknown symbol (served with HTTP 404); UNVERIFIED live (HTTP 429 from the development environment on 2026-10-18).",
+  "chart": {
+    "result": null,
+    "error": { "code": "Not Found", "description": "No data found, symbol may be delisted" }
+  }
+}

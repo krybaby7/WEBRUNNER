@@ -1,0 +1,11 @@
+{
+  "_source": "built from the Finnhub /api/v1/quote documentation (https://finnhub.io/docs/api/quote): c current, d change, dp percent change, h high, l low, o open, pc previous close, t epoch seconds. UNVERIFIED live: no FINNHUB_API_KEY in the development environment. The token query parameter is never recorded.",
+  "c": 343.46,
+  "d": 1.46,
+  "dp": 0.4269,
+  "h": 347.82,
+  "l": 340.46,
+  "o": 346.08,
+  "pc": 342.0,
+  "t": 1792180801
+}

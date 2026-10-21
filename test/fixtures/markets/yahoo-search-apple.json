@@ -1,0 +1,19 @@
+{
+  "_source": "built from the Yahoo Finance v1 search response shape as documented by third parties (query2.finance.yahoo.com/v1/finance/search?q=apple&quotesCount=6&newsCount=0); UNVERIFIED live (HTTP 429 from the development environment on 2026-10-18). Non-essential fields dropped.",
+  "explains": [],
+  "count": 4,
+  "quotes": [
+    { "exchange": "NMS", "shortname": "Apple Inc.", "quoteType": "EQUITY", "symbol": "AAPL", "index": "quotes", "score": 2000000, "typeDisp": "Equity", "longname": "Apple Inc.", "exchDisp": "NASDAQ", "isYahooFinance": true },
+    { "exchange": "GER", "shortname": "APPLE INC.", "quoteType": "EQUITY", "symbol": "APC.DE", "index": "quotes", "score": 20100, "typeDisp": "Equity", "longname": "Apple Inc.", "exchDisp": "XETRA", "isYahooFinance": true },
+    { "exchange": "MEX", "shortname": "APPLE INC", "quoteType": "EQUITY", "symbol": "AAPL.MX", "index": "quotes", "score": 20021, "typeDisp": "Equity", "longname": "Apple Inc.", "exchDisp": "Mexico", "isYahooFinance": true },
+    { "exchange": "PCX", "shortname": "Direxion Daily AAPL Bull 2X Shares", "quoteType": "ETF", "symbol": "AAPU", "index": "quotes", "score": 20004, "typeDisp": "ETF", "longname": "Direxion Daily AAPL Bull 2X Shares", "exchDisp": "NYSEArca", "isYahooFinance": true }
+  ],
+  "news": [],
+  "nav": [],
+  "lists": [],
+  "researchReports": [],
+  "screenerFieldResults": [],
+  "totalTime": 30,
+  "timeTakenForQuotes": 420,
+  "timeTakenForNews": 0
+}
