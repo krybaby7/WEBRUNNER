@@ -1,5 +1,7 @@
+import type { Page, Response as PageResponse } from "playwright";
 import { z } from "zod";
 import type { NormalizedReviewsQuery, Review, ReviewKind, ReviewSubject } from "../../../schemas/reviews.js";
+import type { BrowserSession } from "../../browser/types.js";
 import { detectBotWall } from "../../fetch/botwall.js";
 import { FetchServiceError, type FetchService } from "../../fetch/index.js";
 import { LlmError, type LlmClient } from "../../llm/types.js";
@@ -19,21 +21,39 @@ import { ReviewSourceError, type ReviewHooks, type ReviewSearchResult, type Revi
  * Trustpilot (PLAN.md 14.6). The subject becomes a review page:
  *   - a `trustpilot.com/review/<x>` URL is used as is;
  *   - any other URL gives its host (without `www.`) for `/review/<host>`;
+ *   - a bare domain ("notion.so", "booking.com") is tried as `/review/<domain>`,
+ *     and goes through the search when Trustpilot has no page for it;
  *   - a name goes through `/search?query=<name>` and the first `/review/` link wins.
  *
  * The page is fetched raw with a browser-like User-Agent and its embedded JSON
  * is parsed: `<script id="__NEXT_DATA__">` first, JSON-LD `Review` items
- * second. The field mapping for both is FROM DOCS, UNVERIFIED: from the
- * development environment every Trustpilot URL answered with an AWS WAF
- * "Verifying Connection" challenge (HTTP 403, recorded as a fixture). That
- * challenge, or any bot wall, falls back to `FetchService.fetchPage` in auto
- * mode (which renders in the browser) and schema-driven LLM extraction over
- * the Markdown; with no LLM the source fails with `blocked`.
+ * second. Trustpilot answers raw requests from cloud IPs with an AWS WAF
+ * "Verifying Connection" challenge (HTTP 403, recorded as a fixture). Past that
+ * challenge, in this order:
+ *   1. the shared browser renders the page (the challenge is a script a real
+ *      browser runs on its own; nothing is solved or faked) and the rendered
+ *      HTML's embedded JSON is parsed, with no model call;
+ *   2. `FetchService.fetchPage` in auto mode and schema-driven LLM extraction
+ *      over the Markdown; with no LLM the source fails with `blocked`.
+ *
+ * Verified live on 2026-10-21 from a cloud session: the WAF challenge was still
+ * served to raw requests; Chromium passed it in 2.6 to 7 s per page; the
+ * rendered `__NEXT_DATA__` had exactly the documented fields (`pageProps.businessUnit`
+ * with displayName, trustScore, numberOfReviews, categories; `pageProps.reviews[]`
+ * with id, title, text, rating, likes, language, dates, consumer.displayName,
+ * reply, labels.verification), so `parseNextData` read 20 reviews unchanged
+ * (fixture trustpilot-review-live.html). The search page's results are plain
+ * `href="/review/<domain>"` links. A name lookup renders two pages, so the
+ * source's budget is 60 s (PLAN.md 14.6, 14.10).
  */
 
 const CANONICAL_BASE = "https://www.trustpilot.com";
 /** Markdown handed to the extractor; the page's reviews sit well within this. */
 const FALLBACK_MAX_CHARS = 60_000;
+/** Longest wait for one rendered page (challenge, reload and the embedded data). */
+const RENDER_TIMEOUT_MS = 25_000;
+/** "notion.so", "www.booking.com", "amazon.co.uk": a subject Trustpilot most likely files under that domain. */
+const BARE_DOMAIN_RE = /^(?:www\.)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,})$/i;
 
 export interface TrustpilotOptions {
   fetchImpl?: FetchImpl;
@@ -41,6 +61,8 @@ export interface TrustpilotOptions {
   fetch?: FetchService;
   /** The extractor for the Markdown fallback. */
   llm?: LlmClient;
+  /** The shared browser: past a bot wall, the rendered page's embedded JSON is read without a model. */
+  browser?: BrowserSession;
   /** Replaces https://www.trustpilot.com. For tests. */
   baseUrl?: string;
   /** Clock in epoch milliseconds, for relative dates. Default Date.now. */
@@ -387,12 +409,19 @@ function hostLabel(url: string): string {
 
 type HtmlOutcome = { kind: "html"; text: string } | { kind: "wall"; status: number; reason: string };
 
+/** The bare domain a subject names, lower-cased without `www.`, or undefined. */
+export function bareDomain(subject: string): string | undefined {
+  const m = BARE_DOMAIN_RE.exec(subject.trim());
+  return m !== null ? (m[1] as string).toLowerCase() : undefined;
+}
+
 export class TrustpilotSource implements ReviewSourceProvider {
   readonly name = "trustpilot" as const;
   readonly defaultKinds: readonly ReviewKind[] = kindsDefaultingTo("trustpilot");
   private readonly fetchImpl: FetchImpl;
   private readonly fetch: FetchService | undefined;
   private readonly llm: LlmClient | undefined;
+  private readonly browser: BrowserSession | undefined;
   private readonly baseUrl: string;
   private readonly now: () => number;
 
@@ -400,6 +429,7 @@ export class TrustpilotSource implements ReviewSourceProvider {
     this.fetchImpl = opts.fetchImpl ?? ((...args) => fetch(...args));
     this.fetch = opts.fetch;
     this.llm = opts.llm;
+    this.browser = opts.browser;
     this.baseUrl = (opts.baseUrl ?? CANONICAL_BASE).replace(/\/+$/, "");
     this.now = opts.now ?? Date.now;
   }
@@ -410,16 +440,31 @@ export class TrustpilotSource implements ReviewSourceProvider {
   }
 
   async search(q: NormalizedReviewsQuery, signal: AbortSignal, hooks?: ReviewHooks): Promise<ReviewSearchResult> {
+    const domain = q.subject_url === undefined ? bareDomain(q.subject) : undefined;
+    if (domain !== undefined) {
+      try {
+        return await this.readPage(`${this.baseUrl}/review/${domain}`, q, signal, hooks);
+      } catch (err) {
+        if (!(err instanceof ReviewSourceError && err.code === "not_found")) throw err;
+        // Trustpilot files the business under another name: look it up instead.
+      }
+    }
     const pageUrl = await this.resolvePageUrl(q, signal, hooks);
+    return this.readPage(pageUrl, q, signal, hooks);
+  }
+
+  private async readPage(pageUrl: string, q: NormalizedReviewsQuery, signal: AbortSignal, hooks?: ReviewHooks): Promise<ReviewSearchResult> {
     const outcome = await this.fetchHtml(pageUrl, signal, `Trustpilot has no review page at ${pageUrl}`);
     let result: ReviewSearchResult | undefined;
-    if (outcome.kind === "html") {
-      result = parseNextData(outcome.text, pageUrl) ?? parseJsonLd(outcome.text, pageUrl);
-      if (result === undefined) {
-        result = await this.extractViaFetchService(pageUrl, signal, hooks, "the page carries no embedded review JSON");
+    if (outcome.kind === "html") result = parseNextData(outcome.text, pageUrl) ?? parseJsonLd(outcome.text, pageUrl);
+    if (result === undefined) {
+      const why = outcome.kind === "html" ? "the page carries no embedded review JSON" : `a bot-wall challenge (${outcome.reason}, HTTP ${outcome.status})`;
+      const rendered = await this.renderHtml(pageUrl, signal);
+      if (rendered?.status === 404) {
+        throw new ReviewSourceError(`trustpilot: Trustpilot has no review page at ${pageUrl}`, { source: this.name, code: "not_found", retryable: false });
       }
-    } else {
-      result = await this.extractViaFetchService(pageUrl, signal, hooks, `a bot-wall challenge (${outcome.reason}, HTTP ${outcome.status})`);
+      if (rendered !== undefined) result = parseNextData(rendered.html, rendered.url) ?? parseJsonLd(rendered.html, rendered.url);
+      result ??= await this.extractViaFetchService(pageUrl, signal, hooks, why);
     }
     return { subject: result.subject, reviews: result.reviews.slice(0, q.per_source) };
   }
@@ -442,12 +487,17 @@ export class TrustpilotSource implements ReviewSourceProvider {
     }
     const searchUrl = `${this.baseUrl}/search?query=${encodeURIComponent(q.subject)}`;
     const outcome = await this.fetchHtml(searchUrl, signal, `Trustpilot search for "${q.subject}" returned nothing`);
+    const HREF = /href="(?:https?:\/\/(?:www\.)?trustpilot\.com)?\/review\/([^"/?#]+)/gi;
     let seg: string | undefined;
     if (outcome.kind === "html") {
-      seg = firstCompanySlug(outcome.text, /href="(?:https?:\/\/(?:www\.)?trustpilot\.com)?\/review\/([^"/?#]+)/gi);
+      seg = firstCompanySlug(outcome.text, HREF);
     } else {
-      const page = await this.renderPage(searchUrl, signal, `a bot-wall challenge on the search page (${outcome.reason}, HTTP ${outcome.status})`);
-      seg = firstCompanySlug(page, /\]\((?:https?:\/\/(?:www\.)?trustpilot\.com)?\/review\/([^)\s/?#]+)/gi);
+      const rendered = await this.renderHtml(searchUrl, signal);
+      if (rendered !== undefined) seg = firstCompanySlug(rendered.html, HREF);
+      if (seg === undefined) {
+        const page = await this.renderPage(searchUrl, signal, `a bot-wall challenge on the search page (${outcome.reason}, HTTP ${outcome.status})`);
+        seg = firstCompanySlug(page, /\]\((?:https?:\/\/(?:www\.)?trustpilot\.com)?\/review\/([^)\s/?#]+)/gi);
+      }
     }
     if (seg === undefined) {
       throw new ReviewSourceError(`trustpilot: no company matches "${q.subject}"`, { source: this.name, code: "not_found", retryable: false });
@@ -473,6 +523,48 @@ export class TrustpilotSource implements ReviewSourceProvider {
     if (res.status === 404) throw statusError(this.name, 404, res.text, { notFoundMessage });
     if (res.status < 200 || res.status > 299) throw statusError(this.name, res.status, res.text);
     return { kind: "html", text: res.text };
+  }
+
+  /**
+   * The page's HTML as the shared browser rendered it, once the embedded data is
+   * there, with the URL it ended on and the status of the last main-frame
+   * navigation (live: 403 challenge, 308, 200; or a plain 404 for an unknown
+   * page). Undefined when there is no browser or the render failed: the Markdown
+   * path is the next fallback. Read only: navigate and wait.
+   */
+  private async renderHtml(url: string, signal: AbortSignal): Promise<{ html: string; url: string; status?: number } | undefined> {
+    const browser = this.browser;
+    if (browser === undefined) return undefined;
+    if (signal.aborted) throw new ReviewSourceError("trustpilot request was cancelled", { source: this.name, code: "timeout", retryable: true });
+    let page: Page;
+    try {
+      page = await browser.acquire();
+    } catch {
+      return undefined;
+    }
+    const acquired = page;
+    const onAbort = (): void => {
+      acquired.close().catch(() => undefined);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    let status: number | undefined;
+    const onResponse = (res: PageResponse): void => {
+      if (res.request().isNavigationRequest() && res.frame() === acquired.mainFrame()) status = res.status();
+    };
+    acquired.on("response", onResponse);
+    try {
+      await acquired.goto(url, { waitUntil: "domcontentloaded", timeout: RENDER_TIMEOUT_MS });
+      // The challenge page runs its script and reloads into the real page, which carries the data.
+      await acquired.waitForSelector("script#__NEXT_DATA__", { state: "attached", timeout: RENDER_TIMEOUT_MS });
+      return { html: await acquired.content(), url: acquired.url(), ...(status !== undefined && { status }) };
+    } catch {
+      if (signal.aborted) throw new ReviewSourceError("trustpilot request was cancelled", { source: this.name, code: "timeout", retryable: true });
+      return undefined;
+    } finally {
+      acquired.off("response", onResponse);
+      signal.removeEventListener("abort", onAbort);
+      await browser.release(acquired);
+    }
   }
 
   /** The page as Markdown through the fetch service (auto mode renders in the browser past a wall). */

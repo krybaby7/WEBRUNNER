@@ -26,10 +26,14 @@ import { ReviewSourceError, type ReviewSearchResult, type ReviewSourceProvider }
 
 export const REVIEWS_CACHE_TTL_MS = 60 * 60 * 1000;
 
-/** Per-source time budgets: 15 s for API and fetch sources, 60 s for browser sources (PLAN.md 14.6). */
+/**
+ * Per-source time budgets (PLAN.md 14.6): 15 s for API sources, 60 s for browser
+ * sources and for Trustpilot, whose WAF challenge sends it through the browser
+ * (a name lookup renders two pages; live 2026-10-21, 15 s timed out).
+ */
 export const DEFAULT_SOURCE_TIMEOUTS_MS: Readonly<Record<ReviewSource, number>> = {
   app_store: 15_000,
-  trustpilot: 15_000,
+  trustpilot: 60_000,
   google_maps: 60_000,
   google_play: 60_000,
   amazon: 60_000,

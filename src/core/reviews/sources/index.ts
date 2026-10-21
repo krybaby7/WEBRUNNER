@@ -30,6 +30,7 @@ export function buildAllReviewSources(_config: Config, deps: ReviewSourceDeps = 
       ...(fetchImpl !== undefined && { fetchImpl }),
       ...(deps.fetch !== undefined && { fetch: deps.fetch }),
       ...(deps.llm !== undefined && { llm: deps.llm }),
+      ...(deps.browser !== undefined && { browser: deps.browser }),
     }),
     // Browser sources (WP19b): listed even without a browser so an explicit request can be told why they are unavailable.
     ...buildBrowserReviewSources({

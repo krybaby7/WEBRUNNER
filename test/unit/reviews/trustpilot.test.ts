@@ -3,7 +3,9 @@ import { FetchServiceError } from "../../../src/core/fetch/index.js";
 import { CostMeter } from "../../../src/core/llm/cost.js";
 import type { LlmRequest } from "../../../src/core/llm/types.js";
 import { APPROXIMATE_DATE_CAVEAT } from "../../../src/core/reviews/normalize.js";
-import { parseJsonLd, parseNextData, TrustpilotSource, type TrustpilotExtraction } from "../../../src/core/reviews/sources/trustpilot.js";
+import type { Page } from "playwright";
+import type { BrowserSession } from "../../../src/core/browser/types.js";
+import { bareDomain, parseJsonLd, parseNextData, TrustpilotSource, type TrustpilotExtraction } from "../../../src/core/reviews/sources/trustpilot.js";
 import { ReviewSourceError } from "../../../src/core/reviews/types.js";
 import { ReviewSchema, ReviewSubjectSchema, type NormalizedReviewsQuery } from "../../../src/schemas/reviews.js";
 import { scriptedLlm, userText } from "../research/helpers.js";
@@ -19,6 +21,8 @@ const jsonLdHtml = readFixture("trustpilot-jsonld.html");
 const wafHtml = readFixture("trustpilot-waf-challenge.html");
 const searchHtml = readFixture("trustpilot-search.html");
 const pageMarkdown = readFixture("trustpilot-page.md");
+/** The notion.so review page as Chromium rendered it past the WAF on 2026-10-21 (trimmed, names pseudonymized). */
+const liveHtml = readFixture("trustpilot-review-live.html");
 
 const BASE = "https://www.trustpilot.com";
 const PAGE = `${BASE}/review/acme-travel.example`;
@@ -66,6 +70,57 @@ function routed(over: Partial<Record<"review" | "search", (call: RecordedCall) =
     if (url.pathname === "/search") return (over.search ?? (() => htmlResponse(searchHtml)))(call);
     return new Response("not found", { status: 404 });
   });
+}
+
+/**
+ * A browser whose pages "render" a URL into the given HTML and final navigation
+ * status, or fail to (an Error). Records the URLs visited; never types or clicks.
+ */
+function fakeBrowser(render: (url: string) => { html: string; status?: number } | Error): BrowserSession & { visited: string[]; released: number } {
+  const visited: string[] = [];
+  const state = { released: 0 };
+  const makePage = (): Page => {
+    let current = "about:blank";
+    let result: { html: string; status?: number } | Error = { html: "" };
+    const listeners: Array<(res: unknown) => void> = [];
+    const mainFrame = {};
+    const page = {
+      on: (event: string, fn: (res: unknown) => void) => {
+        if (event === "response") listeners.push(fn);
+        return page;
+      },
+      off: () => page,
+      mainFrame: () => mainFrame,
+      url: () => current,
+      close: async () => undefined,
+      goto: async (url: string) => {
+        visited.push(url);
+        current = url;
+        result = render(url);
+        if (!(result instanceof Error)) {
+          const status = result.status ?? 200;
+          for (const fn of listeners) fn({ status: () => status, frame: () => mainFrame, request: () => ({ isNavigationRequest: () => true }) });
+        }
+        return null;
+      },
+      waitForSelector: async () => {
+        if (result instanceof Error) throw result;
+        return null;
+      },
+      content: async () => (result instanceof Error ? "" : result.html),
+    };
+    return page as unknown as Page;
+  };
+  return {
+    visited,
+    get released() {
+      return state.released;
+    },
+    acquire: async () => makePage(),
+    release: async () => {
+      state.released++;
+    },
+  } as unknown as BrowserSession & { visited: string[]; released: number };
 }
 
 async function failure(p: Promise<unknown>): Promise<ReviewSourceError> {
@@ -208,6 +263,76 @@ describe("TrustpilotSource", () => {
     const out = await new TrustpilotSource({ fetchImpl: f.fetchImpl }).search({ ...Q, per_source: 1 }, signal());
     expect(out.reviews).toHaveLength(1);
     expect(out.reviews[0]?.id).toBe("trustpilot:6711a0c1e3f2a90012ab0001");
+  });
+
+  it("tries a bare domain as /review/<domain>, and searches when Trustpilot has no page for it", async () => {
+    const f = routed();
+    const out = await new TrustpilotSource({ fetchImpl: f.fetchImpl }).search({ ...BASE_QUERY, subject: "www.Acme-Travel.example", sources: ["trustpilot"] }, signal());
+    expect(f.calls.map((c) => c.url)).toEqual([PAGE]);
+    expect(out.subject.name).toBe("Acme Travel");
+
+    const g = routed({ review: (call) => (call.url.endsWith("/review/node.js") ? htmlResponse("<html><body>Page not found</body></html>", 404) : htmlResponse(nextDataHtml)) });
+    await new TrustpilotSource({ fetchImpl: g.fetchImpl }).search({ ...BASE_QUERY, subject: "Node.js", sources: ["trustpilot"] }, signal());
+    expect(g.calls.map((c) => c.url)).toEqual([`${BASE}/review/node.js`, `${BASE}/search?query=Node.js`, PAGE]);
+
+    expect(bareDomain("notion.so")).toBe("notion.so");
+    expect(bareDomain("amazon.co.uk")).toBe("amazon.co.uk");
+    expect(bareDomain("Hotel Lutetia Paris")).toBeUndefined();
+    expect(bareDomain("Sony WH-1000XM5")).toBeUndefined();
+  });
+
+  describe("past the WAF challenge through the browser (live 2026-10-21)", () => {
+    const noModel = scriptedLlm({});
+    const noFetch = fakeFetchService(() => new Error("the Markdown path must not be needed"));
+
+    it("parses the rendered page's embedded JSON with no model call", async () => {
+      const browser = fakeBrowser(() => ({ html: liveHtml }));
+      const caveats: string[] = [];
+      const out = await new TrustpilotSource({ fetchImpl: wafFetch().fetchImpl, browser, fetch: noFetch, llm: noModel, now: () => NOW }).search(
+        { ...BASE_QUERY, subject: "notion.so", sources: ["trustpilot"] },
+        signal(),
+        { caveats },
+      );
+      expect(browser.visited).toEqual([`${BASE}/review/notion.so`]);
+      expect(browser.released).toBe(1);
+      expect(noModel.requests).toHaveLength(0);
+      expect(noFetch.calls).toHaveLength(0);
+      expect(ReviewSubjectSchema.safeParse(out.subject).success).toBe(true);
+      expect(out.subject).toMatchObject({ name: "Notion", rating_avg: 2.2, review_count: 440, rating_distribution: { "1": 193, "2": 35, "3": 23, "4": 47, "5": 142 } });
+      expect(out.reviews).toHaveLength(5);
+      for (const r of out.reviews) expect(ReviewSchema.safeParse(r).success).toBe(true);
+      expect(out.reviews[0]).toMatchObject({ id: "trustpilot:6ad7520a11259b84c22e22b3", author: "Reviewer A", rating: 2, created_at: "2026-10-20T13:35:38.000Z", verified: false, language: "en" });
+      expect(caveats.some((c) => /LLM/.test(c))).toBe(false);
+    });
+
+    it("resolves a walled search through the rendered search page", async () => {
+      const browser = fakeBrowser((url) => ({ html: url.includes("/search?") ? searchHtml : liveHtml }));
+      const out = await new TrustpilotSource({ fetchImpl: wafFetch().fetchImpl, browser, fetch: noFetch, llm: noModel, now: () => NOW }).search(
+        { ...BASE_QUERY, subject: "acme travel", sources: ["trustpilot"] },
+        signal(),
+      );
+      expect(browser.visited).toEqual([`${BASE}/search?query=acme%20travel`, PAGE]);
+      expect(out.reviews).toHaveLength(5);
+    });
+
+    it("a rendered 404 is not_found, so a bare domain falls back to the search", async () => {
+      const browser = fakeBrowser((url) => (url.endsWith("/review/node.js") ? { html: "<script id=\"__NEXT_DATA__\">{}</script>", status: 404 } : { html: url.includes("/search?") ? searchHtml : liveHtml }));
+      await new TrustpilotSource({ fetchImpl: wafFetch().fetchImpl, browser, fetch: noFetch, llm: noModel }).search({ ...BASE_QUERY, subject: "node.js", sources: ["trustpilot"] }, signal());
+      expect(browser.visited).toEqual([`${BASE}/review/node.js`, `${BASE}/search?query=node.js`, PAGE]);
+      const err = await failure(new TrustpilotSource({ fetchImpl: wafFetch().fetchImpl, browser: fakeBrowser(() => ({ html: "", status: 404 })) }).search(Q, signal()));
+      expect(err.code).toBe("not_found");
+    });
+
+    it("falls back to the Markdown and model path when the render fails", async () => {
+      const browser = fakeBrowser(() => new Error("Timeout 25000ms exceeded"));
+      const fetchService = fakeFetchService(() => pageMarkdown);
+      const llm = scriptedLlm({ extractor: [EXTRACTION] });
+      const out = await new TrustpilotSource({ fetchImpl: wafFetch().fetchImpl, browser, fetch: fetchService, llm, now: () => NOW }).search(Q, signal());
+      expect(browser.visited).toEqual([PAGE]);
+      expect(fetchService.calls).toHaveLength(1);
+      expect(llm.requests).toHaveLength(1);
+      expect(out.reviews).toHaveLength(3);
+    });
   });
 
   describe("on the recorded WAF challenge", () => {
