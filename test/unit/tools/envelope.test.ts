@@ -15,6 +15,9 @@ import { registerSearchFlightsTool } from "../../../src/tools/search_flights.js"
 import { registerSocialSearchTool } from "../../../src/tools/social_search.js";
 import { registerSearchHotelsTool } from "../../../src/tools/search_hotels.js";
 import { registerSearchReviewsTool } from "../../../src/tools/search_reviews.js";
+import { registerExchangeRateTool } from "../../../src/tools/exchange_rate.js";
+import { registerMarketQuoteTool } from "../../../src/tools/market_quote.js";
+import { registerWeatherTool } from "../../../src/tools/weather.js";
 import { registerWebSearchTool } from "../../../src/tools/web_search.js";
 import { makeConfig } from "../llm/helpers.js";
 import { recordingLogger, scriptedLlm } from "../research/helpers.js";
@@ -120,6 +123,34 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
     register: (server, deps) =>
       registerSearchReviewsTool(server, deps, {
         sources: () => {
+          throw boom();
+        },
+      }),
+  },
+  market_quote: {
+    args: { symbols: ["AAPL"] },
+    // The provider factory throws before any source is called: nothing per-source can catch it.
+    register: (server, deps) =>
+      registerMarketQuoteTool(server, deps, {
+        providers: () => {
+          throw boom();
+        },
+      }),
+  },
+  weather: {
+    args: { location: "Paris" },
+    register: (server, deps) =>
+      registerWeatherTool(server, deps, {
+        service: () => {
+          throw boom();
+        },
+      }),
+  },
+  exchange_rate: {
+    args: { from: "USD", to: ["EUR"] },
+    register: (server, deps) =>
+      registerExchangeRateTool(server, deps, {
+        service: () => {
           throw boom();
         },
       }),

@@ -227,8 +227,11 @@ describe("tool wall-clock caps", () => {
     expect(desc("browse_task")).toMatch(/11 minutes/);
     expect(desc("deep_research")).toMatch(/15 minutes/);
     expect(desc("deep_research")).toMatch(/WEBRUNNER_RESEARCH_MAX_MS/);
+    expect(desc("market_quote")).toMatch(/30 seconds/);
+    expect(desc("weather")).toMatch(/20 seconds/);
+    expect(desc("exchange_rate")).toMatch(/20 seconds/);
     expect(desc("accounts")).toMatch(/330 seconds/);
-    for (const name of ["web_search", "fetch_page", "search_flights", "search_hotels", "search_reviews", "browse_task", "social_search", "deep_research", "accounts"]) {
+    for (const name of ["web_search", "fetch_page", "search_flights", "search_hotels", "search_reviews", "browse_task", "social_search", "deep_research", "accounts", "market_quote", "weather", "exchange_rate"]) {
       expect(desc(name)).toMatch(/timeout/);
     }
   });

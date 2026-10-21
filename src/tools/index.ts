@@ -3,13 +3,16 @@ import type { Deps } from "../deps.js";
 import { registerAccountsTool } from "./accounts.js";
 import { registerBrowseTaskTool } from "./browse_task.js";
 import { registerDeepResearchTool } from "./deep_research.js";
+import { registerExchangeRateTool } from "./exchange_rate.js";
 import { registerHealthTool } from "./health.js";
 import { registerPingTool } from "./ping.js";
 import { registerFetchPageTool } from "./fetch_page.js";
+import { registerMarketQuoteTool } from "./market_quote.js";
 import { registerSearchFlightsTool } from "./search_flights.js";
 import { registerSocialSearchTool } from "./social_search.js";
 import { registerSearchHotelsTool } from "./search_hotels.js";
 import { registerSearchReviewsTool } from "./search_reviews.js";
+import { registerWeatherTool } from "./weather.js";
 import { registerWebSearchTool } from "./web_search.js";
 
 /**
@@ -26,6 +29,9 @@ export const TOOL_NAMES = [
   "social_search",
   "search_hotels",
   "search_reviews",
+  "market_quote",
+  "weather",
+  "exchange_rate",
   "deep_research",
   "accounts",
   "health",
@@ -41,6 +47,9 @@ export function registerTools(server: McpServer, deps: Deps): void {
   registerSocialSearchTool(server, deps);
   registerSearchHotelsTool(server, deps);
   registerSearchReviewsTool(server, deps);
+  registerMarketQuoteTool(server, deps);
+  registerWeatherTool(server, deps);
+  registerExchangeRateTool(server, deps);
   registerDeepResearchTool(server, deps);
   registerAccountsTool(server, deps);
   registerHealthTool(server, deps, TOOL_NAMES);

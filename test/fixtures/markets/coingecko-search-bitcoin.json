@@ -1,0 +1,47 @@
+{
+  "_source": "recorded live from api.coingecko.com/api/v3/search?query=bitcoin on 2026-10-18; trimmed to the first 6 coins, exchanges/nfts/categories dropped",
+  "coins": [
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "api_symbol": "bitcoin",
+      "symbol": "BTC",
+      "market_cap_rank": 1
+    },
+    {
+      "id": "bitcoin-cash",
+      "name": "Bitcoin Cash",
+      "api_symbol": "bitcoin-cash",
+      "symbol": "BCH",
+      "market_cap_rank": 22
+    },
+    {
+      "id": "bitcoin-cash-sv",
+      "name": "Bitcoin SV",
+      "api_symbol": "bitcoin-cash-sv",
+      "symbol": "BSV",
+      "market_cap_rank": 128
+    },
+    {
+      "id": "dog-go-to-the-moon-rune",
+      "name": "Dog (Bitcoin)",
+      "api_symbol": "dog-go-to-the-moon-rune",
+      "symbol": "DOG",
+      "market_cap_rank": 296
+    },
+    {
+      "id": "fractal-bitcoin",
+      "name": "Fractal Bitcoin",
+      "api_symbol": "fractal-bitcoin",
+      "symbol": "FB",
+      "market_cap_rank": 518
+    },
+    {
+      "id": "ishares-bitcoin-trust-ondo-tokenized",
+      "name": "iShares Bitcoin Trust (Ondo Tokenized)",
+      "api_symbol": "ishares-bitcoin-trust-ondo-tokenized",
+      "symbol": "IBITON",
+      "market_cap_rank": 720
+    }
+  ]
+}

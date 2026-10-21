@@ -1,0 +1,119 @@
+{
+  "_source": "built from the Yahoo Finance v8 chart response shape as documented by third parties (query1.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=5m); UNVERIFIED live: the development environment received HTTP 429 from Yahoo on 2026-10-18. Trimmed to 5 bars; the third bar carries nulls, as live responses do for missing ticks.",
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "USD",
+          "symbol": "AAPL",
+          "exchangeName": "NMS",
+          "fullExchangeName": "NasdaqGS",
+          "instrumentType": "EQUITY",
+          "firstTradeDate": 345479400,
+          "regularMarketTime": 1792180801,
+          "hasPrePostMarketData": true,
+          "gmtoffset": -14400,
+          "timezone": "EDT",
+          "exchangeTimezoneName": "America/New_York",
+          "regularMarketPrice": 343.46,
+          "fiftyTwoWeekHigh": 348.15,
+          "fiftyTwoWeekLow": 243.42,
+          "regularMarketDayHigh": 347.82,
+          "regularMarketDayLow": 340.46,
+          "regularMarketVolume": 59950000,
+          "longName": "Apple Inc.",
+          "shortName": "Apple Inc.",
+          "chartPreviousClose": 342.0,
+          "previousClose": 342.0,
+          "scale": 3,
+          "priceHint": 2,
+          "marketState": "CLOSED",
+          "currentTradingPeriod": {
+            "pre": {
+              "timezone": "EDT",
+              "start": 1792137600,
+              "end": 1792157400,
+              "gmtoffset": -14400
+            },
+            "regular": {
+              "timezone": "EDT",
+              "start": 1792157400,
+              "end": 1792180800,
+              "gmtoffset": -14400
+            },
+            "post": {
+              "timezone": "EDT",
+              "start": 1792180800,
+              "end": 1792195200,
+              "gmtoffset": -14400
+            }
+          },
+          "dataGranularity": "5m",
+          "range": "1d",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ]
+        },
+        "timestamp": [
+          1792157400,
+          1792157700,
+          1792158000,
+          1792158300,
+          1792158600
+        ],
+        "indicators": {
+          "quote": [
+            {
+              "open": [
+                346.08,
+                345.9,
+                null,
+                345.2,
+                344.95
+              ],
+              "high": [
+                346.5,
+                346.1,
+                null,
+                345.6,
+                345.3
+              ],
+              "low": [
+                345.7,
+                345.1,
+                null,
+                344.9,
+                344.6
+              ],
+              "close": [
+                345.9,
+                345.3,
+                null,
+                344.95,
+                345.1
+              ],
+              "volume": [
+                1203400,
+                980200,
+                null,
+                870100,
+                910300
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "error": null
+  }
+}
