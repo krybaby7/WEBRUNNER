@@ -13,3 +13,6 @@ profile/
 .claude/worktrees/
 # local eval output
 eval-results/
+
+# also ignore a node_modules symlink (worktrees link to a shared install)
+node_modules
