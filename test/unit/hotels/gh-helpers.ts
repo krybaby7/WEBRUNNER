@@ -29,6 +29,7 @@ export interface HotelsServer {
 /**
  * Local stand-in for Google Hotels.
  *   /results       the results fixture built from the live DOM (consent dialog, 3 pages behind "Next")
+ *   /rated         the 2026-10-21 live Rome page: organic cards with guest ratings, an inert "Next"
  *   /unstructured  the same hotels without the card structure (forces the LLM path)
  *   /blocked       the unusual-traffic interstitial
  *   /empty         a destination with no results
@@ -42,6 +43,7 @@ export async function startHotelsServer(): Promise<HotelsServer> {
       res.writeHead(status, { "content-type": "text/html; charset=utf-8" }).end(body);
     };
     if (path === "/results") html(readFixture("google-hotels-results.html"));
+    else if (path === "/rated") html(readFixture("google-hotels-results-rated-live.html"));
     else if (path === "/unstructured") html(readFixture("google-hotels-unstructured.html"));
     else if (path === "/blocked") html(readFixture("google-hotels-blocked.html"));
     else if (path === "/empty") html(readFixture("google-hotels-empty.html"));
@@ -64,6 +66,19 @@ export async function startHotelsServer(): Promise<HotelsServer> {
 export function makeLogger(): { [K in keyof Logger]: ReturnType<typeof vi.fn> } & Logger {
   return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
 }
+
+/** The query the 2026-10-21 rated fixture was recorded for: Rome, 2026-11-25 to 2026-11-28, 2 adults, USD. */
+export const ROME: NormalizedHotelsQuery = {
+  destination: "Rome",
+  check_in: "2026-11-25",
+  check_out: "2026-11-28",
+  nights: 3,
+  guests: { adults: 2, children: 0 },
+  sort: "relevance",
+  sources: ["google_hotels"],
+  currency: "USD",
+  max_results: 40,
+};
 
 /** The query the fixtures were recorded for: Paris, 2026-11-20 to 2026-11-23, 2 adults, USD. */
 export const PARIS: NormalizedHotelsQuery = {

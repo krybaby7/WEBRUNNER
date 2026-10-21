@@ -34,6 +34,7 @@ import {
   makeLogger,
   PARIS,
   promptOf,
+  ROME,
   scriptedLlm,
   startHotelsServer,
   type HotelsServer,
@@ -438,6 +439,25 @@ describe.skipIf(!probe.available)(`google-hotels recipe in Chromium${probe.avail
     expect(r.caveats.some((c) => /no guest rating for 25 of 34 hotels/.test(c))).toBe(true);
     expect(r.caveats.some((c) => /not applied/.test(c))).toBe(false);
     expect(r.log.warn).not.toHaveBeenCalled();
+  });
+
+  it("reads guest ratings on organic cards from the 2026-10-21 live page, deterministically", async () => {
+    const llm = forbiddenLlm();
+    const r = await runRecipe("/rated", ROME, llm);
+    expect(r.error).toBeUndefined();
+    expect(llm.calls).toHaveLength(0);
+    const hotels = r.hotels!;
+    for (const h of hotels) expect(HotelResultSchema.safeParse(h).success).toBe(true);
+    expect(hotels).toHaveLength(18);
+    expect(hotels.some((h) => h.tags.includes("Sponsored"))).toBe(false);
+    const rated = hotels.filter((h) => h.rating !== undefined && h.review_count !== undefined);
+    expect(rated.length).toBeGreaterThanOrEqual(17);
+    expect(hotels.every((h) => h.price_per_night?.currency === "USD" && h.total_price !== undefined)).toBe(true);
+    expect(hotels.find((h) => h.name === "Persia Collection Trevi")).toMatchObject({ rating: 4.7, review_count: 228 });
+    expect(hotels.find((h) => h.name === "Hotel Trevi")).toMatchObject({ rating: 3.8, review_count: 1496 });
+    // "Next" was inert live and is inert here: the recipe says only the first page was read.
+    expect(r.caveats.some((c) => /"Next" page button did not load more results/.test(c) && /Showing results 1 - 18 of 8,084/.test(c))).toBe(true);
+    expect(r.caveats.some((c) => /not applied/.test(c))).toBe(false);
   });
 
   it("applies the contract's filters in code and says what they hid", async () => {

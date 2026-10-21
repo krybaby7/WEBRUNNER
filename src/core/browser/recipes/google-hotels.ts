@@ -53,7 +53,18 @@ import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
  * nothing within 15 s in this environment (button visible and enabled); the
  * recipe tries at most twice and caveats either way.
  *
- * Guest ratings and review counts were ABSENT from every organic card in every
+ * Re-checked live on 2026-10-21 from a Claude Code cloud session (shared cloud
+ * IP, headless, logged out; Rome and Paris, 35 to 42 days out, 2 adults):
+ *   - Organic cards now DO carry guest ratings and review counts, as an
+ *     aria-label on the card: "4.7 out of 5 stars from 228 reviews, Persia
+ *     Collection Trevi" (17 of 18 Rome cards, 18 of 18 Paris cards).
+ *     `parseRatingLabel` reads it as is; recorded as
+ *     test/fixtures/hotels/google-hotels-results-rated-live.html.
+ *   - "Next" still does not paginate: the click lands on the button's label,
+ *     and the page sends NO network request and keeps the same 18 cards (checked
+ *     for 15 s). So the result is one page of 18; the caveat says how many exist.
+ *
+ * Before 2026-10-21, guest ratings and review counts were ABSENT from every organic card in every
  * run (Paris and Lisbon, gl=ZZ and gl=us, headless and regular user agent).
  * Only the "Sponsored" list (`li` with an `/aclk` ad link) showed them, as
  * `[role=img][aria-label="4.4 out of 5 stars from 1,044 reviews"]` plus the
