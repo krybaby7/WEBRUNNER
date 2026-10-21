@@ -9,7 +9,8 @@ import type { FetchOpts } from "../../src/core/fetch/types.js";
 
 /**
  * Real network fetches. Skipped unless RUN_INTEGRATION=1. Firecrawl tests
- * additionally need FIRECRAWL_API_KEY; the Jina key is optional.
+ * additionally need FIRECRAWL_API_KEY (set and non-empty: the live workflow
+ * passes unset secrets as empty strings); the Jina key is optional.
  */
 const enabled = process.env["RUN_INTEGRATION"] === "1";
 const OPTS: FetchOpts = { maxChars: 40_000, timeoutMs: 30_000 };
@@ -38,10 +39,13 @@ describe.skipIf(!enabled)("fast fetch integration", () => {
     expect(result.markdown.length).toBeLessThanOrEqual(2000);
   });
 
-  it("direct: refuses a real PDF in the fast path", async () => {
-    await expect(
-      new DirectFetcher().fetch("https://arxiv.org/pdf/1706.03762", OPTS, new AbortController().signal),
-    ).rejects.toMatchObject({ code: "invalid_input" });
+  it("direct: extracts a real PDF to text (PDF support since WP14b)", async () => {
+    const result = await new DirectFetcher().fetch("https://arxiv.org/pdf/1706.03762", OPTS, new AbortController().signal);
+    expect(result.method).toBe("direct");
+    expect(result.markdown).toMatch(/Attention Is All You Need/);
+    // Pages are separated by a rule (README, fetch_page).
+    expect(result.markdown).toContain("\n---\n");
+    expect(visibleTextLength(result.markdown)).toBeGreaterThan(5000);
   });
 
   it("jina: returns Markdown for a real article", async () => {
@@ -51,7 +55,7 @@ describe.skipIf(!enabled)("fast fetch integration", () => {
     expect(visibleTextLength(result.markdown)).toBeGreaterThan(500);
   });
 
-  it.skipIf(process.env["FIRECRAWL_API_KEY"] === undefined)("firecrawl: returns Markdown for a real article", async () => {
+  it.skipIf(!process.env["FIRECRAWL_API_KEY"])("firecrawl: returns Markdown for a real article", async () => {
     const result = await new FirecrawlFetcher({ apiKey: process.env["FIRECRAWL_API_KEY"] }).fetch(
       ARTICLE,
       OPTS,
