@@ -1,0 +1,56 @@
+<!DOCTYPE html><html class="a-no-js" lang="en-us"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<meta charset="utf-8">
+<title dir="ltr">Amazon.com</title>
+<meta name="viewport" content="width=device-width">
+<!-- Recorded live on 2026-10-21 (WP19b): what https://www.amazon.com/product-reviews/B0B2FCT81R?reviewerType=all_reviews&sortBy=recent&pageNumber=1
+     returned to a signed-out headless Chromium: a redirect to https://www.amazon.com/ap/signin?openid.return_to=...
+     whose body is this soft bot check ("Click the button below to continue shopping", form action
+     /errors_page/validateCaptcha). Sanitized: the stylesheet link and the hidden form values (amzn,
+     amzn-r, field-keywords) were removed. The fixture server serves it at an /ap/signin URL. -->
+</head>
+<body>
+<!--
+        To discuss automated access to Amazon data please contact api-services-support@amazon.com.
+-->
+<div class="a-container a-padding-double-large" style="min-width:350px;padding:44px 0 !important">
+    <div class="a-row a-spacing-double-large" style="width: 350px; margin: 0 auto">
+        <div class="a-row a-spacing-medium a-text-center"><i class="a-icon a-logo" alt="Amazon logo"></i></div>
+        <div class="a-box a-alert a-alert-info a-spacing-base">
+            <div class="a-box-inner">
+                <i class="a-icon a-icon-alert" alt="Alert icon"></i>
+                <h4>Click the button below to continue shopping</h4>
+                </div>
+            </div>
+            <div class="a-section">
+                <div class="a-box a-color-offset-background">
+                    <div class="a-box-inner a-padding-extra-large">
+                        <form method="get" action="/errors_page/validateCaptcha" name="">
+                            <input type="hidden" name="amzn" value="redacted"><input type="hidden" name="amzn-r" value="/ap/signin"><input type="hidden" name="amzn-pt" value="AuthenticationPortal">
+                            <input type="hidden" name="field-keywords" value="redacted">
+                            <div class="a-section a-spacing-extra-large">
+                                <div class="a-row">
+                                    <span class="a-button a-button-primary a-span12">
+                                        <span class="a-button-inner">
+                                            <button type="submit" class="a-button-text" alt="Continue shopping">Continue shopping</button>
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="a-divider a-divider-section"><div class="a-divider-inner"></div></div>
+        <div class="a-text-center a-spacing-small a-size-mini">
+            <a href="https://www.amazon.com/gp/help/customer/display.html">Conditions of Use</a>
+            <span class="a-letter-space"></span>
+            <a href="https://www.amazon.com/gp/help/customer/display.html">Privacy Policy</a>
+        </div>
+        <div class="a-text-center a-size-mini a-color-base">
+          © 1996-2025, Amazon.com, Inc. or its affiliates
+        </div>
+    </div>
+</div>
+</body></html>

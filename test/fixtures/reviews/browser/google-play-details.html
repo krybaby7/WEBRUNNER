@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Notion: AI Workspace - Apps on Google Play</title>
+<!--
+  Google Play app details page (WP19b), built from the page served live on
+  2026-10-21 for https://play.google.com/store/apps/details?id=notion.id&hl=en&gl=us&showAllReviews=true
+  (sanitized: scripts, jsaction/jscontroller/jsname, ssk, srcset, menu ids and
+  image URLs removed; structure, classes, data attributes and aria labels kept).
+  The header block and the first three review cards (reviewer display names
+  Morgan Midnight, Bay and Jeff Moore, as shown publicly) are LIVE markup.
+  The "See all reviews" dialog, the remaining cards and the developer reply
+  block (div.ocpBU: developer name, date, text) are SYNTHETIC: the live page
+  carried only three server-rendered cards, none with a reply, and the dialog
+  needs the UI bundle that this environment could not load.
+-->
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  [hidden] { display: none !important; }
+  nav a { margin-right: 8px; }
+  .EGFGHd { padding: 10px; border-bottom: 1px solid #eee; min-height: 70px; }
+  #all-reviews { position: fixed; inset: 10%; background: #fff; border: 1px solid #888; }
+  #all-list { height: 300px; overflow-y: auto; }
+</style>
+</head>
+<body class="tQj5Y ghyPEc IqBfM ecJEib EWZcud">
+<header class="S3WLMd">
+  <nav class="yyaGpb">
+    <a href="/store/games" class="uEz1ib Y4jiDf"><div class="WL3b7c">Games</div></a>
+    <a href="/store/apps" class="uEz1ib Y4jiDf"><div class="WL3b7c">Apps</div></a>
+    <a href="/store/apps/category/FAMILY" class="uEz1ib Y4jiDf"><div class="WL3b7c">Kids</div></a>
+  </nav>
+</header>
+<c-wiz>
+<div class="hnnXjf">
+  <div class="Il7kR"><div class="RhBWnf">
+    <img src="data:," class="T75of cN0oRe fFmL2e" aria-hidden="true" alt="Icon image" itemprop="image">
+    <div>
+      <div class="Fd93Bb F5UCq xwcR9d"><h1><span class="AfwdI" itemprop="name">Notion: AI Workspace</span></h1></div>
+      <div class="tv4jIf"><div class="Vbfug auoIOc"><a href="/store/apps/developer?id=Notion+Labs,+Inc."><span>Notion Labs, Inc.</span></a></div>
+      <div class="ulKokd"><div class=""><span class="UIuSk">In-app purchases</span></div></div></div>
+    </div>
+  </div></div>
+  <div class="JU1wdd"><div class="l8YSdd" tabindex="0" role="region" aria-label="Information badges"><div class="w7Iutd">
+    <div class="wVqUob"><div class="ClM7O"><div itemprop="starRating"><div class="TT9eCd" role="img" aria-label="Rated 4.6 stars out of five stars"><span aria-hidden="true">4.6</span><i class="google-material-icons notranslate ERwvGb" aria-hidden="true">star</i></div></div></div><div class="g1rdde">401K reviews</div></div>
+    <div class="wVqUob PSXKRc"><div class="ClM7O"><img src="data:," class="T75of xGa6dd" alt="Content rating" itemprop="image"></div><div class="g1rdde"><span itemprop="contentRating"><span>Everyone</span></span></div></div>
+    <div class="wVqUob"><div class="ClM7O">10M+</div><div class="g1rdde">Downloads</div></div>
+  </div></div></div>
+  <div class="Uc6QCc"><a href="/store/apps/category/PRODUCTIVITY" class="WpHeLc">Productivity</a></div>
+</div>
+</c-wiz>
+
+<section class="HcyOxe">
+  <header class="pvMSFd"><h2>About this app</h2></header>
+  <div class="bARER">Notion is the connected workspace where teams and AI think together.</div>
+</section>
+
+<section class="HcyOxe" id="ratings">
+  <header class="pvMSFd"><h2>Ratings and reviews</h2></header>
+  <div class="Jwxk6d">
+    <div class="SfzRHd">
+      <div class="P4w39d"><div class="Te9Tpc"><div><div aria-label="Rated 4.6 stars out of five stars" role="img" class="I26one"></div></div></div></div>
+      <div id="cards"></div>
+      <div><button type="button" id="see-all" class="VfPpkd-LgbsSe"><span class="VfPpkd-vQzf8d">See all reviews</span></button></div>
+    </div>
+  </div>
+</section>
+
+<div id="all-reviews" role="dialog" aria-label="Ratings and reviews" hidden>
+  <header><h2>Ratings and reviews</h2> <button type="button" aria-label="Close">×</button></header>
+  <div id="all-list"></div>
+</div>
+
+<script>
+  // LIVE cards first (text verbatim as served), then synthetic ones. `response` is synthetic throughout.
+  const REVIEWS = [
+    { id: "b1bcf48a-2f1f-4625-a132-38ac06649c43", name: "Morgan Midnight", stars: 4, date: "February 26, 2026", helpful: 82, history: true,
+      text: "This app is great for organization and just whatever you need written down. My only complaint is the gap in the lines when you start writing below writing, it doesn't matter but I wish I could change it like I can on computer, and the fact you can't put a ' at the end of things or when you continue typing it deletes the word, I need to write names with 's at the end.. I'd like to add on, the AI features absolutely disgust me. I appreciate they don't pop up unwarranted, but it's still upsetting.." },
+    { id: "61a1c7ed-a0b0-420c-8a56-c44471365015", name: "Bay", stars: 1, date: "September 27, 2025", helpful: 350,
+      text: "This was a fantastic app and superior alternative to most writing docs until the AI rebrand. And, sure, everything has an AI feature nowadays– that which you don't have to use if you don't wish to. But Notion in particular seems insistent on shoving it down their users throats (for lack of a better term)... Basically, it's far too annoying to put up with. And with no obligation to, I will be searching for a better place to keep my work.",
+      response: { who: "Notion Labs, Inc.", date: "September 29, 2025", text: "Thanks for the honest feedback. You can turn off Notion AI suggestions in Settings, and we are working on making that easier to find." } },
+    { id: "3fc89318-1be2-4a91-9c81-4bccfedd90e6", name: "Jeff Moore", stars: 5, date: "July 25, 2026", helpful: 43, history: true,
+      text: "I love love love Notion. This platform came across my screen before any others did and they had me at, ## HELLO I have been able to form ideas and build blueprints to follow. There is just about nothing Notion workspace can't do. Automation, and integration great to call for a library of templates. I love the app I've only been able to use the free version but look forward to using the paid version soon!!! Keep making it better and better. So far it's just gotten better!!!" },
+    { id: "0d3e7c1a-synthetic-0004", name: "Priya S.", stars: 3, date: "June 2, 2026", helpful: 12,
+      text: "Sync is reliable but the Android widget keeps resetting." },
+    { id: "0d3e7c1a-synthetic-0005", name: "Daniel K.", stars: 5, date: "May 18, 2026", helpful: 0,
+      text: "Replaced three other apps for me. Offline mode finally works well." },
+    { id: "0d3e7c1a-synthetic-0006", name: "Léa M.", stars: 2, date: "April 30, 2026", helpful: 7,
+      text: "Slow to open large pages on a mid-range phone.",
+      response: { who: "Notion Labs, Inc.", date: "May 2, 2026", text: "Sorry about the slowness. Version 1.5 improves page load on lower-memory devices; please update and let us know." } },
+    { id: "0d3e7c1a-synthetic-0007", name: "Chris O.", stars: 4, date: "March 9, 2026", helpful: 3,
+      text: "Great for notes and databases. Wish the calendar view was built in." },
+    { id: "0d3e7c1a-synthetic-0008", name: "Yuki", stars: 5, date: "February 1, 2026", helpful: 1,
+      text: "Templates gallery is excellent." },
+    { id: "0d3e7c1a-synthetic-0009", name: "Ahmed R.", stars: 1, date: "January 12, 2026", helpful: 25,
+      text: "Lost a page after an update. Support took a week to answer." },
+    { id: "0d3e7c1a-synthetic-0010", name: "Sophie B.", stars: 4, date: "December 20, 2025", helpful: 2,
+      text: "Solid, improving steadily." },
+    { id: "0d3e7c1a-synthetic-0011", name: "Mateo G.", stars: 5, date: "November 5, 2025", helpful: 0,
+      text: "The AI meeting notes are a game changer for me." },
+    { id: "0d3e7c1a-synthetic-0012", name: "Nina P.", stars: 3, date: "October 14, 2025", helpful: 4,
+      text: "Fine, but the mobile editor lags behind the web app." },
+    { id: "0d3e7c1a-synthetic-0013", name: "Oliver T.", stars: 4, date: "September 1, 2025", helpful: 1,
+      text: "Good value on the free plan." },
+    { id: "0d3e7c1a-synthetic-0014", name: "Grace L.", stars: 5, date: "August 22, 2025", helpful: 6,
+      text: "Everything in one place. Love it." },
+  ];
+
+  function card(r) {
+    const stars = [1, 2, 3, 4, 5].map((n) => `<span aria-hidden="true" class="F7XJmb" data-number="${n}"><span class="notranslate ${n <= r.stars ? "Z1Dz7b" : "Wi7KIe"}" aria-hidden="true"><svg></svg></span></span>`).join("");
+    const el = document.createElement("div");
+    el.className = "EGFGHd";
+    el.innerHTML =
+      `<header class="c1bOId" data-review-id="${r.id}"><div class="YNR7H"><div class="gSGphe"><img src="data:," class="T75of abYEib" aria-hidden="true" loading="lazy"><div class="X5PpBb">${r.name}</div></div>` +
+      `<div><div class="VfPpkd-xl07Ob-XxIAqe-OWXEXe-oYxtQd"><div><button class="VfPpkd-Bz112c-LgbsSe yHy1rc eT1oJ mN1ivc" aria-label="More review actions" aria-expanded="false" aria-haspopup="menu"><i class="material-icons-extended notranslate VfPpkd-kBDsod" aria-hidden="true">more_vert</i></button></div>` +
+      `<div><div class="VfPpkd-xl07Ob-XxIAqe VfPpkd-xl07Ob q6oraf P77izf B6Yvkd"><ul class="VfPpkd-StrnGf-rymPhb DMZ54e" role="menu" tabindex="-1" aria-label="More review actions"><li class="bO7Z3c VfPpkd-StrnGf-rymPhb-ibnC6b" role="menuitem" tabindex="-1" data-option="2"><span class="VfPpkd-StrnGf-rymPhb-b9t22c">Flag inappropriate</span></li>` +
+      (r.history ? `<li class="bO7Z3c VfPpkd-StrnGf-rymPhb-ibnC6b" role="menuitem" tabindex="-1" data-option="3"><span class="VfPpkd-StrnGf-rymPhb-b9t22c">Show review history</span></li>` : "") +
+      `</ul></div></div></div></div></div>` +
+      `<div class="Jx4nYe"><div aria-label="Rated ${r.stars} stars out of five stars" role="img" class="iXRFPc">${stars}</div><span class="bp9Aid">${r.date}</span></div></header>` +
+      `<div class="h3YV2d">${r.text}</div>` +
+      `<div data-review-id="${r.id}" data-original-thumbs-up-count="${r.helpful}"><div class="AJTPZc">${r.helpful === 1 ? "One person found this review helpful" : r.helpful + " people found this review helpful"}</div>` +
+      `<footer class="Anb3we"><div class="NC0Ppb">Did you find this helpful?</div><div data-expanded-toggles="true"><div class="b6SkTb"><div role="button" id="${r.id}::1" class="D3Qfie VfPpkd-ksKsZd-XxIAqe UQI9cd kofMvc EFMXQ" aria-label="Yes" tabindex="0" aria-pressed="false" data-single-select="true"><div class="kW9Bj" aria-hidden="true"><span class="ypTNYd">Yes</span></div></div><div role="button" id="${r.id}::2" class="D3Qfie VfPpkd-ksKsZd-XxIAqe UQI9cd kofMvc EFMXQ" aria-label="No" tabindex="0" aria-pressed="false" data-single-select="true"><div class="kW9Bj" aria-hidden="true"><span class="ypTNYd">No</span></div></div></div></div></footer></div>` +
+      (r.response ? `<div class="ocpBU"><div class="I6j64d"><div class="X43Kjb">${r.response.who}</div><div class="I9Jtec">${r.response.date}</div></div><div class="ras4vb"><div>${r.response.text}</div></div></div>` : "");
+    return el;
+  }
+
+  const cards = document.getElementById("cards");
+  for (const r of REVIEWS.slice(0, 3)) cards.appendChild(card(r));
+
+  let shownInDialog = 0;
+  let pending = false;
+  const BATCHES = [10, 14];
+  function appendBatch() {
+    const list = document.getElementById("all-list");
+    const idx = BATCHES.indexOf(shownInDialog);
+    const next = shownInDialog === 0 ? BATCHES[0] : idx >= 0 && idx + 1 < BATCHES.length ? BATCHES[idx + 1] : shownInDialog;
+    for (let i = shownInDialog; i < next; i++) list.appendChild(card(REVIEWS[i]));
+    shownInDialog = next;
+  }
+  document.getElementById("see-all").addEventListener("click", () => {
+    const dialog = document.getElementById("all-reviews");
+    dialog.hidden = false;
+    setTimeout(() => {
+      appendBatch();
+      document.getElementById("all-list").addEventListener("scroll", () => {
+        const list = document.getElementById("all-list");
+        if (list.scrollTop + list.clientHeight < list.scrollHeight - 5) return;
+        if (pending) return;
+        pending = true;
+        setTimeout(() => { appendBatch(); pending = false; }, 60);
+      });
+    }, 100);
+  });
+</script>
+</body>
+</html>

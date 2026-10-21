@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hôtel Lutetia - Google Maps</title>
+<!--
+  SYNTHETIC stand-in for a Google Maps place page (WP19b). The live Maps page
+  could not be rendered from the development environment on 2026-10-21 (the
+  application bundle answered HTTP 403, see the recipe header), so this page
+  follows the Maps markup known from the public DOM: a consent dialog first,
+  then the place panel with an h1, [role=img][aria-label="4.6 stars"], the
+  review count, button[data-item-id=address], a category button, a price
+  level, a tablist whose "Reviews for ..." tab reveals a scrollable pane of
+  div[data-review-id] cards (reviewer button with a /maps/contrib/ link, star
+  img, relative time, text behind a "More" expander, a "Response from the
+  owner" block on some, an "N likes" button). Scrolling the pane appends more
+  cards twice (5, then 9, then 12). Reviewer names are invented.
+-->
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  [hidden] { display: none !important; }
+  #consent { position: fixed; inset: 20% 20%; background: #fff; border: 1px solid #888; padding: 24px; z-index: 10; }
+  #pane { height: 260px; overflow-y: auto; border-top: 1px solid #ddd; }
+  div[data-review-id] { padding: 8px; border-bottom: 1px solid #eee; min-height: 90px; }
+  button[data-href] { display: block; background: none; border: 0; text-align: left; padding: 0; }
+</style>
+</head>
+<body>
+<div id="consent" role="dialog" aria-label="Before you continue to Google">
+  <h1>Before you continue to Google</h1>
+  <p>We use cookies and data to deliver and maintain Google services.</p>
+  <button id="reject" type="button">Reject all</button>
+  <button id="accept" type="button">Accept all</button>
+</div>
+
+<div id="app"></div>
+
+<template id="place">
+<div role="main" aria-label="Hôtel Lutetia">
+  <h1>Hôtel Lutetia</h1>
+  <div>
+    <span>4.6</span>
+    <span role="img" aria-label="4.6 stars"><span>★★★★★</span></span>
+    <span aria-label="1,234 reviews">(1,234)</span>
+    <span>·</span>
+    <span aria-label="Price: Very expensive">$$$$</span>
+    <span>·</span>
+    <button type="button" jsaction="pane.rating.category">5-star hotel</button>
+  </div>
+  <button type="button" data-item-id="address" aria-label="Address: 45 Boulevard Raspail, 75006 Paris, France">45 Boulevard Raspail, 75006 Paris, France</button>
+  <div role="tablist">
+    <button type="button" role="tab" aria-selected="true" aria-label="Overview for Hôtel Lutetia">Overview</button>
+    <button type="button" role="tab" aria-selected="false" aria-label="Reviews for Hôtel Lutetia">Reviews</button>
+    <button type="button" role="tab" aria-selected="false" aria-label="About Hôtel Lutetia">About</button>
+  </div>
+  <div id="overview">
+    <p>Luxurious hotel on the Left Bank, with a spa, a brasserie and a jazz bar.</p>
+  </div>
+  <div id="reviews" hidden>
+    <div>
+      <button type="button" aria-label="Sort reviews">Sort</button>
+      <button type="button" aria-label="Search reviews">Search reviews</button>
+    </div>
+    <div id="pane"></div>
+  </div>
+</div>
+</template>
+
+<script>
+  const REVIEWS = [
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUM1a09xY3B3RRAB", name: "Marie D.", guide: "Local Guide · 54 reviews · 120 photos", stars: 5, when: "2 months ago",
+      text: "A dream stay on the Left Bank. The spa is wonderful and the breakfast buffet is generous.",
+      more: " The staff remembered our names after one day and the jazz bar is a lovely place to end the evening.",
+      likes: 3, response: { when: "a month ago", text: "Thank you Marie, we look forward to welcoming you again." } },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4cGZtNUV3EAE", name: "Tom Becker", guide: "12 reviews", stars: 4, when: "3 weeks ago",
+      text: "Beautiful art deco building and a great location between Saint-Germain and the Bon Marché. Rooms are smaller than the price suggests.", likes: 1 },
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUNMNnFhSmlnRRAB", name: "Aiko Tanaka", guide: "Local Guide · 210 reviews", stars: 5, when: "a month ago",
+      text: "Impeccable service. The pool and hammam were quiet in the morning.", likes: 7 },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4Z2JDbkdBEAE", name: "Luc Moreau", guide: "3 reviews", stars: 2, when: "a day ago",
+      text: "Noisy street side room and a long wait at check-in. Expected more for the price.",
+      more: " The concierge did help with a restaurant booking, which was the highlight.", likes: 0,
+      response: { when: "a day ago", text: "We are sorry about the wait at check-in and have shared your comments with the front desk team." } },
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUNiNk5PY3BBRRAB", name: "Priya N.", guide: "Local Guide · 88 reviews", stars: 4, when: "5 months ago",
+      text: "Elegant, calm and central. Breakfast is pricey but excellent.", likes: 2 },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4a3ZXWUtREAE", name: "Carlos R.", guide: "27 reviews", stars: 5, when: "6 months ago",
+      text: "The bar alone is worth a visit. Live jazz, perfect cocktails.", likes: 4 },
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUQ1LXI2V2tBRRAB", name: "Hannah W.", guide: "Local Guide · 31 reviews", stars: 3, when: "8 months ago",
+      text: "Good but not exceptional. Housekeeping missed our room one day.", likes: 0 },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4LTdfZkJREAE", name: "Jean-Pierre L.", guide: "9 reviews", stars: 5, when: "a year ago",
+      text: "Historic hotel renovated with taste. The suites are magnificent.", likes: 11 },
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUM3NnRHZzlnRRAB", name: "Olga S.", guide: "Local Guide · 140 reviews", stars: 4, when: "Edited 2 days ago",
+      text: "Updated after a second stay: still lovely, breakfast improved.", likes: 2 },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4NU9LcUVREAE", name: "Sam O.", guide: "2 reviews", stars: 1, when: "2 years ago",
+      text: "Overpriced and the air conditioning did not work during a heat wave.", likes: 5,
+      response: { when: "2 years ago", text: "We apologise; the system has since been replaced." } },
+    { id: "ChdDSUhNMG9nS0VJQ0FnSUR6Z3FycjdnRRAB", name: "Fatima Z.", guide: "Local Guide · 67 reviews", stars: 5, when: "3 years ago",
+      text: "Perfect anniversary weekend.", likes: 1 },
+    { id: "ChZDSUhNMG9nS0VJQ0FnSUR4cjVLbU5nEAE", name: "George K.", guide: "15 reviews", stars: 4, when: "4 years ago",
+      text: "Classic Parisian luxury, attentive staff.", likes: 0 },
+  ];
+  const BATCHES = [5, 9, 12];
+  let shown = 0;
+  let pending = false;
+
+  function card(r) {
+    const el = document.createElement("div");
+    el.setAttribute("data-review-id", r.id);
+    const full = r.text + (r.more || "");
+    el.innerHTML =
+      `<button type="button" data-href="https://www.google.com/maps/contrib/${100000 + REVIEWS.indexOf(r)}/reviews" aria-label="Photo of ${r.name}">` +
+      `<div>${r.name}</div><div>${r.guide}</div></button>` +
+      `<div><span role="img" aria-label="${r.stars} star${r.stars === 1 ? "" : "s"}"><span>${"★".repeat(r.stars)}</span></span> <span>${r.when}</span></div>` +
+      `<div class="MyEned"><span class="wiI7pd">${r.text}${r.more ? "…" : ""}</span>` +
+      (r.more ? `<button type="button" aria-label="See more" aria-expanded="false">More</button>` : "") + `</div>` +
+      `<div><button type="button" aria-label="${r.likes} like${r.likes === 1 ? "" : "s"}">Like</button> <button type="button" aria-label="Share ${r.name}'s review">Share</button></div>` +
+      (r.response ? `<div class="CDe7pd"><div><span>Response from the owner</span><span>${r.response.when}</span></div><div class="wiI7pd">${r.response.text}</div></div>` : "");
+    const more = el.querySelector('button[aria-label="See more"]');
+    if (more) more.addEventListener("click", () => {
+      el.querySelector(".wiI7pd").textContent = full;
+      more.setAttribute("aria-expanded", "true");
+      more.hidden = true;
+    });
+    return el;
+  }
+
+  function appendBatch() {
+    const idx = BATCHES.indexOf(shown);
+    const next = idx >= 0 && idx + 1 < BATCHES.length ? BATCHES[idx + 1] : shown === 0 ? BATCHES[0] : shown;
+    const pane = document.getElementById("pane");
+    for (let i = shown; i < next; i++) pane.appendChild(card(REVIEWS[i]));
+    shown = next;
+  }
+
+  function render() {
+    document.getElementById("consent").remove();
+    document.getElementById("app").appendChild(document.getElementById("place").content.cloneNode(true));
+    const tabs = document.querySelectorAll('[role="tab"]');
+    tabs[1].addEventListener("click", () => {
+      tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
+      tabs[1].setAttribute("aria-selected", "true");
+      document.getElementById("overview").hidden = true;
+      document.getElementById("reviews").hidden = false;
+      // Cards arrive a moment after the tab opens, like the live pane.
+      setTimeout(() => {
+        appendBatch();
+        document.getElementById("pane").addEventListener("scroll", () => {
+          const pane = document.getElementById("pane");
+          if (pane.scrollTop + pane.clientHeight < pane.scrollHeight - 5) return;
+          if (pending) return;
+          pending = true;
+          setTimeout(() => { appendBatch(); pending = false; }, 60);
+        });
+      }, 120);
+    });
+  }
+  document.getElementById("reject").addEventListener("click", () => { document.documentElement.setAttribute("data-consent", "rejected"); render(); });
+  document.getElementById("accept").addEventListener("click", () => { document.documentElement.setAttribute("data-consent", "accepted"); render(); });
+</script>
+</body>
+</html>
