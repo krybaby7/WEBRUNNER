@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  AMAZON_MEDLEY_CAVEAT,
   AMAZON_NEEDS_LOGIN_MESSAGE,
   amazonReviewsRecipe,
   amazonSortFor,
@@ -78,7 +79,7 @@ describe.skipIf(!probe.available)(`amazon-reviews recipe in Chromium${probe.avai
   }, 30_000);
 
   const recipe = (over: Parameters<typeof createAmazonReviewsRecipe>[0] = {}) =>
-    createAmazonReviewsRecipe({ baseUrl: `${server.url}/amazon`, pollMs: 50, maxWaitMs: 8000, settleMs: 800, ...over });
+    createAmazonReviewsRecipe({ baseUrl: `${server.url}/amazon`, pollMs: 50, maxWaitMs: 8000, settleMs: 800, medleyWaitMs: 1500, ...over });
 
   const amazonUrl = (asin: string) => `https://www.amazon.com/dp/${asin}`;
 
@@ -145,6 +146,40 @@ describe.skipIf(!probe.available)(`amazon-reviews recipe in Chromium${probe.avai
     expect(err.message).toMatch(/accounts connect amazon/);
     expect(llm.calls).toHaveLength(0);
     expect(server.requests.some((x) => x.startsWith("GET /amazon/ap/signin"))).toBe(true);
+    // It looked for the product page's top reviews first; that page had none, so the login error stands.
+    expect(server.requests).toContain("GET /amazon/dp/B0SIGNIN00");
+  });
+
+  it("reads the product page's top reviews when the list needs a login (live medley, 2026-10-21)", async () => {
+    const llm = neverLlm();
+    const r = await runRecipe(session, recipe(), makeQuery({ subject: amazonUrl("B0MEDLEY00"), subject_url: amazonUrl("B0MEDLEY00"), per_source: 20 }), llm);
+    expect(r.error).toBeUndefined();
+    expect(llm.calls).toHaveLength(0);
+    expect(r.spy.forbidden).toEqual([]);
+    expect(server.requests).toContain("GET /amazon/dp/B0MEDLEY00");
+    expect(r.caveats).toContain(AMAZON_MEDLEY_CAVEAT);
+    const { subject, reviews } = r.result!;
+    expect(subject).toMatchObject({ source: "amazon", rating_avg: 4.3, review_count: 1429 });
+    expect(subject.name).toMatch(/^Sony WH-1000XM5/);
+    expect(reviews).toHaveLength(8);
+    for (const review of reviews) {
+      expect(ReviewSchema.safeParse(review).success).toBe(true);
+      expect(review.id).toMatch(/^amazon:R[A-Z0-9]{9,14}$/);
+      expect(review.rating).toBeGreaterThanOrEqual(1);
+      expect(review.title?.length).toBeGreaterThan(0);
+      expect(review.text.length).toBeGreaterThan(20);
+      expect(review.text).not.toMatch(/double tap to read/i);
+    }
+    expect(reviews[0]).toMatchObject({
+      id: "amazon:RC9F7YV8DG5BP",
+      author: "Amazon Customer A",
+      rating: 5,
+      title: "They thought of everything!",
+      created_at: "2026-09-09T00:00:00.000Z",
+      verified: true,
+      helpful_votes: 2,
+    });
+    expect(reviews[0]?.text).toMatch(/^Amazing headphones at an amazing price/);
   });
 
   it("maps the CAPTCHA page to blocked without needsLogin, on the reviews page and on the search page", async () => {

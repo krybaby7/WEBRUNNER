@@ -58,7 +58,9 @@ export interface ReviewsFixtureServer {
  *                 /play/details?id=      notion.id the details page; blocked.app; stalled.app;
  *                                        unstructured.app (no data-review-id); missing.app (404 text)
  *   Amazon        /amazon/s?k=           the search page; "Nothing" empty; "Captcha" the CAPTCHA page; "Stalled"
- *                 /amazon/product-reviews/<ASIN>  B0B2FCT81R reviews; B0SIGNIN00 302 to /amazon/ap/signin;
+ *                 /amazon/product-reviews/<ASIN>  B0B2FCT81R reviews; B0SIGNIN00 and B0MEDLEY00 302 to /amazon/ap/signin;
+ *                 /amazon/dp/<ASIN>      B0MEDLEY00 the live product page with its "Top reviews" medley;
+ *                                        any other ASIN a product page without a medley;
  *                                        B0CAPTCHA0 the CAPTCHA page; B0STALLED0; B0UNSTRUCT (no review hooks);
  *                                        B0NOREVIEW (product info, "No customer reviews"); B0STATUS50 (HTTP 503)
  *                 /amazon/ap/signin      the recorded sign-in interstitial
@@ -104,7 +106,7 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
       else html(readFixture("amazon-search.html"));
     } else if (path.startsWith("/amazon/product-reviews/")) {
       const asin = path.split("/")[3] ?? "";
-      if (asin === "B0SIGNIN00") {
+      if (asin === "B0SIGNIN00" || asin === "B0MEDLEY00") {
         res
           .writeHead(302, { location: `/amazon/ap/signin?openid.return_to=${encodeURIComponent(`http://localhost${path}${u.search}`)}&openid.mode=checkid_setup` })
           .end();
@@ -119,6 +121,10 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
         );
       } else if (asin === "B0STATUS50") html("<title>503</title>", 503);
       else html(readFixture("amazon-reviews.html"));
+    } else if (path.startsWith("/amazon/dp/")) {
+      const asin = path.split("/")[3] ?? "";
+      if (asin === "B0MEDLEY00") html(readFixture("amazon-product-medley-live.html"));
+      else html('<title>Amazon.com: Gadget</title><span id="productTitle">Gadget without a medley</span><span data-hook="rating-out-of-text">4.1 out of 5</span>');
     } else if (path === "/amazon/ap/signin") {
       html(readFixture("amazon-signin.html"));
     } else {
