@@ -1,0 +1,472 @@
+import type { Page } from "playwright";
+import { NormalizedReviewsQuerySchema, type NormalizedReviewsQuery } from "../../../schemas/reviews.js";
+import {
+  BASIC_PROBE_FIELDS_JS,
+  CONSENT_CAVEAT,
+  MIN_PROBE_REVIEWS,
+  ReviewSearchResultSchema,
+  SubjectNotFoundError,
+  assembleReview,
+  assembleSubject,
+  blockedReason,
+  caveatSink,
+  dedupeReviews,
+  dismissConsent,
+  errMsg,
+  extractReviewsWithLlm,
+  mergeSubject,
+  navigateTo,
+  reviewsFromExtraction,
+  sleep,
+  timeGuard,
+  toRecipeError,
+  type BasicProbe,
+  type RawReview,
+  type RawSubject,
+  type ReviewsRecipe,
+} from "../../reviews/sources/shared-browser.js";
+import type { ReviewSearchResult } from "../../reviews/types.js";
+import { RecipeError, type RecipeContext } from "./types.js";
+
+/**
+ * Google Maps reviews recipe (PLAN.md 14.6, 4.5, WP19b).
+ *
+ * Personal use only: reading Google Maps automatically is against Google's
+ * terms (PLAN.md 14.0). No stealth, no CAPTCHA solving: a bot wall is
+ * `blocked`. The recipe navigates, dismisses the consent dialog (reject
+ * preferred, as in flights), opens the first result when a list is shown,
+ * opens the "Reviews" tab, scrolls the reviews pane at most three times,
+ * clicks the read-only "More" expanders inside reviews, and reads
+ * `div[data-review-id]`. It never types.
+ *
+ * Live findings, 2026-10-21, headless Chromium in the development environment
+ * (3 page loads): `https://www.google.com/maps/search/Hotel%20Lutetia%20Paris?hl=en`
+ * answered HTTP 200 with the Maps shell, but the application bundle
+ * `https://www.google.com/maps/_/js/k=maps.m.en....` answered HTTP 403, so the
+ * page never rendered (body text "Collapse side panel" only, no consent
+ * dialog, no results). The fixture page under `test/fixtures/reviews/browser/`
+ * is therefore SYNTHETIC: it follows the Maps place-page markup known from
+ * the public DOM (`h1` name, `[role="img"][aria-label="4.6 stars"]`, the
+ * "1,234 reviews" count, `button[data-item-id="address"]`, a
+ * `button[role="tab"]` named "Reviews for ...", a scrollable pane of
+ * `div[data-review-id]` cards each holding a `button[data-href*="/maps/contrib/"]`
+ * with the reviewer's name, `[role="img"][aria-label="N stars"]`, a relative
+ * time ("2 months ago"), the text in `span.wiI7pd` behind a "More" button, an
+ * optional "Response from the owner" block and a "N likes" button). The
+ * owner's first run from a home IP is the real test of the selectors; the
+ * schema-driven LLM fallback covers a redesign.
+ */
+
+export const GOOGLE_MAPS_REVIEWS_SITE = "google_maps_reviews";
+export const GOOGLE_MAPS_SEARCH_URL = "https://www.google.com/maps/search/";
+
+/** Tabs are named "Reviews for <place>" or just "Reviews". */
+const REVIEWS_TAB_RE = /^\s*Reviews\b/i;
+const MORE_REVIEWS_RE = /\bmore reviews\b/i;
+const NO_RESULTS_RE = /\b(?:can.t find|couldn.t find|no results found|did not match any)\b/i;
+
+export interface GoogleMapsReviewsRecipeOptions {
+  /** Replaces https://www.google.com/maps/search/ (tests point it at a fixture server). */
+  searchBaseUrl?: string;
+  /** Longest wait for a place page or a results list, in ms. Also capped at 60% of the time left. Default 30000. */
+  maxWaitMs?: number;
+  /** Poll interval while waiting. Default 300. */
+  pollMs?: number;
+  /** How many times the reviews pane is scrolled to load more. Default 3 (PLAN.md 14.6). */
+  maxScrolls?: number;
+  /** Longest wait for the first review cards after the tab was opened. Default 8000. */
+  reviewsWaitMs?: number;
+}
+
+/** True for a URL on a google.* host under /maps/ (search, place), or a short maps.app.goo.gl link. */
+export function isGoogleMapsUrl(url: string | undefined): boolean {
+  if (url === undefined) return false;
+  try {
+    const u = new URL(url);
+    if (/^maps\.app\.goo\.gl$/i.test(u.hostname) || /^goo\.gl$/i.test(u.hostname)) return true;
+    return /(^|\.)google\.[a-z.]+$/i.test(u.hostname) && /^\/maps(\/|$)/.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** The search text: subject plus location when given. */
+export function mapsSearchText(q: Pick<NormalizedReviewsQuery, "subject" | "location">): string {
+  return q.location !== undefined ? `${q.subject} ${q.location}` : q.subject;
+}
+
+export function buildGoogleMapsSearchUrl(q: Pick<NormalizedReviewsQuery, "subject" | "location">, base: string = GOOGLE_MAPS_SEARCH_URL): string {
+  return `${base}${encodeURIComponent(mapsSearchText(q))}?hl=en`;
+}
+
+function withEnglish(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.searchParams.has("hl")) u.searchParams.set("hl", "en");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page probes (strings: the project compiles without the DOM lib)
+// ---------------------------------------------------------------------------
+
+interface MapsProbe extends BasicProbe {
+  heading: string;
+  resultLinks: number;
+  hasReviewsTab: boolean;
+  hasMoreReviews: boolean;
+  hasRating: boolean;
+  reviewCards: number;
+}
+
+const PROBE_JS = `(() => {
+  const text = document.body ? (document.body.innerText || "") : "";
+  const h1 = document.querySelector("h1");
+  const tabs = Array.from(document.querySelectorAll('button[role="tab"]'));
+  const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+  const name = (el) => ((el.getAttribute("aria-label") || el.textContent || "").replace(/\\s+/g, " ").trim());
+  return {${BASIC_PROBE_FIELDS_JS}
+    heading: h1 ? (h1.textContent || "").replace(/\\s+/g, " ").trim() : "",
+    resultLinks: document.querySelectorAll('a[href*="/maps/place/"]').length,
+    hasReviewsTab: tabs.some((t) => /^\\s*Reviews\\b/i.test(name(t))),
+    hasMoreReviews: buttons.some((b) => /\\bmore reviews\\b/i.test(name(b))),
+    hasRating: !!document.querySelector('[role="img"][aria-label*="star" i]'),
+    reviewCards: document.querySelectorAll("div[data-review-id]").length,
+  };
+})()`;
+
+/** Subject fields from a place page. */
+const SUBJECT_JS = `(() => {
+  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const h1 = document.querySelector("h1");
+  const ratingEl = document.querySelector('[role="img"][aria-label*="star" i]');
+  let reviewCountText;
+  for (const el of document.querySelectorAll("[aria-label], span, button")) {
+    const label = clean(el.getAttribute("aria-label")) || (el.children.length === 0 ? clean(el.textContent) : "");
+    const m = /^\\(?([\\d.,]+\\s*[KkMm]?)\\)?\\s*reviews?$/i.exec(label) || /^([\\d.,]+\\s*[KkMm]?)\\s+reviews?\\b/i.exec(label);
+    if (m) { reviewCountText = m[1] + " reviews"; break; }
+  }
+  const addressEl = document.querySelector('button[data-item-id="address"], [data-item-id="address"], [data-tooltip="Copy address"]');
+  let address = addressEl ? clean(addressEl.getAttribute("aria-label") || addressEl.textContent) : undefined;
+  if (address) address = address.replace(/^address:\\s*/i, "");
+  const categories = Array.from(document.querySelectorAll('button[jsaction*="category" i], [data-item-id="category"], a[href*="/maps/search/"][aria-label^="Category" i]'))
+    .map((b) => clean(b.textContent)).filter((t) => t && t.length < 60);
+  const priceEl = Array.from(document.querySelectorAll("[aria-label]")).find((el) => /^price/i.test(el.getAttribute("aria-label") || "") && /^[$€£¥·\\s-]+$/.test(clean(el.textContent)));
+  return {
+    name: h1 ? clean(h1.textContent) : undefined,
+    url: location.href,
+    ratingLabel: ratingEl ? (ratingEl.getAttribute("aria-label") || undefined) : undefined,
+    reviewCountText,
+    address: address || undefined,
+    categories,
+    priceLevel: priceEl ? clean(priceEl.textContent) : undefined,
+  };
+})()`;
+
+/** Scroll the pane that holds the review cards to its end; returns how many cards exist afterwards. */
+const SCROLL_JS = `(() => {
+  const first = document.querySelector("div[data-review-id]");
+  let node = first ? first.parentElement : null;
+  let pane = null;
+  while (node && node !== document.body) {
+    const s = getComputedStyle(node);
+    if (node.scrollHeight > node.clientHeight + 10 && /(auto|scroll)/.test(s.overflowY)) { pane = node; break; }
+    node = node.parentElement;
+  }
+  if (pane) { pane.scrollTop = pane.scrollHeight; pane.dispatchEvent(new Event("scroll")); }
+  else window.scrollTo(0, document.documentElement.scrollHeight);
+  return document.querySelectorAll("div[data-review-id]").length;
+})()`;
+
+/** Click the read-only "More" expanders inside review cards. Returns how many were clicked. */
+const EXPAND_JS = `(() => {
+  let n = 0;
+  for (const b of document.querySelectorAll('div[data-review-id] button, div[data-review-id] [role="button"]')) {
+    const label = (b.getAttribute("aria-label") || "").replace(/\\s+/g, " ").trim();
+    const text = (b.textContent || "").replace(/\\s+/g, " ").trim();
+    const expander = /^(more|see more|read more|show more)$/i.test(text) || /^(see|read|show) more\\b/i.test(label);
+    if (!expander || b.getAttribute("aria-expanded") === "true") continue;
+    try { b.click(); n++; } catch (e) { /* ignore */ }
+  }
+  return n;
+})()`;
+
+/** One record per div[data-review-id]. */
+const COLLECT_JS = `(() => {
+  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const TIME_RE = /^(?:edited\\s+)?(?:an?|\\d+)\\s+(?:second|minute|hour|day|week|month|year)s?\\s+ago(?:\\s+on\\s+google)?$|^(?:yesterday|today|just now)$/i;
+  const NOISE_RE = /^(more|see more|read more|like|share|local guide|new|helpful|\\d+ reviews?|\\d+ photos?|·|•)$|^\\d+ (reviews?|photos?)\\b|^local guide\\b|^response from the owner/i;
+  const out = [];
+  for (const card of document.querySelectorAll("div[data-review-id]")) {
+    if (card.querySelector("div[data-review-id]")) continue; // nested wrappers: read the innermost
+    const rec = { nativeId: card.getAttribute("data-review-id") || undefined };
+    const star = Array.from(card.querySelectorAll('[role="img"][aria-label]')).find((el) => /\\bstars?\\b|out of 5|\\/\\s*5/i.test(el.getAttribute("aria-label") || ""));
+    if (star) rec.ratingLabel = star.getAttribute("aria-label") || undefined;
+    const authorEl = card.querySelector('button[data-href*="/maps/contrib/"], a[href*="/maps/contrib/"], button[aria-label^="Photo of" i]');
+    if (authorEl) {
+      const href = authorEl.getAttribute("data-href") || authorEl.getAttribute("href");
+      if (href) rec.url = href;
+      const nameLine = (authorEl.innerText || authorEl.textContent || "").split("\\n").map(clean).find((l) => l && !NOISE_RE.test(l));
+      const label = clean(authorEl.getAttribute("aria-label"));
+      rec.author = nameLine || (label ? label.replace(/^photo of\\s+/i, "") : undefined);
+    }
+    let response = null;
+    for (const el of card.querySelectorAll("div, section")) {
+      if (/^\\s*response from the owner/i.test(el.innerText || "")) { response = el; break; }
+    }
+    const inside = (el, root) => !!root && root.contains(el);
+    if (response) {
+      const rl = Array.from(response.querySelectorAll("*")).filter((el) => el.children.length === 0 && clean(el.textContent));
+      const timeLeaf = rl.find((el) => TIME_RE.test(clean(el.textContent)));
+      if (timeLeaf) rec.responseDateText = clean(timeLeaf.textContent);
+      const body = rl.filter((el) => el !== timeLeaf && !/^response from the owner/i.test(clean(el.textContent))).map((el) => clean(el.textContent));
+      rec.responseText = body.join("\\n") || undefined;
+    }
+    const leaves = Array.from(card.querySelectorAll("*")).filter((el) => el.children.length === 0 && !inside(el, response) && !inside(el, authorEl) && el.tagName !== "SCRIPT" && el.tagName !== "STYLE");
+    for (const el of leaves) {
+      const t = clean(el.textContent);
+      if (!rec.dateText && TIME_RE.test(t)) { rec.dateText = t; break; }
+    }
+    const preferred = card.querySelector("span.wiI7pd, [data-expandable-section], .MyEned");
+    if (preferred && !inside(preferred, response)) rec.text = clean(preferred.innerText || preferred.textContent);
+    if (!rec.text) {
+      let best = "";
+      for (const el of leaves) {
+        const t = clean(el.textContent);
+        if (!t || TIME_RE.test(t) || NOISE_RE.test(t) || t === rec.author) continue;
+        if (t.length > best.length) best = t;
+      }
+      rec.text = best || undefined;
+    }
+    const like = Array.from(card.querySelectorAll('button[aria-label], [role="button"][aria-label]')).map((b) => b.getAttribute("aria-label") || "").find((l) => /^\\d[\\d,.]*\\s*(likes?|people found this helpful|helpful)/i.test(l));
+    if (like) rec.helpfulText = like;
+    out.push(rec);
+  }
+  return out;
+})()`;
+
+/** Visible text of the pane that holds the reviews (or the whole page). */
+const PANE_TEXT_JS = `(() => {
+  const first = document.querySelector("div[data-review-id]");
+  let node = first ? first.parentElement : null;
+  while (node && node !== document.body) {
+    const s = getComputedStyle(node);
+    if (node.scrollHeight > node.clientHeight + 10 && /(auto|scroll)/.test(s.overflowY)) return node.innerText || "";
+    node = node.parentElement;
+  }
+  const main = document.querySelector('[role="main"]');
+  return (main && main.innerText) || (document.body ? document.body.innerText : "") || "";
+})()`;
+
+// ---------------------------------------------------------------------------
+// Recipe
+// ---------------------------------------------------------------------------
+
+export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOptions = {}): ReviewsRecipe {
+  const searchBaseUrl = options.searchBaseUrl ?? GOOGLE_MAPS_SEARCH_URL;
+  const maxWaitMs = options.maxWaitMs ?? 30_000;
+  const pollMs = options.pollMs ?? 300;
+  const maxScrolls = options.maxScrolls ?? 3;
+  const reviewsWaitMs = options.reviewsWaitMs ?? 8000;
+  const site = "Google Maps";
+
+  /** A test base URL accepts any URL on its origin as a place page. */
+  const onFixtureOrigin = (url: string): boolean => {
+    if (searchBaseUrl === GOOGLE_MAPS_SEARCH_URL) return false;
+    try {
+      return new URL(url).origin === new URL(searchBaseUrl).origin;
+    } catch {
+      return false;
+    }
+  };
+
+  const buildUrl = (q: NormalizedReviewsQuery): string | null => {
+    if (q.subject_url !== undefined) return isGoogleMapsUrl(q.subject_url) || onFixtureOrigin(q.subject_url) ? withEnglish(q.subject_url) : null;
+    return buildGoogleMapsSearchUrl(q, searchBaseUrl);
+  };
+
+  async function run(page: Page, params: NormalizedReviewsQuery, ctx: RecipeContext): Promise<ReviewSearchResult> {
+    const parsed = NormalizedReviewsQuerySchema.safeParse(params);
+    if (!parsed.success) {
+      throw new RecipeError("invalid_input", `invalid reviews query: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
+    }
+    const q = parsed.data;
+    const caveat = caveatSink(ctx);
+    const guard = timeGuard(ctx, site);
+    const nowMs = Date.now();
+
+    try {
+      guard.check("before navigating");
+      const url = buildUrl(q);
+      if (url === null) {
+        throw new SubjectNotFoundError(`Google Maps cannot look up a URL on ${new URL(q.subject_url as string).hostname}; pass the place's name instead`);
+      }
+      page.on("dialog", (d) => {
+        d.dismiss().catch(() => undefined);
+      });
+      await navigateTo(page, url, ctx, site);
+      await waitForPlace(page, ctx, { caveat, guard });
+
+      const subjectRaw = await page.evaluate<RawSubject>(SUBJECT_JS).catch(() => ({}) as RawSubject);
+      await openReviews(page, ctx, { guard });
+      await loadMore(page, q, ctx, { guard });
+
+      guard.check("before reading reviews");
+      const raws = await page.evaluate<RawReview[]>(COLLECT_JS);
+      const source = "google_maps";
+      const reviews = raws.map((r) => assembleReview(source, r, { nowMs, caveat })).filter((r): r is NonNullable<typeof r> => r !== undefined);
+      ctx.log.debug("google maps reviews probe", { cards: raws.length, valid: reviews.length });
+
+      if (reviews.length >= MIN_PROBE_REVIEWS) {
+        return { subject: assembleSubject(source, subjectRaw, q.subject), reviews: dedupeReviews(reviews, q.per_source) };
+      }
+
+      guard.check("before the fallback extraction");
+      const paneText = await page.evaluate<string>(PANE_TEXT_JS);
+      const extracted = await extractReviewsWithLlm({
+        site,
+        source,
+        pageText: paneText,
+        pageUrl: page.url(),
+        query: q,
+        ctx,
+        hint: "The reviews are in the place's Reviews pane; each starts with the reviewer's name, then a star rating and a relative date.",
+      });
+      const fromLlm = reviewsFromExtraction(source, extracted, { nowMs, caveat });
+      const merged = dedupeReviews([...reviews, ...fromLlm], q.per_source);
+      if (merged.length === 0) {
+        caveat("Google Maps showed no reviews for this place.");
+      } else {
+        caveat("Google Maps reviews were read by the extractor model because the page structure was not recognised; fields may be incomplete.");
+      }
+      return { subject: mergeSubject(source, subjectRaw, extracted.subject, q.subject), reviews: merged };
+    } catch (err) {
+      throw toRecipeError(err, ctx, site);
+    }
+  }
+
+  /** Wait for a place page; open the first result when a list appears; dismiss consent; detect walls. */
+  async function waitForPlace(page: Page, ctx: RecipeContext, o: { caveat: (m: string) => void; guard: ReturnType<typeof timeGuard> }): Promise<void> {
+    const start = Date.now();
+    const budget = Math.max(0, Math.min(maxWaitMs, o.guard.remaining() * 0.6));
+    const until = start + budget;
+    let consentHandled = false;
+    let clickedResult = false;
+    let lastProbe: MapsProbe | undefined;
+    for (;;) {
+      o.guard.check("while waiting for the place page");
+      let probe: MapsProbe | undefined;
+      try {
+        probe = await page.evaluate<MapsProbe>(PROBE_JS);
+      } catch {
+        // Navigation under us (consent redirect, result click): probe again.
+      }
+      if (probe !== undefined) {
+        lastProbe = probe;
+        const wall = blockedReason(probe);
+        if (wall !== undefined) {
+          throw new RecipeError("blocked", `Google Maps served a bot check (${wall}) at ${probe.url}; no reviews were returned`, { retryable: false });
+        }
+        const isPlace = probe.heading !== "" && (probe.hasReviewsTab || probe.hasMoreReviews || probe.reviewCards > 0 || probe.hasRating);
+        if (isPlace) return;
+        if (!consentHandled && (await dismissConsent(page))) {
+          consentHandled = true;
+          o.caveat(CONSENT_CAVEAT);
+          await sleep(pollMs);
+          continue;
+        }
+        if (probe.resultLinks > 0 && !clickedResult) {
+          clickedResult = true;
+          const first = page.locator('a[href*="/maps/place/"]').first();
+          ctx.log.debug("google maps: opening the first result", { label: await first.getAttribute("aria-label").catch(() => null) });
+          try {
+            await first.click({ timeout: Math.min(o.guard.cap(5000), 3000) });
+          } catch (err) {
+            // The result link is an overlay with no box of its own on some layouts: click it in the page instead.
+            ctx.log.debug("google maps: locator click failed, clicking the link in the page", { error: errMsg(err) });
+            await page.evaluate(`(() => { const a = document.querySelector('a[href*="/maps/place/"]'); if (a) a.click(); })()`).catch((e: unknown) => {
+              ctx.log.warn("google maps: could not open the first result", { error: errMsg(e) });
+            });
+          }
+          await sleep(pollMs);
+          continue;
+        }
+        if (probe.resultLinks === 0 && NO_RESULTS_RE.test(probe.text)) {
+          throw new SubjectNotFoundError(`Google Maps found no place matching "${probe.title.replace(/ - Google Maps$/, "")}"`);
+        }
+      } else if (!consentHandled && (await dismissConsent(page))) {
+        consentHandled = true;
+        o.caveat(CONSENT_CAVEAT);
+      }
+      if (Date.now() >= until) {
+        throw new RecipeError("timeout", `no Google Maps place page appeared within ${Math.round(budget / 1000)}s (page: ${lastProbe?.title ?? "unknown"})`);
+      }
+      await sleep(pollMs);
+    }
+  }
+
+  /** Open the Reviews tab (or "More reviews") and wait for the first cards. */
+  async function openReviews(page: Page, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
+    o.guard.check("before opening the reviews tab");
+    const existing = await page.locator("div[data-review-id]").count();
+    const tab = page.getByRole("tab", { name: REVIEWS_TAB_RE }).first();
+    const more = page.getByRole("button", { name: MORE_REVIEWS_RE }).first();
+    try {
+      if ((await tab.count()) > 0) await tab.click({ timeout: o.guard.cap(5000) });
+      else if ((await more.count()) > 0) await more.click({ timeout: o.guard.cap(5000) });
+      else if (existing === 0) {
+        ctx.log.debug("google maps: no reviews tab or button on the place page");
+        return;
+      }
+    } catch (err) {
+      ctx.log.warn("google maps: could not open the reviews tab", { error: errMsg(err) });
+    }
+    const until = Date.now() + o.guard.cap(reviewsWaitMs);
+    while (Date.now() < until) {
+      const n = await page.locator("div[data-review-id]").count();
+      if (n > 0 && (n !== existing || existing > 0)) return;
+      await sleep(pollMs);
+    }
+  }
+
+  /** Scroll the pane at most `maxScrolls` times until `per_source` cards exist, then expand the "More" buttons. */
+  async function loadMore(page: Page, q: NormalizedReviewsQuery, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
+    let count = await page.locator("div[data-review-id]").count();
+    for (let i = 0; i < maxScrolls && count < q.per_source && count > 0; i++) {
+      o.guard.check("while scrolling the reviews");
+      const before = count;
+      try {
+        await page.evaluate(SCROLL_JS);
+      } catch (err) {
+        ctx.log.debug("google maps: scroll failed", { error: errMsg(err) });
+        break;
+      }
+      const until = Date.now() + o.guard.cap(3000);
+      do {
+        await sleep(pollMs);
+        count = await page.locator("div[data-review-id]").count();
+      } while (count <= before && Date.now() < until);
+      if (count <= before) break;
+    }
+    try {
+      const expanded = await page.evaluate<number>(EXPAND_JS);
+      if (expanded > 0) await sleep(Math.min(500, pollMs * 2));
+    } catch (err) {
+      ctx.log.debug("google maps: expanding review text failed", { error: errMsg(err) });
+    }
+  }
+
+  return {
+    site: GOOGLE_MAPS_REVIEWS_SITE,
+    paramsSchema: NormalizedReviewsQuerySchema,
+    resultSchema: ReviewSearchResultSchema,
+    buildUrl,
+    run,
+  };
+}
+
+/** The recipe against live Google Maps. */
+export const googleMapsReviewsRecipe: ReviewsRecipe = createGoogleMapsReviewsRecipe();
