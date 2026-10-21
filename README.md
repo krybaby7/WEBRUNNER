@@ -525,7 +525,7 @@ Each input is routed to the first source that can answer it: anything that looks
 }
 ```
 
-Open-Meteo only, no key, no account. A place name goes through Open-Meteo's geocoder and the first match is used; when other matches lie in a different country or region, a caveat lists up to three with their coordinates, and `location` also accepts `{ "latitude": 48.85, "longitude": 2.35 }` to pick one. `hourly: true` adds the next 48 hours. `condition` is the WMO weather code's plain-English text. Forecasts are cached for 10 minutes and geocoding for 30 days; the call is capped at 20 seconds. The forecast endpoint timed out from the development environment, so its mapping follows Open-Meteo's documentation; the geocoder answered live.
+Open-Meteo only, no key, no account. A place name goes through Open-Meteo's geocoder and the first match is used; when other matches lie in a different country or region, a caveat lists up to three with their coordinates, and `location` also accepts `{ "latitude": 48.85, "longitude": 2.35 }` to pick one. `hourly: true` adds the next 48 hours. `condition` is the WMO weather code's plain-English text. Forecasts are cached for 10 minutes and geocoding for 30 days; the call is capped at 20 seconds. The geocoder and the forecast endpoint were both verified live on 2026-10-21 (from a cloud session, not yet from the owner's own machine). Open-Meteo's free tier limits requests per IP per day: from that shared cloud IP some forecast requests answered HTTP 429 "Daily API request limit exceeded", which the tool returns as a retryable `provider` error; a home IP is far below the limit.
 
 ### exchange_rate
 
