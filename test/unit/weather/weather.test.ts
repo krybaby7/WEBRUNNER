@@ -69,7 +69,7 @@ describe("weather: geocoding (fixture recorded live 2026-10-18)", () => {
   });
 });
 
-describe("weather: forecast mapping (fixture from docs, unverified live: the forecast host timed out)", () => {
+describe("weather: forecast mapping (fixture from docs; the live shape is checked below)", () => {
   it("maps current and daily with WMO condition text and metric units", async () => {
     const { f, svc } = service();
     const out = await svc.forecast(PARIS, signal());
@@ -149,6 +149,54 @@ describe("weather: forecast mapping (fixture from docs, unverified live: the for
     const fSlow = fakeFetch(() => new Promise<Response>(() => undefined));
     const e4 = (await service(fSlow, { timeoutMs: 30 }).svc.forecast(PARIS, signal()).catch((e: unknown) => e)) as WeatherError;
     expect(e4.code).toBe("timeout");
+  });
+});
+
+describe("weather: forecast mapping against a live response (recorded 2026-10-21)", () => {
+  const live = load("forecast-paris-live");
+  const liveFetch = () => fakeFetch((call) => (new URL(call.url).hostname === "api.open-meteo.com" ? jsonResponse(live) : respond(call)));
+
+  it("maps the recorded response: current, three days and 48 hours from the current hour", async () => {
+    const out = await service(liveFetch()).svc.forecast({ ...PARIS, hourly: true }, signal());
+    expect(WeatherOutputSchema.safeParse(out).success).toBe(true);
+    expect(out.current).toEqual({
+      time: "2026-10-21T19:30", temperature: 11.9, apparent_temperature: 8.3, humidity_pct: 63, wind_speed: 16.3, wind_direction_deg: 248,
+      precipitation: 0, weather_code: 0, condition: "Clear sky", is_day: false,
+    });
+    expect(out.daily.map((d) => [d.date, d.temp_max, d.temp_min, d.condition])).toEqual([
+      ["2026-10-21", 14.5, 8.3, "Slight rain showers"],
+      ["2026-10-22", 14.9, 8.8, "Slight rain"],
+      ["2026-10-23", 12.9, 9.4, "Slight rain showers"],
+    ]);
+    expect(out.daily[0]).toMatchObject({ sunrise: "2026-10-21T08:20", sunset: "2026-10-21T18:49", precipitation_probability_max: 85, uv_index_max: 2.45 });
+    expect(out.hourly).toHaveLength(48);
+    expect(out.hourly?.[0]?.time).toBe("2026-10-21T19:00");
+    expect(out.hourly?.at(-1)?.time).toBe("2026-10-23T18:00");
+    expect(out.location.timezone).toBe("Europe/Paris");
+  });
+
+  it("asks for at least three days when hourly is on, so a one-day request still gets 48 hours", async () => {
+    const f = liveFetch();
+    const out = await service(f).svc.forecast({ ...PARIS, days: 1, hourly: true }, signal());
+    expect(new URL(f.calls[1]?.url ?? "").searchParams.get("forecast_days")).toBe("3");
+    expect(out.daily).toHaveLength(1);
+    expect(out.hourly).toHaveLength(48);
+    expect(buildForecastQuery({ latitude: 1, longitude: 2 }, { days: 1, units: "metric", hourly: false })).toContain("forecast_days=1");
+    expect(buildForecastQuery({ latitude: 1, longitude: 2 }, { days: 2, units: "metric", hourly: true })).toContain("forecast_days=3");
+    expect(buildForecastQuery({ latitude: 1, longitude: 2 }, { days: 7, units: "metric", hourly: true })).toContain("forecast_days=7");
+  });
+
+  it("names Open-Meteo's daily-limit 429 in a retryable provider error", async () => {
+    const f = fakeFetch((call) =>
+      new URL(call.url).hostname === "api.open-meteo.com"
+        ? jsonResponse({ error: true, reason: "Daily API request limit exceeded. Please try again tomorrow." }, 429)
+        : respond(call),
+    );
+    const err = (await service(f).svc.forecast(PARIS, signal()).catch((e: unknown) => e)) as WeatherError;
+    expect(err.code).toBe("provider");
+    expect(err.retryable).toBe(true);
+    expect(err.message).toContain("HTTP 429");
+    expect(err.message).toContain("Daily API request limit exceeded");
   });
 });
 

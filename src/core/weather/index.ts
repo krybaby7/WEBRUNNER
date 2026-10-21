@@ -11,10 +11,20 @@ import { conditionText } from "./codes.js";
  *   https://geocoding-api.open-meteo.com/v1/search?name=Paris&count=5&language=en&format=json
  *   -> results[] of { name, latitude, longitude, country, country_code, admin1, admin2, timezone, population, ... }
  *   (Paris FR first, then four US towns named Paris). A place with no match answers `{"generationtime_ms":...}` with no `results`.
- * Forecast: api.open-meteo.com timed out from the development environment, so
- * the response mapping below follows the documented shape (variables as parallel
- * arrays under `current`, `daily` and `hourly`, each with a `time` array in the
- * location's local time when `timezone=auto`); see test/fixtures/weather/forecast-paris.json.
+ * Forecast: api.open-meteo.com timed out from the development environment on
+ * 2026-10-18, so the mapping was first written from the documented shape
+ * (variables as parallel arrays under `current`, `daily` and `hourly`, each with
+ * a `time` array in the location's local time when `timezone=auto`; see
+ * test/fixtures/weather/forecast-paris.json). Verified live on 2026-10-21 from a
+ * cloud session: the response had exactly the documented keys and units
+ * (test/fixtures/weather/forecast-paris-live.json). From that shared cloud IP
+ * some requests answered HTTP 429 `{"error":true,"reason":"Daily API request
+ * limit exceeded..."}` (Open-Meteo's free tier counts calls per IP); that is a
+ * retryable `provider` error naming the reason.
+ *
+ * `hourly` holds the next 48 hours (14.3), but Open-Meteo returns hourly data
+ * only for the `forecast_days` requested, so an hourly request asks for at least
+ * HOURLY_MIN_DAYS days and `daily` is cut back to the requested `days`.
  */
 
 export const GEOCODING_BASE_URL = "https://geocoding-api.open-meteo.com";
@@ -22,6 +32,8 @@ export const FORECAST_BASE_URL = "https://api.open-meteo.com";
 export const WEATHER_DEFAULT_TIMEOUT_MS = 10_000;
 export const WEATHER_TTL_MS = { forecast: 10 * 60_000, geocoding: 30 * 24 * 60 * 60_000 } as const;
 const GEOCODE_COUNT = 5;
+/** Days of forecast that always cover the next 48 hours, whatever the current hour (72 - 23 >= 48). */
+const HOURLY_MIN_DAYS = 3;
 const MAX_ALTERNATIVES = 3;
 
 const CURRENT_VARS = [
@@ -139,7 +151,7 @@ export function buildForecastQuery(coords: Coordinates, q: Pick<WeatherQuery, "d
     latitude: String(coords.latitude),
     longitude: String(coords.longitude),
     timezone: "auto",
-    forecast_days: String(q.days),
+    forecast_days: String(q.hourly ? Math.max(q.days, HOURLY_MIN_DAYS) : q.days),
     current: CURRENT_VARS.join(","),
     daily: DAILY_VARS.join(","),
   });
