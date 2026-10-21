@@ -3,18 +3,24 @@ import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Config } from "../config.js";
+import { createAccountsService } from "../core/accounts/index.js";
 import { resolveHeadless } from "../core/browser/session.js";
 import { buildFastFetchers } from "../core/fetch/fast/index.js";
 import { buildAllFlightProviders } from "../core/flights/providers/index.js";
+import { buildAllHotelProviders } from "../core/hotels/providers/index.js";
+import { buildAllMarketProviders } from "../core/markets/providers/index.js";
+import { buildAllReviewSources } from "../core/reviews/sources/index.js";
 import { buildProviders } from "../core/search/providers/index.js";
+import { buildAllSocialPlatforms } from "../core/social/platforms/index.js";
 import type { Deps } from "../deps.js";
+import { AccountPlatformSchema } from "../schemas/accounts.js";
 import { toolError } from "../schemas/error.js";
 import { jsonResult } from "../schemas/result.js";
 import { getVersion } from "../server.js";
 
 const DESCRIPTION =
-  "Report the server's own status: version, uptime, which providers and fetchers are configured (names only, never key values), " +
-  "the model routing, the browser mode and session state, the disk cache size and the registered tool names. " +
+  "Report the server's own status: version, uptime, which providers, fetchers, flight, hotel, market, social and review sources are configured (names only, never key values), " +
+  "which optional keys are set, the model routing, the browser mode and session state, which account platforms are connected in an already-open browser (names only), the disk cache size and the registered tool names. " +
   "Read-only, takes no input, and never starts a browser or makes a network call. Use it to find out why a tool returns a `config` error.";
 
 const BrowserStatsSchema = z.object({
@@ -38,6 +44,13 @@ const HealthOutputSchema = z.object({
     search_providers: z.array(z.string()),
     fast_fetchers: z.array(z.string()),
     flight_sources: z.array(z.string()),
+    hotel_sources: z.array(z.string()),
+    market_sources: z.array(z.string()),
+    social_platforms: z.array(z.object({ name: z.string(), access: z.enum(["api", "browser"]) })),
+    review_sources: z.array(z.string()),
+    reddit_api: z.boolean(),
+    youtube_api_key: z.boolean(),
+    finnhub_api_key: z.boolean(),
     currency: z.string(),
     models: z.object({ planner: z.string(), scorer: z.string(), extractor: z.string(), writer: z.string() }),
     cache_dir: z.string(),
@@ -49,6 +62,8 @@ const HealthOutputSchema = z.object({
     }),
   }),
   browser: BrowserStatsSchema.nullable(),
+  /** Platforms whose session cookies are present, read only from a browser that is already open; null when none is. */
+  accounts: z.object({ connected: z.array(AccountPlatformSchema).nullable() }),
   cache: z.object({ dir: z.string(), entries: z.number(), bytes: z.number() }),
   tools: z.array(z.string()),
 });
@@ -101,6 +116,19 @@ function browserConfig(config: Config) {
 }
 
 /**
+ * Account platforms connected in the shared browser, by name. Read only when
+ * the browser is already open: `health` must never launch Chromium, and
+ * `BrowserSession.cookies()` would. `null` says "not checked", which is
+ * different from "none connected".
+ */
+async function connectedAccounts(deps: Deps): Promise<string[] | null> {
+  const { browser } = deps;
+  if (browser === undefined || !browser.isOpen()) return null;
+  const service = createAccountsService({ browser, config: deps.config, log: deps.log });
+  return service.connectedPlatforms();
+}
+
+/**
  * `toolNames` is the list of registered tools (`TOOL_NAMES` in ./index.ts);
  * passing it in avoids an import cycle with the registry.
  */
@@ -117,25 +145,40 @@ export function registerHealthTool(server: McpServer, deps: Deps, toolNames: rea
       try {
         const { config, browser } = deps;
         const cacheStats = await measureCache(config.cache_dir);
+        // Every builder takes the same optional services; none of them touches the browser or the network when building.
+        const services = {
+          ...(browser !== undefined && { browser }),
+          ...(deps.llm !== undefined && { llm: deps.llm }),
+        };
+        const configured = <T extends { name: string; isConfigured(): boolean }>(list: T[]): T[] => list.filter((p) => p.isConfigured());
+        const names = (list: Array<{ name: string }>): string[] => list.map((p) => p.name);
         return jsonResult({
           version: getVersion(),
           uptime_s: Math.round(process.uptime()),
           config: {
             anthropic_api_key: config.anthropic_api_key !== undefined,
-            search_providers: buildProviders(config).map((p) => p.name),
-            fast_fetchers: buildFastFetchers(config).map((f) => f.name),
-            flight_sources: buildAllFlightProviders(config, {
-              ...(browser !== undefined && { browser }),
-              ...(deps.llm !== undefined && { llm: deps.llm }),
-            })
-              .filter((p) => p.isConfigured())
-              .map((p) => p.name),
+            search_providers: names(buildProviders(config)),
+            fast_fetchers: names(buildFastFetchers(config)),
+            flight_sources: names(configured(buildAllFlightProviders(config, services))),
+            hotel_sources: names(configured(buildAllHotelProviders(config, services))),
+            market_sources: names(configured(buildAllMarketProviders(config, services))),
+            social_platforms: configured(buildAllSocialPlatforms(config, { ...services, version: getVersion() })).map((p) => ({
+              name: p.name,
+              access: p.access,
+            })),
+            review_sources: names(
+              configured(buildAllReviewSources(config, { ...services, ...(deps.fetch !== undefined && { fetch: deps.fetch }) })),
+            ),
+            reddit_api: config.reddit_client_id !== undefined && config.reddit_client_secret !== undefined,
+            youtube_api_key: config.youtube_api_key !== undefined,
+            finnhub_api_key: config.finnhub_api_key !== undefined,
             currency: config.currency,
             models: { ...config.models },
             cache_dir: config.cache_dir,
             browser: browserConfig(config),
           },
           browser: browser === undefined ? null : { ...browser.stats(), is_open: browser.isOpen() },
+          accounts: { connected: await connectedAccounts(deps) },
           cache: { dir: config.cache_dir, ...cacheStats },
           tools: [...toolNames],
         });

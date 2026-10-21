@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { TOOL_NAMES } from "../../src/tools/index.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entry = join(root, "dist", "index.js");
@@ -95,6 +96,9 @@ describe("stdio server smoke test", () => {
     const byId = new Map(messages.filter((m) => m.id !== undefined).map((m) => [m.id, m]));
 
     const list = byId.get(2)?.result as { tools: Array<{ name: string }> } | undefined;
+    // Every registered tool, and nothing else, reaches the client over real stdio: 14 in v0.2.
+    expect(list?.tools).toHaveLength(TOOL_NAMES.length);
+    expect(list?.tools.map((t) => t.name).sort()).toEqual([...TOOL_NAMES].sort());
     expect(list?.tools.map((t) => t.name)).toContain("ping");
     expect(list?.tools.map((t) => t.name)).toContain("web_search");
     expect(list?.tools.map((t) => t.name)).toContain("fetch_page");

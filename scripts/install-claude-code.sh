@@ -32,6 +32,11 @@ ENV_NAMES=(
   FIRECRAWL_API_KEY
   JINA_API_KEY
   DUFFEL_API_KEY
+  REDDIT_CLIENT_ID
+  REDDIT_CLIENT_SECRET
+  REDDIT_USER_AGENT
+  YOUTUBE_API_KEY
+  FINNHUB_API_KEY
   BROWSER_CDP_URL
   BROWSER_HEADLESS
   RESEARCH_MAX_COST_USD
@@ -151,13 +156,13 @@ if [ "${#ENV_FLAGS[@]}" -gt 0 ]; then
 fi
 ADD_CMD+=(--transport stdio "$SERVER_NAME" -- node "$ENTRY")
 
-# Printable form: values of *_KEY variables are never echoed.
+# Printable form: values of *_KEY, *_SECRET and *_CLIENT_ID variables are never echoed.
 print_command() {
   local out="" arg prev=""
   for arg in "${ADD_CMD[@]}"; do
     if [ "$prev" = "--env" ]; then
       case "$arg" in
-        *_KEY=*) arg="${arg%%=*}=REDACTED" ;;
+        *_KEY=* | *_SECRET=* | *_CLIENT_ID=*) arg="${arg%%=*}=REDACTED" ;;
       esac
     fi
     out="$out $(printf '%q' "$arg")"
@@ -201,7 +206,8 @@ Verify:
   claude mcp list                 # webrunner should show as connected
   claude mcp get $SERVER_NAME          # shows the command and the variable names passed through
 Then start a new Claude Code session; the tools are ping, web_search, fetch_page,
-deep_research, browse_task and search_flights. Inside Claude Code, /mcp shows the same.
+deep_research, browse_task, search_flights, search_hotels, market_quote, weather,
+exchange_rate, social_search, search_reviews, accounts and health. Inside Claude Code, /mcp shows the same.
 
 To change keys or move the checkout, run this script again. To remove it:
   scripts/uninstall.sh

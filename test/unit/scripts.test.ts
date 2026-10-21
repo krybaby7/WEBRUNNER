@@ -22,6 +22,11 @@ const WEBRUNNER_VARS = [
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "DUFFEL_API_KEY",
+  "REDDIT_CLIENT_ID",
+  "REDDIT_CLIENT_SECRET",
+  "REDDIT_USER_AGENT",
+  "YOUTUBE_API_KEY",
+  "FINNHUB_API_KEY",
   "BROWSER_CDP_URL",
   "BROWSER_HEADLESS",
   "RESEARCH_MAX_COST_USD",
@@ -40,6 +45,14 @@ const WEBRUNNER_VARS = [
 const SECRET_ANTHROPIC = "sentinel-anthropic-0001";
 const SECRET_BRAVE = "sentinel-brave-0002";
 const SECRET_EXA = "sentinel-exa-0003";
+// The five v0.2 variables (PLAN.md 14.8). REDDIT_USER_AGENT is not a secret and may be echoed.
+const V02_SECRETS = {
+  REDDIT_CLIENT_ID: "sentinel-reddit-id-0004",
+  REDDIT_CLIENT_SECRET: "sentinel-reddit-secret-0005",
+  YOUTUBE_API_KEY: "sentinel-youtube-0006",
+  FINNHUB_API_KEY: "sentinel-finnhub-0007",
+};
+const V02_VARS = { ...V02_SECRETS, REDDIT_USER_AGENT: "sentinel-agent/1.0" };
 
 let work: string;
 let home: string;
@@ -119,6 +132,19 @@ describe("install-codex.sh", () => {
 
     for (const output of [once, replaced, first.all, second.all, third.all]) {
       for (const secret of [SECRET_ANTHROPIC, SECRET_BRAVE, SECRET_EXA]) expect(output).not.toContain(secret);
+    }
+  });
+
+  it("forwards the five v0.2 variables by name, in the script's order, and never writes their values", () => {
+    const r = runScript(scripts.codex, ["--skip-build"], V02_VARS);
+    expect(r.status, r.all).toBe(0);
+    const text = readFileSync(codexConfig(), "utf8");
+    expect(text).toContain(
+      'env_vars = ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USER_AGENT", "YOUTUBE_API_KEY", "FINNHUB_API_KEY"]',
+    );
+    for (const secret of Object.values(V02_SECRETS)) {
+      expect(text).not.toContain(secret);
+      expect(r.all).not.toContain(secret);
     }
   });
 
@@ -235,6 +261,24 @@ describe("install-claude-code.sh", () => {
     ]);
     // The key reaches claude (that is the point) but is not echoed by the script.
     expect(r.all).not.toContain(SECRET_BRAVE);
+  });
+
+  it("forwards the five v0.2 variables as --env flags and redacts the secret ones when printing", () => {
+    installFakeClaude();
+    const dry = runScript(scripts.claude, ["--dry-run"], V02_VARS);
+    expect(dry.status, dry.all).toBe(0);
+    expect(dry.stdout).toContain("--env REDDIT_CLIENT_ID=REDACTED");
+    expect(dry.stdout).toContain("--env REDDIT_CLIENT_SECRET=REDACTED");
+    expect(dry.stdout).toContain("--env REDDIT_USER_AGENT=sentinel-agent/1.0");
+    expect(dry.stdout).toContain("--env YOUTUBE_API_KEY=REDACTED");
+    expect(dry.stdout).toContain("--env FINNHUB_API_KEY=REDACTED");
+    for (const secret of Object.values(V02_SECRETS)) expect(dry.all).not.toContain(secret);
+
+    const real = runScript(scripts.claude, ["--skip-build"], V02_VARS);
+    expect(real.status, real.all).toBe(0);
+    const add = readFileSync(claudeLog, "utf8").trim().split("\n")[1] ?? "";
+    for (const [name, value] of Object.entries(V02_VARS)) expect(add).toContain(`--env ${name}=${value}`);
+    for (const secret of Object.values(V02_SECRETS)) expect(real.all).not.toContain(secret);
   });
 
   it("--no-env passes no variables", () => {
