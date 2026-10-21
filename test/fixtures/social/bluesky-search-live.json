@@ -1,0 +1,72 @@
+{
+  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=rust%20programming&limit=3&sort=top. The same query on public.api.bsky.app answered HTTP 403 with an HTML page. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Public posts; handles and texts are as published.",
+  "posts": [
+    {
+      "uri": "at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q",
+      "cid": "bafyreie4do65tyjnl5btxpjeumczh3alklzif7mopqgdwjftcthecjtorm",
+      "author": {
+        "did": "did:plc:5ujaiwdzii5kb6ilzs4tadoz",
+        "handle": "compute.yee.nu",
+        "displayName": "Every Day Your Computer Does A Computation"
+      },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Even the Rust programming language will taste if you try_into hard enough",
+        "createdAt": "2026-10-18T18:22:18.347Z",
+        "langs": [
+          "en"
+        ]
+      },
+      "replyCount": 1,
+      "repostCount": 2,
+      "likeCount": 4,
+      "quoteCount": 0,
+      "indexedAt": "2026-10-18T18:22:19.160Z"
+    },
+    {
+      "uri": "at://did:plc:cvz7fadldr3x5an34slkkqmc/app.bsky.feed.post/3my63elp6jc2e",
+      "cid": "bafyreigvhsi2b3ar7nr4uqb3fpkfmpdtvqvmmebz6fj6ah3pwzatg67vpy",
+      "author": {
+        "did": "did:plc:cvz7fadldr3x5an34slkkqmc",
+        "handle": "fronkongames.bsky.social",
+        "displayName": "Fronkon Games"
+      },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Programming language popularity increases for R, Julia and Rust (but Not Go)  www.tiobe.com/tiobe-index/\n\n#gamedev #gamedevelopment #programming #code",
+        "createdAt": "2026-10-18T17:00:20.033Z",
+        "langs": [
+          "es"
+        ]
+      },
+      "replyCount": 0,
+      "repostCount": 1,
+      "likeCount": 4,
+      "quoteCount": 0,
+      "indexedAt": "2026-10-18T17:00:22.956Z"
+    },
+    {
+      "uri": "at://did:plc:sqd4qv5ovqoit3zua3fj35jt/app.bsky.feed.post/3my73febq3c2u",
+      "cid": "bafyreiallpynimodpdahdi5ghkbjmbpsj44wziv2mdi2km4dppuavlynzy",
+      "author": {
+        "did": "did:plc:sqd4qv5ovqoit3zua3fj35jt",
+        "handle": "koldinium.com",
+        "displayName": "uncle kold"
+      },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "hello i am db cooper the fbi is using the rust programming language to triangulate my position.\n\ni've filled their server with copies of \"A Tour of C++\" by Bjarne Stroustrop. that should keep them busy while i make my daring escape!!",
+        "createdAt": "2026-10-19T02:33:25.546Z",
+        "langs": [
+          "en"
+        ]
+      },
+      "replyCount": 0,
+      "repostCount": 3,
+      "likeCount": 44,
+      "quoteCount": 0,
+      "indexedAt": "2026-10-19T02:33:26.570Z"
+    }
+  ],
+  "cursor": "eyJzIjpbMTUuNTE1NzUzLCJkaWQ6cGxjOnNxZDRxdjVvdnFvaXQzenVhM2ZqMzVqdCIsIjNteTczZmVicTNjMnUiXSwibyI6IjIwMjYtMTAtMjFUMTc6NDQ6MzZaIn0"
+}

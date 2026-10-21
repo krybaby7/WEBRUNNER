@@ -27,11 +27,20 @@ import { SocialProviderError, type SocialHooks, type SocialPlatformProvider } fr
  *   resolved to a DID with `com.atproto.identity.resolveHandle`, then
  *   `getPostThread` on `at://<did>/app.bsky.feed.post/<rkey>`.
  *
- * The fixtures under test/fixtures/social are built from the documented
+ * The first fixtures under test/fixtures/social were built from the documented
  * shapes: the public API answered 403 from the development environment.
+ *
+ * Verified live on 2026-10-21 from a cloud session (fixtures `bluesky-*-live.json`):
+ * the cached public AppView, public.api.bsky.app, refuses `searchPosts` with an
+ * HTML "403 Forbidden" page while serving `getPostThread`, `resolveHandle` and
+ * `getProfile` keyless; the AppView itself, api.bsky.app, serves `searchPosts`
+ * keyless. So search goes to api.bsky.app and everything else stays on the
+ * cached public host. The response shapes matched the documented ones.
  */
 
 const DEFAULT_BASE_URL = "https://public.api.bsky.app";
+/** `searchPosts` is refused by the cached public host; the AppView answers it without auth. */
+const DEFAULT_SEARCH_BASE_URL = "https://api.bsky.app";
 const WEB_URL = "https://bsky.app";
 const MAX_LIMIT = 100;
 /** Posts whose replies are fetched for `kind: "comments"`. */
@@ -77,6 +86,8 @@ export interface BlueskyProviderOptions {
   fetchImpl?: typeof fetch;
   /** API origin, without a trailing path. Overridable for tests. */
   baseUrl?: string;
+  /** Origin for `searchPosts`. Default api.bsky.app, or `baseUrl` when only that is given (tests). */
+  searchBaseUrl?: string;
   /** Clock in epoch milliseconds, for recency windows. Default Date.now. */
   now?: () => number;
 }
@@ -110,11 +121,13 @@ export class BlueskyProvider implements SocialPlatformProvider {
   readonly access = "api" as const;
   private readonly fetchImpl: typeof fetch;
   private readonly baseUrl: string;
+  private readonly searchBaseUrl: string;
   private readonly now: () => number;
 
   constructor(opts: BlueskyProviderOptions = {}) {
     this.fetchImpl = opts.fetchImpl ?? ((...args) => fetch(...args));
     this.baseUrl = stripTrailingSlash(opts.baseUrl ?? DEFAULT_BASE_URL);
+    this.searchBaseUrl = stripTrailingSlash(opts.searchBaseUrl ?? opts.baseUrl ?? DEFAULT_SEARCH_BASE_URL);
     this.now = opts.now ?? Date.now;
   }
 
@@ -170,10 +183,10 @@ export class BlueskyProvider implements SocialPlatformProvider {
     return [post, ...comments];
   }
 
-  private async xrpc(method: string, params: URLSearchParams, signal: AbortSignal): Promise<unknown> {
+  private async xrpc(method: string, params: URLSearchParams, signal: AbortSignal, origin: string = this.baseUrl): Promise<unknown> {
     return fetchJson({
       platform: this.name,
-      url: `${this.baseUrl}/xrpc/${method}?${params.toString()}`,
+      url: `${origin}/xrpc/${method}?${params.toString()}`,
       init: { method: "GET", headers: { Accept: "application/json" } },
       fetchImpl: this.fetchImpl,
       signal,
@@ -190,7 +203,7 @@ export class BlueskyProvider implements SocialPlatformProvider {
     const since = sinceIso(q.recency, this.now());
     if (since !== undefined) params.set("since", since);
     if (q.lang !== undefined) params.set("lang", q.lang);
-    const body = await this.xrpc("app.bsky.feed.searchPosts", params, signal);
+    const body = await this.xrpc("app.bsky.feed.searchPosts", params, signal, this.searchBaseUrl);
     return parseBody(this.name, SearchResponse, body, "Bluesky").posts;
   }
 

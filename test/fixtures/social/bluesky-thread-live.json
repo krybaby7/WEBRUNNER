@@ -1,0 +1,56 @@
+{
+  "_note": "Recorded live on 2026-10-21 (HTTP 200) from a Claude Code cloud session: https://public.api.bsky.app/xrpc/app.bsky.feed.getPostThread?uri=at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q&depth=1. Trimmed to the fields the provider reads plus counts: avatars, pronouns, associated, labels, embeds, facets and bridge fields removed. Public posts; handles and texts are as published.",
+  "thread": {
+    "$type": "app.bsky.feed.defs#threadViewPost",
+    "post": {
+      "uri": "at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q",
+      "cid": "bafyreie4do65tyjnl5btxpjeumczh3alklzif7mopqgdwjftcthecjtorm",
+      "author": {
+        "did": "did:plc:5ujaiwdzii5kb6ilzs4tadoz",
+        "handle": "compute.yee.nu",
+        "displayName": "Every Day Your Computer Does A Computation"
+      },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "text": "Even the Rust programming language will taste if you try_into hard enough",
+        "createdAt": "2026-10-18T18:22:18.347Z",
+        "langs": [
+          "en"
+        ]
+      },
+      "replyCount": 1,
+      "repostCount": 2,
+      "likeCount": 4,
+      "quoteCount": 0,
+      "indexedAt": "2026-10-18T18:22:19.160Z"
+    },
+    "replies": [
+      {
+        "$type": "app.bsky.feed.defs#threadViewPost",
+        "post": {
+          "uri": "at://did:plc:jhke75n4qayjfdqohk3hqqfk/app.bsky.feed.post/3my67z3zqb22q",
+          "cid": "bafyreigo4qdloocszqsk7pqgyjbhn54jidhb6kz4y3cc2rukghazm3iw4a",
+          "author": {
+            "did": "did:plc:jhke75n4qayjfdqohk3hqqfk",
+            "handle": "pupgirlcrystal.bsky.social",
+            "displayName": "Goth Bimbuppy Girl Crystal (Bimbotober Event) | Unit D0GG1E"
+          },
+          "record": {
+            "$type": "app.bsky.feed.post",
+            "text": "rust tarts!! mmmmm",
+            "createdAt": "2026-10-18T18:23:23.213Z",
+            "langs": [
+              "en"
+            ]
+          },
+          "replyCount": 0,
+          "repostCount": 0,
+          "likeCount": 1,
+          "quoteCount": 0,
+          "indexedAt": "2026-10-18T18:23:26.766Z"
+        },
+        "replies": []
+      }
+    ]
+  }
+}

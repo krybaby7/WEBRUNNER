@@ -51,7 +51,8 @@ describe("bluesky: mapping", () => {
     expect(out[2]?.lang).toBe("en");
 
     const url = new URL(f.calls[0]?.url ?? "");
-    expect(url.origin).toBe("https://public.api.bsky.app");
+    // public.api.bsky.app refuses searchPosts (403, live 2026-10-21); the AppView serves it keyless.
+    expect(url.origin).toBe("https://api.bsky.app");
     expect(url.searchParams.get("q")).toBe("rust async");
     expect(url.searchParams.get("limit")).toBe("10");
     expect(url.searchParams.get("sort")).toBe("top");
@@ -104,6 +105,26 @@ describe("bluesky: mapping", () => {
     expect(f.to("getPostThread")).toHaveLength(1);
   });
 
+  it("searches on api.bsky.app and reads threads and handles on public.api.bsky.app", async () => {
+    const f = routed();
+    await make(f).search(query({ kind: "both", per_platform: 4 }), signal());
+    await make(f).thread(POST_URL, query({ per_platform: 5 }), signal());
+    const origins = f.calls.map((c) => {
+      const u = new URL(c.url);
+      return `${u.origin} ${u.pathname.split("/").pop() ?? ""}`;
+    });
+    expect(new Set(origins)).toEqual(
+      new Set([
+        "https://api.bsky.app app.bsky.feed.searchPosts",
+        "https://public.api.bsky.app app.bsky.feed.getPostThread",
+        "https://public.api.bsky.app com.atproto.identity.resolveHandle",
+      ]),
+    );
+    const one = new BlueskyProvider({ fetchImpl: f.fetchImpl, baseUrl: "http://127.0.0.1:9" });
+    await one.search(query({ kind: "posts", per_platform: 1 }), signal());
+    expect(new URL(f.calls.at(-1)?.url ?? "").origin).toBe("http://127.0.0.1:9");
+  });
+
   it("owns bsky.app post URLs only", () => {
     expect(blueskyPostRef(POST_URL)).toEqual({ handle: "rustacean.example.com", rkey: "3kz7abcdefg2a" });
     const p = make(routed());
@@ -118,5 +139,48 @@ describe("bluesky: mapping", () => {
       .search(query(), signal())
       .catch((e: unknown) => e);
     expect(err).toMatchObject({ platform: "bluesky", code: "provider", retryable: true, status: 429, retryAfterMs: 30_000 });
+  });
+});
+
+describe("bluesky: live responses (recorded 2026-10-21)", () => {
+  const liveSearch = loadFixture("bluesky-search-live");
+  const liveThread = loadFixture("bluesky-thread-live");
+  const liveResolve = loadFixture("bluesky-resolve-handle-live");
+  const liveRouted = () =>
+    fakeFetch((_call, url) => {
+      if (url.pathname.endsWith("app.bsky.feed.searchPosts")) return jsonResponse(liveSearch);
+      if (url.pathname.endsWith("app.bsky.feed.getPostThread")) return jsonResponse(liveThread);
+      if (url.pathname.endsWith("com.atproto.identity.resolveHandle")) return jsonResponse(liveResolve);
+      return jsonResponse({ error: "unknown" }, 404);
+    });
+
+  it("maps the live search: web URLs, handles, counts, created_at from the record", async () => {
+    const out = await make(liveRouted()).search(query({ kind: "posts", per_platform: 3 }), signal());
+    expect(out).toHaveLength(3);
+    for (const i of out) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    expect(out[0]).toMatchObject({
+      id: "bluesky:did:plc:5ujaiwdzii5kb6ilzs4tadoz/3my67x6gk462q",
+      kind: "post",
+      url: "https://bsky.app/profile/compute.yee.nu/post/3my67x6gk462q",
+      author: "compute.yee.nu",
+      created_at: "2026-10-18T18:22:18.347Z",
+      score: 4,
+      replies: 1,
+      reposts: 2,
+    });
+    expect(out[0]?.text).toMatch(/^Even the Rust programming language/);
+  });
+
+  it("maps the live thread: the post first, then its reply as a comment pointing at it", async () => {
+    const f = liveRouted();
+    const out = await make(f).thread("https://bsky.app/profile/compute.yee.nu/post/3my67x6gk462q", query({ per_platform: 5 }), signal());
+    expect(out.map((i) => i.kind)).toEqual(["post", "comment"]);
+    expect(out[1]).toMatchObject({
+      author: "pupgirlcrystal.bsky.social",
+      parent_url: "https://bsky.app/profile/compute.yee.nu/post/3my67x6gk462q",
+      created_at: "2026-10-18T18:23:23.213Z",
+    });
+    expect(new URL(f.calls[0]?.url ?? "").searchParams.get("handle")).toBe("compute.yee.nu");
+    expect(new URL(f.calls[1]?.url ?? "").searchParams.get("uri")).toBe("at://did:plc:5ujaiwdzii5kb6ilzs4tadoz/app.bsky.feed.post/3my67x6gk462q");
   });
 });
