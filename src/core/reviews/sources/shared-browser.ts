@@ -1,24 +1,12 @@
-import { createHash } from "node:crypto";
 import { errors as playwrightErrors, type Page } from "playwright";
 import { z } from "zod";
 import { log as defaultLog, type Logger } from "../../../log.js";
-import {
-  DEFAULT_SOURCES_BY_KIND,
-  REVIEW_KINDS,
-  REVIEW_TEXT_MAX_CHARS,
-  ReviewSchema,
-  ReviewSubjectSchema,
-  type NormalizedReviewsQuery,
-  type Review,
-  type ReviewKind,
-  type ReviewSource,
-  type ReviewSubject,
-} from "../../../schemas/reviews.js";
+import { ReviewSchema, ReviewSubjectSchema, type NormalizedReviewsQuery, type Review, type ReviewKind, type ReviewSource, type ReviewSubject } from "../../../schemas/reviews.js";
 import { RecipeError, type Recipe, type RecipeContext } from "../../browser/recipes/types.js";
 import type { BrowserSession } from "../../browser/types.js";
 import { detectBotWall } from "../../fetch/browser.js";
 import { LlmError, type LlmClient } from "../../llm/types.js";
-import { APPROXIMATE_DATE_CAVEAT, parseReviewDate } from "../relative-date.js";
+import { APPROXIMATE_DATE_CAVEAT, kindsDefaultingTo, parseReviewDate, reviewId, truncateReviewText } from "../normalize.js";
 import { ReviewSourceError, type ReviewHooks, type ReviewSearchResult, type ReviewSourceErrorCode, type ReviewSourceProvider } from "../types.js";
 
 /**
@@ -45,10 +33,8 @@ export const MIN_PROBE_REVIEWS = 3;
 /** Longest page text handed to the LLM fallback. */
 export const MAX_LLM_TEXT_CHARS = 30_000;
 
-/** Kinds for which `source` answers when the caller names no sources (PLAN.md 14.6 table). */
-export function kindsDefaultingTo(source: ReviewSource): ReviewKind[] {
-  return REVIEW_KINDS.filter((kind) => DEFAULT_SOURCES_BY_KIND[kind].includes(source));
-}
+// One set of id, text and kind helpers for every review source (normalize.ts).
+export { kindsDefaultingTo, reviewId, truncateReviewText };
 
 /**
  * The subject could not be matched on the site (no search result). A
@@ -265,26 +251,6 @@ export function toRecipeError(err: unknown, ctx: RecipeContext, site: string): u
 // Review assembly
 // ---------------------------------------------------------------------------
 
-/** Collapse whitespace and cut at REVIEW_TEXT_MAX_CHARS. */
-export function truncateReviewText(raw: string): { text: string; truncated: boolean } {
-  const text = raw
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t\u00a0]+/g, " ")
-    .replace(/ ?\n ?/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  if (text.length <= REVIEW_TEXT_MAX_CHARS) return { text, truncated: false };
-  return { text: text.slice(0, REVIEW_TEXT_MAX_CHARS).trimEnd(), truncated: true };
-}
-
-/** `"<source>:<native id>"`, or `"<source>:<12-hex sha1 of author + text>"` when the site gives no id. */
-export function reviewId(source: ReviewSource, nativeId: string | undefined, author: string | undefined, text: string): string {
-  const native = nativeId?.trim();
-  if (native !== undefined && native !== "" && /^[\w.:=-]+$/.test(native)) return `${source}:${native}`;
-  const hash = createHash("sha1").update(`${author ?? ""}\n${text}`).digest("hex").slice(0, 12);
-  return `${source}:${hash}`;
-}
-
 /**
  * A star rating from a label or text as review sites print it: "4 stars",
  * "4.0 out of 5 stars", "Rated 4.5 stars out of five stars", "4,5 Sterne".
@@ -378,7 +344,7 @@ export function assembleReview(source: ReviewSource, raw: RawReview, o: Assemble
   const responseDate = raw.responseDateText !== undefined ? parseReviewDate(raw.responseDateText, o.nowMs) : undefined;
   if (responseDate?.approximate === true) o.caveat(APPROXIMATE_DATE_CAVEAT);
   const candidate = {
-    id: reviewId(source, raw.nativeId, author, body.text !== "" ? body.text : (title ?? "")),
+    id: reviewId(source, raw.nativeId, `${author ?? ""}\n${body.text !== "" ? body.text : (title ?? "")}`),
     source,
     ...(isHttpUrl(raw.url) && { url: raw.url }),
     ...(author !== undefined && { author }),

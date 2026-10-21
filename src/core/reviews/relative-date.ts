@@ -1,7 +1,8 @@
 /**
  * Dates as review sites print them (PLAN.md 14.6): "2 months ago" becomes an
  * approximate ISO 8601 UTC timestamp and the caller adds `APPROXIMATE_DATE_CAVEAT`
- * once; "March 3, 2026" and ISO strings are exact.
+ * once; "March 3, 2026" and ISO strings are exact. The one date parser for every
+ * review source (`normalize.ts` re-exports it).
  *
  * Absolute dates are parsed in UTC by hand, so the result never depends on the
  * server's time zone.
@@ -94,6 +95,12 @@ export function parseReviewDate(raw: string, nowMs: number): ParsedReviewDate | 
     // A bare date or a naive date-time is read as UTC.
     const normalised = /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00Z` : /(?:Z|[+-]\d{2}:?\d{2})$/.test(text) ? text : `${text}Z`;
     const ms = Date.parse(normalised.replace(" ", "T"));
+    if (Number.isFinite(ms)) return { iso: new Date(ms).toISOString(), approximate: false };
+  }
+  // Other absolute forms (RFC 2822 "Tue, 20 Oct 2026 08:19:14 GMT") only when they name their zone,
+  // so the result never depends on the server's own time zone.
+  if (/\d{4}/.test(text) && /(?:\bGMT|\bUTC|Z|[+-]\d{2}:?\d{2})$/i.test(text)) {
+    const ms = Date.parse(text);
     if (Number.isFinite(ms)) return { iso: new Date(ms).toISOString(), approximate: false };
   }
   return undefined;

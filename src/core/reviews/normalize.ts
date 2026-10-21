@@ -22,9 +22,8 @@ export type ParsedSearchReviewsInput = z.output<typeof SearchReviewsInputSchema>
 
 export { RECENCY_MS };
 
-/** Caveat added when a source could only approximate `created_at` from a relative date. */
-export const APPROXIMATE_DATE_CAVEAT =
-  'Some created_at values are approximate: the site printed a relative date such as "2 months ago".';
+// Review dates have one parser, shared by the API, fetch and browser sources.
+export { APPROXIMATE_DATE_CAVEAT, parseReviewDate, type ParsedReviewDate } from "./relative-date.js";
 
 /** The canonical string form of `value` when it is an absolute http(s) URL, else undefined. */
 export function parseHttpUrl(value: string): string | undefined {
@@ -102,11 +101,11 @@ export function normalizeRating(value: number, scale: RatingScale = 5): number |
   return Math.min(5, Math.max(1, half));
 }
 
-/** Collapse whitespace and cut at REVIEW_TEXT_MAX_CHARS. Truncation is always flagged. */
+/** Collapse whitespace (no-break spaces included) and cut at REVIEW_TEXT_MAX_CHARS. Truncation is always flagged. */
 export function truncateReviewText(raw: string): { text: string; truncated: boolean } {
   const text = raw
     .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t\u00a0]+/g, " ")
     .replace(/ ?\n ?/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -119,10 +118,14 @@ export function shortHash(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
-/** `"<source>:<native id>"`, or `"<source>:<12-hex hash of fallback>"` when the site gives no id. */
+/**
+ * `"<source>:<native id>"`, or `"<source>:<12-hex hash of fallback>"` when the
+ * site gives no usable id (none, empty, or with characters an id never has).
+ * Every source passes `"<author>\n<text>"` as the fallback.
+ */
 export function reviewId(source: ReviewSource, nativeId: string | undefined, fallback: string): string {
   const native = nativeId?.trim();
-  return `${source}:${native !== undefined && native !== "" ? native : shortHash(fallback)}`;
+  return `${source}:${native !== undefined && /^[\w.:=-]+$/.test(native) ? native : shortHash(fallback)}`;
 }
 
 /** An ISO 8601 UTC timestamp for a parseable date string or epoch, else undefined. */
@@ -131,44 +134,4 @@ export function toIsoUtc(value: string | number | undefined | null): string | un
   const ms = typeof value === "number" ? value : Date.parse(value.trim());
   if (!Number.isFinite(ms)) return undefined;
   return new Date(ms).toISOString();
-}
-
-const RELATIVE_UNIT_MS: Record<string, number> = {
-  second: 1000,
-  sec: 1000,
-  minute: 60_000,
-  min: 60_000,
-  hour: 3600_000,
-  hr: 3600_000,
-  day: 86_400_000,
-  week: 7 * 86_400_000,
-  month: 30 * 86_400_000,
-  year: 365 * 86_400_000,
-};
-
-export interface ParsedReviewDate {
-  iso: string;
-  /** True when the date was computed from a relative phrase and is only approximate. */
-  approximate: boolean;
-}
-
-/**
- * Read a date as review sites print it: an ISO timestamp or any absolute date
- * `Date.parse` accepts is exact; "today", "yesterday", "just now", "2 months
- * ago", "an hour ago" and "Updated 3 days ago" are approximated from `nowMs`.
- */
-export function parseReviewDate(raw: string, nowMs: number): ParsedReviewDate | undefined {
-  const text = raw.trim().replace(/^(?:updated|posted|reviewed|written)\s+/i, "");
-  if (text === "") return undefined;
-  const lowered = text.toLowerCase();
-  if (/^(?:just now|today|moments? ago)$/.test(lowered)) return { iso: new Date(nowMs).toISOString(), approximate: true };
-  if (lowered === "yesterday") return { iso: new Date(nowMs - RELATIVE_UNIT_MS["day"]!).toISOString(), approximate: true };
-  const rel = /^(?:about |over |almost |~)?(an?|\d+)\s+(second|sec|minute|min|hour|hr|day|week|month|year)s?\s+ago$/.exec(lowered);
-  if (rel !== null) {
-    const count = rel[1] === "a" || rel[1] === "an" ? 1 : Number(rel[1]);
-    const unit = RELATIVE_UNIT_MS[rel[2] as string] as number;
-    return { iso: new Date(nowMs - count * unit).toISOString(), approximate: true };
-  }
-  const iso = toIsoUtc(text);
-  return iso === undefined ? undefined : { iso, approximate: false };
 }

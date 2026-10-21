@@ -190,7 +190,7 @@ export function parseNextData(html: string, pageUrl: string): ReviewSearchResult
     const language = clean(r.language);
     const likes = count(r.likes);
     return {
-      id: reviewId("trustpilot", r.id, text),
+      id: reviewId("trustpilot", r.id, `${author ?? ""}\n${text}`),
       source: "trustpilot",
       url: reviewUrl(r.id),
       ...(author !== undefined && { author }),

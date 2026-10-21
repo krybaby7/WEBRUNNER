@@ -59,3 +59,19 @@ describe("parseReviewDate", () => {
     expect(APPROXIMATE_DATE_CAVEAT).toMatch(/2 months ago/);
   });
 });
+
+describe("one date parser for every review source", () => {
+  it("normalize.ts re-exports it, so API, fetch and browser sources read dates alike", async () => {
+    const normalize = await import("../../../../src/core/reviews/normalize.js");
+    expect(normalize.parseReviewDate).toBe(parseReviewDate);
+    expect(normalize.APPROXIMATE_DATE_CAVEAT).toBe(APPROXIMATE_DATE_CAVEAT);
+  });
+
+  it("reads month-name dates in UTC whatever the server's zone, and zoned RFC 2822 dates", () => {
+    expect(parseReviewDate("Oct 2, 2026", NOW)).toEqual({ iso: "2026-10-02T00:00:00.000Z", approximate: false });
+    expect(parseReviewDate("Tue, 20 Oct 2026 08:19:14 GMT", NOW)).toEqual({ iso: "2026-10-20T08:19:14.000Z", approximate: false });
+    expect(parseReviewDate("Tue, 20 Oct 2026 08:19:14 +0200", NOW)).toEqual({ iso: "2026-10-20T06:19:14.000Z", approximate: false });
+    // A date-time with no zone that is not ISO stays unparsed rather than taking the server's zone.
+    expect(parseReviewDate("10/20/2026 08:19", NOW)).toBeUndefined();
+  });
+});
