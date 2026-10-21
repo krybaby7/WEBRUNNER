@@ -20,6 +20,7 @@ import {
   type ReviewsRecipe,
 } from "../../../../src/core/reviews/sources/shared-browser.js";
 import { ReviewSourceError, type ReviewSearchResult } from "../../../../src/core/reviews/types.js";
+import { reviewId as normalizeReviewId, truncateReviewText as normalizeTruncate } from "../../../../src/core/reviews/normalize.js";
 import { APPROXIMATE_DATE_CAVEAT } from "../../../../src/core/reviews/relative-date.js";
 import { DEFAULT_SOURCES_BY_KIND, NormalizedReviewsQuerySchema, REVIEW_KINDS, REVIEW_TEXT_MAX_CHARS } from "../../../../src/schemas/reviews.js";
 import { fakeBrowser, makeLogger, makeQuery, scriptedLlm } from "./helpers.js";
@@ -297,12 +298,14 @@ describe("review assembly helpers", () => {
     expect(parseHelpful("Like")).toBeUndefined();
   });
 
-  it("builds ids from the native id or a 12-hex sha1 of author and text", () => {
-    expect(reviewId("amazon", "R1A2B3C4D5E6F7G", "x", "y")).toBe("amazon:R1A2B3C4D5E6F7G");
-    expect(reviewId("google_maps", undefined, "Marie D.", "Lovely")).toMatch(/^google_maps:[0-9a-f]{12}$/);
-    expect(reviewId("google_maps", "", "Marie D.", "Lovely")).toBe(reviewId("google_maps", undefined, "Marie D.", "Lovely"));
-    expect(reviewId("google_maps", undefined, "Marie D.", "Lovely")).not.toBe(reviewId("google_maps", undefined, "Tom", "Lovely"));
-    expect(reviewId("google_maps", "has spaces in it", "a", "b")).toMatch(/^google_maps:[0-9a-f]{12}$/);
+  it("builds ids from the native id or a 12-hex hash of author and text (the one helper every source uses)", () => {
+    expect(reviewId("amazon", "R1A2B3C4D5E6F7G", "x\ny")).toBe("amazon:R1A2B3C4D5E6F7G");
+    expect(reviewId("google_maps", undefined, "Marie D.\nLovely")).toMatch(/^google_maps:[0-9a-f]{12}$/);
+    expect(reviewId("google_maps", "", "Marie D.\nLovely")).toBe(reviewId("google_maps", undefined, "Marie D.\nLovely"));
+    expect(reviewId("google_maps", undefined, "Marie D.\nLovely")).not.toBe(reviewId("google_maps", undefined, "Tom\nLovely"));
+    expect(reviewId("google_maps", "has spaces in it", "a\nb")).toMatch(/^google_maps:[0-9a-f]{12}$/);
+    expect(reviewId).toBe(normalizeReviewId);
+    expect(truncateReviewText).toBe(normalizeTruncate);
   });
 
   it("truncates text at REVIEW_TEXT_MAX_CHARS and flags it", () => {
