@@ -56,12 +56,25 @@ import { RecipeError, type RecipeContext } from "./types.js";
  *     `a[aria-label="72 percent of reviews have 5 stars"]`, but NO `[data-hook="review"]` block
  *     (the reviews medley is not rendered for signed-out automated visitors), so the reviews fixture
  *     under test/fixtures/reviews/browser/ is SYNTHETIC, following Amazon's documented review markup.
+ *
+ * Re-checked live on 2026-10-21 from a Claude Code cloud session (logged out): `/product-reviews/<ASIN>`
+ * still redirected to `/ap/signin`, but the product page rendered its "Top reviews from the United
+ * States" medley in 5 of 16 loads (13 `[data-hook="review"]` blocks under `#localTopReviews`; the
+ * other loads served a variant with no medley or an empty one, and none of the last 7 loads from
+ * that IP had it, so repeated visits seem to suppress it). The medley is rendered client-side (not in the served HTML) and uses its own hooks
+ * for the title (`reviewTitle`, an h5) and the text (`reviewRichContentContainer`); rating
+ * (`review-star-rating`), date, author (`.a-profile-name`), verified badge and helpful votes use the
+ * list's hooks. Decision (PLAN.md 14.10): when the list needs a login, the recipe reads the product
+ * page's medley instead, with a caveat; when no medley renders it reports the original `needs_login`.
+ * Fixture: amazon-product-medley-live.html (sanitized, names replaced).
  */
 
 export const AMAZON_REVIEWS_SITE = "amazon_reviews";
 export const AMAZON_BASE_URL = "https://www.amazon.com";
 
 export const AMAZON_NEEDS_LOGIN_MESSAGE = "Amazon shows reviews only to signed-in visitors; run accounts connect amazon";
+export const AMAZON_MEDLEY_CAVEAT =
+  "Amazon shows its full review list only to signed-in visitors, so these are the top reviews from the product page (up to about 13, in Amazon's own order); run accounts connect amazon to read the full list.";
 
 const ASIN_RE = /^[A-Z0-9]{10}$/;
 const CAPTCHA_TEXT_RE = /enter the characters you see below|type the characters you see in this image|sorry, we just need to make sure you.re not a robot|click the button below to continue shopping/i;
@@ -76,6 +89,8 @@ export interface AmazonReviewsRecipeOptions {
   pollMs?: number;
   /** How long a reviews page without review blocks gets to render them before the text fallback runs. Default 4000. */
   settleMs?: number;
+  /** How long the product page gets to render its "Top reviews" medley when the list needs a login. Default 10000. */
+  medleyWaitMs?: number;
 }
 
 /** ASIN from an amazon.* product URL: /dp/<ASIN>, /gp/product/<ASIN>, /product-reviews/<ASIN>, or /<slug>/dp/<ASIN>. */
@@ -108,6 +123,10 @@ export function buildAmazonSearchUrl(subject: string, base: string = AMAZON_BASE
 
 export function amazonSortFor(sort: NormalizedReviewsQuery["sort"]): "recent" | "helpful" {
   return sort === "recent" ? "recent" : "helpful";
+}
+
+export function buildAmazonProductUrl(asin: string, base: string = AMAZON_BASE_URL): string {
+  return `${base.replace(/\/+$/, "")}/dp/${asin}`;
 }
 
 export function buildAmazonReviewsUrl(asin: string, sort: NormalizedReviewsQuery["sort"], base: string = AMAZON_BASE_URL): string {
@@ -144,7 +163,7 @@ interface AmazonSubject extends RawSubject {
 
 const SUBJECT_JS = `(() => {
   const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
-  const link = document.querySelector('[data-hook="product-link"]');
+  const link = document.querySelector('[data-hook="product-link"]') || document.getElementById("productTitle");
   const ratingText = document.querySelector('[data-hook="rating-out-of-text"]');
   const avgAlt = document.querySelector('[data-hook="average-star-rating"] .a-icon-alt, [data-hook="average-star-rating"]');
   const count = document.querySelector('[data-hook="total-review-count"], [data-hook="cr-filter-info-review-rating-count"]');
@@ -174,14 +193,14 @@ const COLLECT_JS = `(() => {
     const rec = { nativeId: card.id || card.getAttribute("data-review-id") || undefined };
     const star = card.querySelector('[data-hook="review-star-rating"] .a-icon-alt, [data-hook="cmps-review-star-rating"] .a-icon-alt, [data-hook="review-star-rating"], [data-hook="cmps-review-star-rating"], i[data-hook*="star-rating"]');
     if (star) rec.ratingLabel = clean(star.textContent) || (star.getAttribute("class") || "").replace(/.*a-star-(\\d)(?:-(\\d))?.*/, (m, a, b) => a + (b ? "." + b : "") + " out of 5 stars");
-    const title = card.querySelector('[data-hook="review-title"]');
+    const title = card.querySelector('[data-hook="review-title"], [data-hook="reviewTitle"]');
     if (title) {
       const spans = Array.from(title.querySelectorAll("span")).map((s) => clean(s.textContent)).filter((t) => t && !/out of 5 stars/i.test(t));
       rec.title = spans.length ? spans[spans.length - 1] : clean(title.textContent).replace(/^\\d(?:\\.\\d)? out of 5 stars\\s*/i, "");
       const href = title.tagName === "A" ? title.getAttribute("href") : (title.querySelector("a") || {}).getAttribute ? title.querySelector("a").getAttribute("href") : null;
       if (href) rec.url = href;
     }
-    const body = card.querySelector('[data-hook="review-body"]');
+    const body = card.querySelector('[data-hook="review-body"], [data-hook="reviewRichContentContainer"]');
     if (body) rec.text = (body.innerText || body.textContent || "").replace(/\\s*Read more\\s*$/i, "").trim();
     const author = card.querySelector(".a-profile-name");
     if (author) rec.author = clean(author.textContent);
@@ -217,6 +236,7 @@ export function createAmazonReviewsRecipe(options: AmazonReviewsRecipeOptions = 
   const maxWaitMs = options.maxWaitMs ?? 30_000;
   const pollMs = options.pollMs ?? 300;
   const settleMs = options.settleMs ?? 4000;
+  const medleyWaitMs = options.medleyWaitMs ?? 10_000;
   const site = "Amazon";
 
   const buildUrl = (q: NormalizedReviewsQuery): string | null => {
@@ -253,7 +273,19 @@ export function createAmazonReviewsRecipe(options: AmazonReviewsRecipeOptions = 
       }
 
       await navigateTo(page, buildAmazonReviewsUrl(asin, q.sort, baseUrl), ctx, site);
-      const state = await waitForReviews(page, guard);
+      let state: "reviews" | "no_reviews";
+      let medley = false;
+      try {
+        state = await waitForReviews(page, guard);
+      } catch (err) {
+        if (!(err instanceof RecipeError && err.needsLogin)) throw err;
+        // The list wants a signed-in visitor; the product page's own top reviews often render for anyone.
+        if (!(await readMedley(page, asin, ctx, guard))) throw err;
+        ctx.log.debug("amazon: review list needs a login; reading the product page's top reviews", { asin });
+        medley = true;
+        state = "reviews";
+        caveat(AMAZON_MEDLEY_CAVEAT);
+      }
       const subjectRaw = await page.evaluate<AmazonSubject>(SUBJECT_JS).catch(() => ({}) as AmazonSubject);
       const subjectBase: RawSubject = {
         ...subjectRaw,
@@ -271,9 +303,10 @@ export function createAmazonReviewsRecipe(options: AmazonReviewsRecipeOptions = 
       const reviews = raws
         .map((r) => assembleReview(source, { ...r, url: absoluteUrl(r.url, pageUrl) }, { nowMs, caveat }))
         .filter((r): r is NonNullable<typeof r> => r !== undefined);
-      ctx.log.debug("amazon reviews probe", { cards: raws.length, valid: reviews.length });
+      ctx.log.debug("amazon reviews probe", { cards: raws.length, valid: reviews.length, medley });
 
-      if (reviews.length >= MIN_PROBE_REVIEWS) {
+      // The medley is short by design: whatever it shows is the answer, never a reason to call the model.
+      if (reviews.length >= MIN_PROBE_REVIEWS || (medley && reviews.length > 0)) {
         return { subject: assembleSubject(source, subjectBase, q.subject), reviews: dedupeReviews(reviews, q.per_source) };
       }
 
@@ -308,6 +341,43 @@ export function createAmazonReviewsRecipe(options: AmazonReviewsRecipeOptions = 
     }
     const wall = blockedReason(probe);
     if (wall !== undefined) throw new RecipeError("blocked", `Amazon served a bot check (${wall}) at ${probe.url}`, { retryable: false });
+  }
+
+  /**
+   * Open the product page and wait for its client-side "Top reviews" medley.
+   * True once review blocks are there; false when none render within the wait
+   * (Amazon serves some visitors a variant without them). Scrolls the medley into
+   * view once, half way through, in case it is lazy.
+   */
+  async function readMedley(page: Page, asin: string, ctx: RecipeContext, guard: TimeGuard): Promise<boolean> {
+    guard.check("before opening the product page");
+    await navigateTo(page, buildAmazonProductUrl(asin, baseUrl), ctx, site);
+    const start = Date.now();
+    const budget = Math.max(0, Math.min(medleyWaitMs, guard.remaining() * 0.5));
+    let scrolled = false;
+    for (;;) {
+      guard.check("while waiting for the product page's reviews");
+      let probe: AmazonProbe | undefined;
+      try {
+        probe = await page.evaluate<AmazonProbe>(PROBE_JS);
+      } catch {
+        // navigation under us
+      }
+      if (probe !== undefined) {
+        if (probe.signin) return false;
+        checkWalls(probe);
+        if (probe.reviews > 0) return true;
+      }
+      const elapsed = Date.now() - start;
+      if (elapsed >= budget) return false;
+      if (!scrolled && elapsed >= budget / 2) {
+        scrolled = true;
+        await page
+          .evaluate(`(() => { const m = document.getElementById("reviewsMedley") || document.getElementById("cr-medley-top-reviews-wrapper"); if (m) m.scrollIntoView(); else window.scrollTo(0, document.body.scrollHeight * 0.6); })()`)
+          .catch(() => undefined);
+      }
+      await sleep(pollMs);
+    }
   }
 
   async function waitForSearchResult(page: Page, q: NormalizedReviewsQuery, guard: TimeGuard): Promise<string> {
