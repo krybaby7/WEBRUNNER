@@ -1,17 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createBrowserSession } from "../../src/core/browser/session.js";
+import type { BrowserSession } from "../../src/core/browser/types.js";
 import { AppStoreSource } from "../../src/core/reviews/sources/app-store.js";
 import { TrustpilotSource } from "../../src/core/reviews/sources/trustpilot.js";
 import { ReviewSourceError } from "../../src/core/reviews/types.js";
 import { ReviewSchema, ReviewSubjectSchema, type NormalizedReviewsQuery } from "../../src/schemas/reviews.js";
+import { makeConfig, makeTempDir, probeChromium, removeDir } from "../unit/browser/helpers.js";
 
 /**
  * Real App Store and Trustpilot calls, keyless. Runs only with RUN_INTEGRATION=1:
  *
  *   RUN_INTEGRATION=1 npx vitest run test/integration/reviews.test.ts
  *
- * Trustpilot served an AWS WAF challenge from the development environment, so
- * its test accepts either a parsed page or a `blocked` failure (the browser and
- * LLM fallback are not wired here).
+ * Trustpilot serves an AWS WAF challenge to raw requests from cloud IPs. The
+ * first test runs without a browser and accepts either a parsed page or a
+ * `blocked` failure; the second wires a headless Chromium, which renders the
+ * page past the challenge, and expects reviews read from the embedded JSON with
+ * no model (as on 2026-10-21 from a cloud session).
  */
 const enabled = process.env["RUN_INTEGRATION"] === "1";
 
@@ -65,4 +70,33 @@ describe.skipIf(!enabled)("Trustpilot live", () => {
       expect((outcome.err as ReviewSourceError).code).toBe("blocked");
     }
   }, 60_000);
+});
+
+const chromium = enabled ? await probeChromium() : { available: false, reason: "RUN_INTEGRATION is not set" };
+
+describe.skipIf(!enabled || !chromium.available)("Trustpilot live through the browser", () => {
+  let session: BrowserSession;
+  let profileDir: string;
+  beforeAll(async () => {
+    profileDir = await makeTempDir();
+    session = createBrowserSession(makeConfig(profileDir));
+  });
+  afterAll(async () => {
+    await session?.close();
+    if (profileDir) await removeDir(profileDir);
+  }, 30_000);
+
+  it("reads a bare domain's reviews from the rendered page with no model", async () => {
+    const out = await new TrustpilotSource({ browser: session }).search(
+      { ...base, kind: "business", sources: ["trustpilot"], subject: "notion.so", per_source: 5 },
+      AbortSignal.timeout(60_000),
+    );
+    expect(out.subject.name).toMatch(/Notion/);
+    expect(out.subject.rating_avg).toBeGreaterThan(0);
+    expect(out.reviews.length).toBeGreaterThan(0);
+    for (const r of out.reviews) {
+      expect(ReviewSchema.safeParse(r).success).toBe(true);
+      expect(r.rating).toBeDefined();
+    }
+  }, 90_000);
 });

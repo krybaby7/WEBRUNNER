@@ -27,8 +27,8 @@ const appStore = () => sourceWith("app_store", [review("app_store", "a1", { rati
 const trustpilot = () => sourceWith("trustpilot", [review("trustpilot", "t1", { rating: 1 }), review("trustpilot", "t2", { rating: 4 })]);
 
 describe("createReviewsService", () => {
-  it("documents the per-source timeouts: 15 s for API and fetch sources, 60 s for browser sources", () => {
-    expect(DEFAULT_SOURCE_TIMEOUTS_MS).toEqual({ app_store: 15_000, trustpilot: 15_000, google_maps: 60_000, google_play: 60_000, amazon: 60_000 });
+  it("documents the per-source timeouts: 15 s for the API source, 60 s for browser sources and Trustpilot (its WAF fallback renders)", () => {
+    expect(DEFAULT_SOURCE_TIMEOUTS_MS).toEqual({ app_store: 15_000, trustpilot: 60_000, google_maps: 60_000, google_play: 60_000, amazon: 60_000 });
     expect(REVIEWS_CACHE_TTL_MS).toBe(3_600_000);
   });
 
