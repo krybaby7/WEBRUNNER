@@ -1,0 +1,12 @@
+<!doctype html>
+<!--
+  Fixture (WP18b): a page that keeps "loading" and never shows results, a login
+  prompt or a block: every social recipe must give up with code `timeout`.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Loading…</title></head>
+<body>
+<main role="main"><div role="progressbar" aria-busy="true">Loading</div></main>
+<script>setInterval(() => { document.querySelector("[role=progressbar]").textContent += "."; }, 200);</script>
+</body>
+</html>

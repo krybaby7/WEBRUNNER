@@ -1,0 +1,37 @@
+<!doctype html>
+<!--
+  SYNTHETIC fixture (WP18b): one Facebook post page with comments and a
+  "View more comments" control that reveals two more comments when clicked
+  (the only kind of control the recipe may click). Names are invented.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Dev Tools Daily - Claude Code vs. Cursor vs. Copilot | Facebook</title></head>
+<body>
+<div role="banner">Facebook</div>
+<div role="main">
+  <div role="article">
+    <h2><a href="/devtoolsdaily">Dev Tools Daily</a></h2>
+    <div>October 15 at 6:00 PM · Public</div>
+    <div>Claude Code vs. Cursor vs. Copilot: we ran the same 20 tickets through each. Claude Code closed 14, Cursor 11, Copilot 9. Full write-up in the comments.</div>
+    <div>👍 2.1K · 310 comments · 88 shares</div>
+    <div>Like · Comment · Share</div>
+  </div>
+  <div>Most relevant</div>
+  <ul id="comments">
+    <li role="article"><b>Priya N.</b> Which model did Cursor use? That matters a lot for a fair comparison. <span>2d · 45 likes · 3 replies</span></li>
+    <li role="article"><b>Jonas K.</b> Closed is not the same as merged. How many of the 14 passed review? <span>2d · 120 likes · 8 replies</span></li>
+  </ul>
+  <div role="button" tabindex="0" id="more">View more comments</div>
+  <div>Write a comment…</div>
+</div>
+<script>
+  document.getElementById("more").addEventListener("click", () => {
+    const ul = document.getElementById("comments");
+    ul.insertAdjacentHTML("beforeend",
+      '<li role="article"><b>Dev Tools Daily</b> Author here: 11 of the 14 were merged after review, the other three needed rework. <span>1d · 230 likes · 2 replies</span></li>' +
+      '<li role="article"><b>Omar S.</b> Would love to see the ticket list, otherwise this is marketing. <span>1d · 17 likes</span></li>');
+    document.getElementById("more").remove();
+  });
+</script>
+</body>
+</html>

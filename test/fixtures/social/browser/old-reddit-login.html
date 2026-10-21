@@ -1,0 +1,24 @@
+<!doctype html>
+<!--
+  SYNTHETIC fixture (WP18b): the page old.reddit shows at /login/?reason=lor2&dest=...
+  when it logs a visitor out of search. Live (2026-10-18, cloud IP) that URL
+  answered 403 with a network-security block instead (see reddit-network-security.html);
+  this is what a home IP sees: a login form. The recipe detects it by URL.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>reddit.com: Log in</title></head>
+<body class="login-page">
+<div class="content" role="main">
+  <div id="login">
+    <h1>Log in</h1>
+    <p>You need to log in to use search right now.</p>
+    <form id="login-form" method="post" action="/post/login">
+      <label>username <input type="text" name="user" autocomplete="username"></label>
+      <label>password <input type="password" name="passwd" autocomplete="current-password"></label>
+      <button type="submit">log in</button>
+    </form>
+    <a href="/password">forgot password?</a> · <a href="/register">create an account</a>
+  </div>
+</div>
+</body>
+</html>

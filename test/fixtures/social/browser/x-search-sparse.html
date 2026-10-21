@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  SYNTHETIC fixture (WP18b): an X results page where the DOM probe validates
+  fewer than 3 posts (two articles carry a status link, the third is a promoted
+  card without one), so the recipe falls back to LLM extraction.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>claude code - Search / X</title></head>
+<body>
+<main role="main">
+<section aria-label="Timeline: Search timeline">
+<article data-testid="tweet" role="article">
+  <div data-testid="User-Name">
+    <a href="/devmaria"><span>Maria Dev</span></a>
+    <a href="/devmaria"><span>@devmaria</span></a>
+    <a href="/devmaria/status/1845000000000000001"><time datetime="2026-10-17T14:05:00.000Z">Oct 17</time></a>
+  </div>
+  <div data-testid="tweetText" lang="en">Claude Code refactored our whole test suite in an afternoon.</div>
+  <div role="group">
+    <button data-testid="reply" aria-label="42 Replies. Reply"><span>42</span></button>
+    <button data-testid="retweet" aria-label="118 reposts. Repost"><span>118</span></button>
+    <button data-testid="like" aria-label="1,234 Likes. Like"><span>1.2K</span></button>
+  </div>
+</article>
+<article data-testid="tweet" role="article">
+  <div data-testid="User-Name">
+    <a href="/tom_builds"><span>Tom</span></a>
+    <a href="/tom_builds"><span>@tom_builds</span></a>
+    <a href="/tom_builds/status/1845000000000000002"><time datetime="2026-10-17T09:30:00.000Z">Oct 17</time></a>
+  </div>
+  <div data-testid="tweetText" lang="en">Hot take: claude code is better at reading a codebase than most onboarding docs.</div>
+  <div role="group">
+    <button data-testid="reply" aria-label="7 Replies. Reply"><span>7</span></button>
+    <button data-testid="retweet" aria-label="Repost"></button>
+    <button data-testid="like" aria-label="89 Likes. Like"><span>89</span></button>
+  </div>
+</article>
+<article data-testid="tweet" role="article">
+  <div data-testid="User-Name">
+    <span>Promoted Tools</span>
+    <span>@promoted_tools</span>
+  </div>
+  <div data-testid="tweetText" lang="en">Try the new claude code plugin for your IDE today.</div>
+  <div>Promoted</div>
+  <div role="group">
+    <button data-testid="reply" aria-label="2 Replies. Reply"><span>2</span></button>
+    <button data-testid="retweet" aria-label="Repost"></button>
+    <button data-testid="like" aria-label="10 Likes. Like"><span>10</span></button>
+  </div>
+</article>
+</section>
+</main>
+</body>
+</html>
