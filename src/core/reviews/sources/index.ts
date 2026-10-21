@@ -5,6 +5,7 @@ import type { LlmClient } from "../../llm/types.js";
 import type { FetchImpl } from "../http.js";
 import type { ReviewSourceProvider } from "../types.js";
 import { AppStoreSource } from "./app-store.js";
+import { buildBrowserReviewSources } from "./browser.js";
 import { TrustpilotSource } from "./trustpilot.js";
 
 /** Shared services the sources draw on. A source whose service is missing is left out or reports itself unconfigured. */
@@ -30,7 +31,11 @@ export function buildAllReviewSources(_config: Config, deps: ReviewSourceDeps = 
       ...(deps.fetch !== undefined && { fetch: deps.fetch }),
       ...(deps.llm !== undefined && { llm: deps.llm }),
     }),
-    // WP19b: google_maps, google_play and amazon are registered here
+    // Browser sources (WP19b): listed even without a browser so an explicit request can be told why they are unavailable.
+    ...buildBrowserReviewSources({
+      ...(deps.browser !== undefined && { browser: deps.browser }),
+      ...(deps.llm !== undefined && { llm: deps.llm }),
+    }),
   ];
 }
 
