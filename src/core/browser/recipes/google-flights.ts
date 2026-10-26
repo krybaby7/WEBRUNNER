@@ -51,6 +51,17 @@ import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
  * numbers, and for round trips only the outbound leg with the round-trip total
  * price. A route with no flights renders the search form and no results list
  * and no message.
+ *
+ * An empty offer list is never silent (WP32). A "no flights" message, or the
+ * results region with its filters but no sort tabs once the grace period is
+ * over (the live empty-route page above), is "no flights" and carries
+ * `NO_FLIGHTS_CAVEAT`. A bot check, a consent page that would not go away or a
+ * redirect to another host is `blocked`. Any other page without result labels
+ * (no result list, no message) is an empty list with
+ * `UNRECOGNISED_PAGE_CAVEAT`. From GitHub runners (live canary, 2026-10-21 and
+ * 2026-10-25) the labels the probe had seen were gone by extraction time, as if
+ * the page re-rendered under the recipe, so it looks a second time before
+ * giving up.
  */
 
 export const GOOGLE_FLIGHTS_SITE = "google_flights";
@@ -455,17 +466,55 @@ const PROBE_JS = `(() => {
     hasHeading: !!Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"]')).find(
       (h) => /^(best|top)( departing| returning)? flights$/i.test((h.textContent || "").trim())
     ),
+    consent: /^consent\\./.test(location.hostname) || /\\bBefore you continue to Google\\b/i.test(text),
   };
 })()`;
 
-interface Probe {
+/** What the recipe reads from the page while it waits. Exported for tests. */
+export interface FlightsPageProbe {
   url: string;
   title: string;
   text: string;
   textLength: number;
   itemCount: number;
   recaptcha: boolean;
+  /** A "Top/Best departing flights" heading: the result list itself. */
   hasHeading: boolean;
+  /** Google's cookie consent page or dialog is showing. */
+  consent: boolean;
+}
+
+/** An empty list for a route that has no flights. */
+export const NO_FLIGHTS_CAVEAT = "Google Flights showed no results for this route and date.";
+/** An empty list for a page that is neither a result list, a "no flights" answer nor a wall. */
+export const UNRECOGNISED_PAGE_CAVEAT =
+  'Google Flights showed a page that was not recognised (no readable result list and no "no flights" message), so no offers were read; this is not a confirmed "no flights" answer.';
+
+export type SettledPage = { kind: "empty" | "unrecognised" | "loading" } | { kind: "blocked"; reason: string };
+
+/**
+ * What a page without result labels is once the no-results grace period is
+ * over. Pure. `baseHost` is the search page's host; a page on another host is
+ * an interstitial (consent, sign-in). "loading" means the results region is
+ * there and still fetching, so the caller keeps waiting until its timeout.
+ */
+export function settlePage(probe: FlightsPageProbe, baseHost: string | undefined): SettledPage {
+  if (probe.consent) return { kind: "blocked", reason: "a cookie consent page that could not be dismissed" };
+  const host = hostOf(probe.url);
+  if (baseHost !== undefined && host !== undefined && host !== baseHost) return { kind: "blocked", reason: `an interstitial on ${host}` };
+  // A result list whose rows carry no label the recipe can read.
+  if (probe.hasHeading) return { kind: "unrecognised" };
+  const results = /\bSearch results\b/.test(probe.text);
+  if (results && /\bFilters\b/.test(probe.text) && !/\bCheapest\b/.test(probe.text)) return { kind: "empty" };
+  return results ? { kind: "loading" } : { kind: "unrecognised" };
+}
+
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 const REJECT_NAMES = [
@@ -533,6 +582,7 @@ export function createGoogleFlightsRecipe(
   const maxResultsWaitMs = options.maxResultsWaitMs ?? 30_000;
   const noResultsGraceMs = options.noResultsGraceMs ?? 10_000;
   const pollMs = options.pollMs ?? 300;
+  const baseHost = hostOf(baseUrl);
 
   const buildUrl = (params: NormalizedFlightsQuery): string => buildGoogleFlightsUrl(params, baseUrl);
 
@@ -557,17 +607,31 @@ export function createGoogleFlightsRecipe(
         d.dismiss().catch(() => undefined);
       });
       await navigate(page, buildUrl(q), ctx, checkTime);
-      const wait = await waitForResults(page, ctx, { maxResultsWaitMs, noResultsGraceMs, pollMs, caveat, checkTime });
-      if (wait === "empty") {
-        caveat("Google Flights showed no results for this route and date.");
-        return [];
+      // Two looks at most: labels the probe saw can be gone by extraction time (see the header).
+      for (let look = 1; ; look++) {
+        const wait = await waitForResults(page, ctx, { maxResultsWaitMs, noResultsGraceMs, pollMs, caveat, checkTime });
+        if (wait === "empty") {
+          caveat(NO_FLIGHTS_CAVEAT);
+          return [];
+        }
+        if (wait === "unrecognised") {
+          caveat(UNRECOGNISED_PAGE_CAVEAT);
+          return [];
+        }
+
+        await verifyControls(page, q, caveat);
+        await expandMore(page, ctx, { pollMs, caveat, checkTime });
+
+        checkTime("before extraction");
+        const labels = await collectLabels(page);
+        if (labels.length > 0) return await extract(page, q, ctx, labels, caveat);
+        if (look >= 2) {
+          ctx.log.warn("google flights: the result labels disappeared again before extraction", { url: page.url() });
+          caveat(UNRECOGNISED_PAGE_CAVEAT);
+          return [];
+        }
+        ctx.log.warn("google flights: the result labels disappeared before extraction; waiting for results again", { url: page.url() });
       }
-
-      await verifyControls(page, q, caveat);
-      await expandMore(page, ctx, { pollMs, caveat, checkTime });
-
-      checkTime("before extraction");
-      return await extract(page, q, ctx);
     } catch (err) {
       throw toRecipeError(err, ctx);
     }
@@ -610,16 +674,16 @@ export function createGoogleFlightsRecipe(
       caveat: (m: string) => void;
       checkTime: (w: string) => void;
     },
-  ): Promise<"results" | "empty"> {
+  ): Promise<"results" | "empty" | "unrecognised"> {
     const start = Date.now();
     const budget = Math.max(0, Math.min(o.maxResultsWaitMs, (ctx.deadline - start) * 0.6));
     const until = start + budget;
     let consentHandled = false;
     for (;;) {
       o.checkTime("while waiting for results");
-      let probe: Probe | undefined;
+      let probe: FlightsPageProbe | undefined;
       try {
-        probe = await page.evaluate<Probe>(PROBE_JS);
+        probe = await page.evaluate<FlightsPageProbe>(PROBE_JS);
       } catch {
         // Navigation (consent redirect, challenge) destroyed the execution context; probe again.
       }
@@ -639,14 +703,17 @@ export function createGoogleFlightsRecipe(
         continue;
       }
       const elapsed = Date.now() - start;
-      if (
-        probe !== undefined &&
-        elapsed >= Math.min(o.noResultsGraceMs, Math.max(0, budget - 1000)) &&
-        /\bSearch results\b/.test(probe.text) &&
-        /\bFilters\b/.test(probe.text) &&
-        !/\bCheapest\b/.test(probe.text)
-      ) {
-        return "empty";
+      if (probe !== undefined && elapsed >= Math.min(o.noResultsGraceMs, Math.max(0, budget - 1000))) {
+        const settled = settlePage(probe, baseHost);
+        if (settled.kind === "blocked") {
+          throw new RecipeError("blocked", `Google Flights stopped at ${settled.reason} (${probe.url}); no results were returned`, {
+            retryable: false,
+          });
+        }
+        if (settled.kind === "unrecognised") {
+          ctx.log.warn("google flights: page not recognised", { url: probe.url, title: probe.title, text_length: probe.textLength });
+        }
+        if (settled.kind !== "loading") return settled.kind;
       }
       if (Date.now() >= until) {
         throw new RecipeError(
@@ -667,7 +734,7 @@ export function createGoogleFlightsRecipe(
   };
 }
 
-function blockedReason(probe: Probe): string | undefined {
+function blockedReason(probe: FlightsPageProbe): string | undefined {
   if (/\/sorry\//.test(probe.url)) return "sorry/index";
   if (probe.recaptcha) return "recaptcha";
   if (/unusual traffic/i.test(probe.text)) return "unusual traffic";
@@ -765,11 +832,28 @@ async function expandMore(
   }
 }
 
-async function extract(page: Page, q: NormalizedFlightsQuery, ctx: RecipeContext): Promise<FlightOffer[]> {
-  const all = await page.evaluate<string[]>(COLLECT_LABELS_JS);
+/** The page's result labels; none while the page is between documents (a navigation destroyed the context). */
+async function collectLabels(page: Page): Promise<string[]> {
+  try {
+    return await page.evaluate<string[]>(COLLECT_LABELS_JS);
+  } catch {
+    return [];
+  }
+}
+
+async function extract(
+  page: Page,
+  q: NormalizedFlightsQuery,
+  ctx: RecipeContext,
+  all: readonly string[],
+  caveat: (m: string) => void,
+): Promise<FlightOffer[]> {
   const labels = selectLabels(all, q);
   if (labels.length === 0) {
+    // `all` is never empty here, so only max_stops can have removed every label.
     ctx.log.info("google flights: no labels left after filtering", { found: all.length, max_stops: q.max_stops });
+    const limit = q.max_stops === 0 ? "of them nonstop" : `with at most ${plural(q.max_stops ?? 0, "stop", "stops")}`;
+    caveat(`Google Flights showed ${plural(all.length, "result", "results")}, none ${limit}.`);
     return [];
   }
 

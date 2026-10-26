@@ -9,9 +9,13 @@ import {
   googleFlightsRecipe,
   labelPrice,
   labelStops,
+  NO_FLIGHTS_CAVEAT,
   resolveAirport,
   selectLabels,
+  settlePage,
+  UNRECOGNISED_PAGE_CAVEAT,
   type ExtractedItinerary,
+  type FlightsPageProbe,
 } from "../../../src/core/browser/recipes/google-flights.js";
 import { RecipeError, type RecipeContext } from "../../../src/core/browser/recipes/types.js";
 import { createBrowserSession } from "../../../src/core/browser/session.js";
@@ -108,6 +112,44 @@ describe("label helpers", () => {
     expect(resolveAirport("Nowhere Airfield", null)).toBeUndefined();
     expect(resolveAirport("Nowhere Airfield", "zzz")).toBe("ZZZ");
     expect(resolveAirport("Nowhere Airfield", "ZZ")).toBeUndefined();
+  });
+});
+
+describe("settlePage: a page without result labels, once the grace period is over", () => {
+  const blank: FlightsPageProbe = {
+    url: "https://www.google.com/travel/flights?q=x",
+    title: "London to New York | Google Flights",
+    text: "",
+    textLength: 0,
+    itemCount: 0,
+    recaptcha: false,
+    hasHeading: false,
+    consent: false,
+  };
+  const settle = (over: Partial<FlightsPageProbe>) => settlePage({ ...blank, ...over }, "www.google.com");
+
+  it("reads the live empty-route page (results region and filters, no sort tabs) as no flights", () => {
+    expect(settle({ text: readFixture("google-flights-empty.html").replace(/<[^>]+>/g, " ") })).toEqual({ kind: "empty" });
+  });
+
+  it("keeps waiting while the results region is still fetching", () => {
+    expect(settle({ text: "Flight search Filters Search results Best Cheapest from Fetching results" })).toEqual({ kind: "loading" });
+  });
+
+  it("calls a page with no results region, or a result list it cannot read, unrecognised", () => {
+    expect(settle({ text: "Flights Round trip Where from? Explore" })).toEqual({ kind: "unrecognised" });
+    expect(settle({ text: "" })).toEqual({ kind: "unrecognised" });
+    expect(settle({ text: "Search results Filters Top departing flights", hasHeading: true })).toEqual({ kind: "unrecognised" });
+  });
+
+  it("blocks on a consent page that stayed and on a page that moved to another host", () => {
+    expect(settle({ consent: true, text: "Search results Filters" })).toMatchObject({ kind: "blocked", reason: expect.stringMatching(/consent/) });
+    expect(settle({ url: "https://accounts.google.com/ServiceLogin?continue=x" })).toEqual({
+      kind: "blocked",
+      reason: "an interstitial on accounts.google.com",
+    });
+    // Without a known base host the host check is skipped.
+    expect(settlePage({ ...blank, url: "https://accounts.google.com/x" }, undefined)).toEqual({ kind: "unrecognised" });
   });
 });
 
@@ -367,6 +409,60 @@ describe.skipIf(!probe.available)(`google-flights recipe in Chromium${probe.avai
     expect(r.error).toBeUndefined();
     expect(r.offers).toEqual([]);
     expect(r.caveats.some((c) => /no results/i.test(c))).toBe(true);
+    expect(r.caveats).toContain(NO_FLIGHTS_CAVEAT);
+    expect(r.caveats).not.toContain(UNRECOGNISED_PAGE_CAVEAT);
+    expect(llm.calls).toHaveLength(0);
+  });
+
+  it("returns an empty list with its own caveat, not the no-flights one, for a page it does not recognise", async () => {
+    const llm = scriptedLlm(() => canned);
+    const t0 = Date.now();
+    const r = await runRecipe("/unrecognised", ROUND_TRIP, llm, { grace: 600 });
+    expect(r.error).toBeUndefined();
+    expect(r.offers).toEqual([]);
+    expect(r.caveats).toContain(UNRECOGNISED_PAGE_CAVEAT);
+    expect(r.caveats).not.toContain(NO_FLIGHTS_CAVEAT);
+    expect(r.log.warn).toHaveBeenCalledWith("google flights: page not recognised", expect.objectContaining({ url: expect.stringContaining("/unrecognised") }));
+    expect(llm.calls).toHaveLength(0);
+    // Decided after the grace period, not at the 30 s timeout.
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+
+  it("throws blocked for a consent page that does not go away", async () => {
+    const llm = scriptedLlm(() => canned);
+    const r = await runRecipe("/consent", ROUND_TRIP, llm, { grace: 600 });
+    expect((r.error as RecipeError).code).toBe("blocked");
+    expect((r.error as RecipeError).message).toMatch(/cookie consent page that could not be dismissed/);
+    expect((r.error as RecipeError).retryable).toBe(false);
+    expect(llm.calls).toHaveLength(0);
+  });
+
+  it("throws blocked for a redirect to an interstitial on another host", async () => {
+    const r = await runRecipe("/away", ROUND_TRIP, scriptedLlm(() => canned), { grace: 600 });
+    expect((r.error as RecipeError).code).toBe("blocked");
+    expect((r.error as RecipeError).message).toMatch(/interstitial on localhost/);
+  });
+
+  it("looks again when the labels it saw are gone by extraction time, and reads them once they are back", async () => {
+    const llm = labelReadingLlm();
+    const r = await runRecipe("/vanish", ROUND_TRIP, llm);
+    expect(r.error).toBeUndefined();
+    const live = readFixture("google-flights-aria-labels.txt").split("\n").filter(Boolean);
+    expect(r.offers).toHaveLength(live.length);
+    expect(llm.calls).toHaveLength(1);
+    expect(r.log.warn).toHaveBeenCalledWith(
+      "google flights: the result labels disappeared before extraction; waiting for results again",
+      expect.anything(),
+    );
+    expect(r.caveats).not.toContain(UNRECOGNISED_PAGE_CAVEAT);
+  });
+
+  it("says so when max_stops leaves none of the results", async () => {
+    const llm = labelReadingLlm();
+    const r = await runRecipe("/stops", { ...ROUND_TRIP, max_stops: 0 }, llm);
+    expect(r.error).toBeUndefined();
+    expect(r.offers).toEqual([]);
+    expect(r.caveats).toContain("Google Flights showed 8 results, none of them nonstop.");
     expect(llm.calls).toHaveLength(0);
   });
 
