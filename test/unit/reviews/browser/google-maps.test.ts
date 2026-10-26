@@ -191,9 +191,32 @@ describe.skipIf(!probe.available)(`google-maps-reviews recipe in Chromium${probe
     expect(llm.calls).toHaveLength(0);
   });
 
-  it("throws timeout when the place never renders", async () => {
+  it("reports blocked at once when the Maps application bundle answers HTTP 403", async () => {
     const t0 = Date.now();
-    const r = await runRecipe(session, recipe(), makeQuery({ subject: "Stalled Cafe" }), neverLlm(), { deadline: Date.now() + 2500 });
+    const llm = neverLlm();
+    const r = await runRecipe(session, recipe({ maxWaitMs: 30_000 }), makeQuery({ subject: "Refused Cafe" }), llm);
+    expect(r.error).toBeInstanceOf(RecipeError);
+    expect((r.error as RecipeError).code).toBe("blocked");
+    expect((r.error as RecipeError).retryable).toBe(false);
+    expect((r.error as RecipeError).message).toMatch(/refused its own page script \(the Maps application bundle answered HTTP 403\)/);
+    expect(server.requests.some((x) => x.startsWith("GET /maps/_/js/"))).toBe(true);
+    expect(llm.calls).toHaveLength(0);
+    expect(r.spy.forbidden).toEqual([]);
+    // Not the 30 s wait the page used to cost.
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+
+  it("reports blocked when a loaded page never starts the app (no app container)", async () => {
+    const t0 = Date.now();
+    const r = await runRecipe(session, recipe({ maxWaitMs: 30_000, appStartMs: 500 }), makeQuery({ subject: "Stalled Cafe" }), neverLlm());
+    expect((r.error as RecipeError).code).toBe("blocked");
+    expect((r.error as RecipeError).message).toMatch(/application never started \(no app container 0\.5s after the load event\); the page's script was refused/);
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+
+  it("throws timeout when the app starts but no place arrives", async () => {
+    const t0 = Date.now();
+    const r = await runRecipe(session, recipe({ appStartMs: 500 }), makeQuery({ subject: "Loading Cafe" }), neverLlm(), { deadline: Date.now() + 2500 });
     expect((r.error as RecipeError).code).toBe("timeout");
     expect((r.error as RecipeError).retryable).toBe(true);
     expect(Date.now() - t0).toBeLessThan(6000);
@@ -217,5 +240,19 @@ describe.skipIf(!probe.available)(`google-maps-reviews recipe in Chromium${probe
     const err = (await source.search(makeQuery({ subject: "Nowhere Bakery" }), new AbortController().signal).catch((e: unknown) => e)) as ReviewSourceError;
     expect(err).toBeInstanceOf(ReviewSourceError);
     expect(err.code).toBe("not_found");
+  });
+
+  it("fails fast through GoogleMapsReviewSource when the script is refused, with the default budgets", async () => {
+    const t0 = Date.now();
+    const source = new GoogleMapsReviewSource({
+      browser: session,
+      recipe: createGoogleMapsReviewsRecipe({ searchBaseUrl: `${server.url}/maps/search/` }),
+    });
+    const err = (await source.search(makeQuery({ subject: "Refused Cafe" }), new AbortController().signal).catch((e: unknown) => e)) as ReviewSourceError;
+    expect(err).toBeInstanceOf(ReviewSourceError);
+    expect(err).toMatchObject({ code: "blocked", needsLogin: false, retryable: false });
+    expect(err.message).toMatch(/page script/);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(session.stats().activePages).toBe(0);
   });
 });

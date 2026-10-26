@@ -1,4 +1,4 @@
-import type { Page } from "playwright";
+import type { Page, Request as PageRequest, Response as PageResponse } from "playwright";
 import { NormalizedReviewsQuerySchema, type NormalizedReviewsQuery } from "../../../schemas/reviews.js";
 import {
   BASIC_PROBE_FIELDS_JS,
@@ -55,6 +55,15 @@ import { RecipeError, type RecipeContext } from "./types.js";
  * optional "Response from the owner" block and a "N likes" button). The
  * owner's first run from a home IP is the real test of the selectors; the
  * schema-driven LLM fallback covers a redesign.
+ *
+ * A refused script is `blocked` at once (WP32): the recipe watches the
+ * responses for the application bundle (`/maps/_/js/`), and a 403 or failed
+ * load there, with nothing of the app on the page, ends the run instead of
+ * waiting out the 30 s budget. A page that has finished loading but shows no
+ * app container for `appStartMs` is reported the same way. Checked live on
+ * 2026-10-26 from a home IP: the rendered page had a search input, map
+ * canvases and headings by its load event; with the bundle answered 403 (via
+ * request interception) the body held only scripts and a `<noscript>`.
  */
 
 export const GOOGLE_MAPS_REVIEWS_SITE = "google_maps_reviews";
@@ -64,6 +73,24 @@ export const GOOGLE_MAPS_SEARCH_URL = "https://www.google.com/maps/search/";
 const REVIEWS_TAB_RE = /^\s*Reviews\b/i;
 const MORE_REVIEWS_RE = /\bmore reviews\b/i;
 const NO_RESULTS_RE = /\b(?:can.t find|couldn.t find|no results found|did not match any)\b/i;
+
+/** The Maps application bundle, e.g. `https://www.google.com/maps/_/js/k=maps.m.en....`. */
+const MAPS_BUNDLE_RE = /\/maps\/_\/js\//;
+
+/**
+ * Anything the Maps application renders once its script runs (search box, map
+ * canvas, a heading, the results feed, a place link, review cards), or a dialog
+ * or form Google shows in its place (consent). The shell alone has none of
+ * these; WP19b's cloud run saw only a "Collapse side panel" button.
+ */
+const APP_SELECTOR = 'input, canvas, h1, [role="feed"], [role="dialog"], form, a[href*="/maps/place/"], div[data-review-id]';
+
+/** A page without the app and with less visible text than this is the bare shell. */
+const SHELL_TEXT_MAX = 200;
+
+function isMapsBundle(request: PageRequest): boolean {
+  return request.resourceType() === "script" && MAPS_BUNDLE_RE.test(request.url());
+}
 
 export interface GoogleMapsReviewsRecipeOptions {
   /** Replaces https://www.google.com/maps/search/ (tests point it at a fixture server). */
@@ -76,6 +103,8 @@ export interface GoogleMapsReviewsRecipeOptions {
   maxScrolls?: number;
   /** Longest wait for the first review cards after the tab was opened. Default 8000. */
   reviewsWaitMs?: number;
+  /** How long a fully loaded page may show no app container before it counts as refused. Default 5000. */
+  appStartMs?: number;
 }
 
 /** True for a URL on a google.* host under /maps/ (search, place), or a short maps.app.goo.gl link. */
@@ -120,6 +149,10 @@ interface MapsProbe extends BasicProbe {
   hasMoreReviews: boolean;
   hasRating: boolean;
   reviewCards: number;
+  /** The load event has fired. */
+  ready: boolean;
+  /** Something of the Maps application (or a consent dialog) is on the page: `APP_SELECTOR`. */
+  hasApp: boolean;
 }
 
 const PROBE_JS = `(() => {
@@ -135,6 +168,8 @@ const PROBE_JS = `(() => {
     hasMoreReviews: buttons.some((b) => /\\bmore reviews\\b/i.test(name(b))),
     hasRating: !!document.querySelector('[role="img"][aria-label*="star" i]'),
     reviewCards: document.querySelectorAll("div[data-review-id]").length,
+    ready: document.readyState === "complete",
+    hasApp: !!document.querySelector('${APP_SELECTOR}'),
   };
 })()`;
 
@@ -271,6 +306,7 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
   const pollMs = options.pollMs ?? 300;
   const maxScrolls = options.maxScrolls ?? 3;
   const reviewsWaitMs = options.reviewsWaitMs ?? 8000;
+  const appStartMs = options.appStartMs ?? 5000;
   const site = "Google Maps";
 
   /** A test base URL accepts any URL on its origin as a place page. */
@@ -298,6 +334,17 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
     const guard = timeGuard(ctx, site);
     const nowMs = Date.now();
 
+    // How the application bundle was refused, once it was: from cloud IPs it answers HTTP 403 and the page never renders.
+    let refusal: string | undefined;
+    const onResponse = (r: PageResponse): void => {
+      if (refusal === undefined && r.status() >= 400 && isMapsBundle(r.request())) refusal = `answered HTTP ${r.status()}`;
+    };
+    const onRequestFailed = (r: PageRequest): void => {
+      const failure = r.failure()?.errorText ?? "";
+      // ERR_ABORTED is a cancellation (a navigation replaced the page), not a refusal.
+      if (refusal === undefined && isMapsBundle(r) && !/ERR_ABORTED/.test(failure)) refusal = `failed with ${failure || "a network error"}`;
+    };
+
     try {
       guard.check("before navigating");
       const url = buildUrl(q);
@@ -307,8 +354,10 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       page.on("dialog", (d) => {
         d.dismiss().catch(() => undefined);
       });
+      page.on("response", onResponse);
+      page.on("requestfailed", onRequestFailed);
       await navigateTo(page, url, ctx, site);
-      await waitForPlace(page, ctx, { caveat, guard });
+      await waitForPlace(page, ctx, { caveat, guard, refusal: () => refusal });
 
       const subjectRaw = await page.evaluate<RawSubject>(SUBJECT_JS).catch(() => ({}) as RawSubject);
       await openReviews(page, ctx, { guard });
@@ -345,17 +394,25 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       return { subject: mergeSubject(source, subjectRaw, extracted.subject, q.subject), reviews: merged };
     } catch (err) {
       throw toRecipeError(err, ctx, site);
+    } finally {
+      page.off("response", onResponse);
+      page.off("requestfailed", onRequestFailed);
     }
   }
 
-  /** Wait for a place page; open the first result when a list appears; dismiss consent; detect walls. */
-  async function waitForPlace(page: Page, ctx: RecipeContext, o: { caveat: (m: string) => void; guard: ReturnType<typeof timeGuard> }): Promise<void> {
+  /** Wait for a place page; open the first result when a list appears; dismiss consent; detect walls and a refused script. */
+  async function waitForPlace(
+    page: Page,
+    ctx: RecipeContext,
+    o: { caveat: (m: string) => void; guard: ReturnType<typeof timeGuard>; refusal: () => string | undefined },
+  ): Promise<void> {
     const start = Date.now();
     const budget = Math.max(0, Math.min(maxWaitMs, o.guard.remaining() * 0.6));
     const until = start + budget;
     let consentHandled = false;
     let clickedResult = false;
     let lastProbe: MapsProbe | undefined;
+    let shellSince: number | undefined;
     for (;;) {
       o.guard.check("while waiting for the place page");
       let probe: MapsProbe | undefined;
@@ -372,6 +429,14 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
         }
         const isPlace = probe.heading !== "" && (probe.hasReviewsTab || probe.hasMoreReviews || probe.reviewCards > 0 || probe.hasRating);
         if (isPlace) return;
+        const refusal = o.refusal();
+        if (refusal !== undefined && !probe.hasApp) {
+          throw new RecipeError(
+            "blocked",
+            `Google Maps refused its own page script (the Maps application bundle ${refusal}), so the page never rendered; Google does this from some cloud and datacenter IPs. No reviews were returned`,
+            { retryable: false },
+          );
+        }
         if (!consentHandled && (await dismissConsent(page))) {
           consentHandled = true;
           o.caveat(CONSENT_CAVEAT);
@@ -396,6 +461,19 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
         }
         if (probe.resultLinks === 0 && NO_RESULTS_RE.test(probe.text)) {
           throw new SubjectNotFoundError(`Google Maps found no place matching "${probe.title.replace(/ - Google Maps$/, "")}"`);
+        }
+        // Loaded, yet nothing of the app: its script was refused or never ran, even when no failed response was seen.
+        if (probe.ready && !probe.hasApp && probe.textLength < SHELL_TEXT_MAX) {
+          shellSince ??= Date.now();
+          if (Date.now() - shellSince >= appStartMs) {
+            throw new RecipeError(
+              "blocked",
+              `Google Maps finished loading but its application never started (no app container ${(appStartMs / 1000).toFixed(1)}s after the load event); the page's script was refused or did not run, as Google does from some cloud and datacenter IPs. No reviews were returned`,
+              { retryable: false },
+            );
+          }
+        } else {
+          shellSince = undefined;
         }
       } else if (!consentHandled && (await dismissConsent(page))) {
         consentHandled = true;
