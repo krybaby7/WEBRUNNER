@@ -1,3 +1,6 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -236,7 +239,7 @@ describe("search_hotels tool", () => {
         meter = hooks?.meter;
         return [];
       });
-      const dir = await import("node:fs/promises").then((fs) => fs.mkdtemp("/tmp/webrunner-hotels-cap-"));
+      const dir = await mkdtemp(join(tmpdir(), "webrunner-hotels-cap-"));
       const dailyCap = new DailyCostCap({ capUsd: 5, dir, log: makeLogger() });
       ok(await call(await connect([g], { deps: { dailyCap } })));
       expect(meter).toBe(dailyCap);
