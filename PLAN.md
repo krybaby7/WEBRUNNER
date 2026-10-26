@@ -1,7 +1,7 @@
 # WEBRUNNER: Implementation Plan
 
 > Repository: github.com/krybaby7/WEBRUNNER (GitHub slugs are case-insensitive). The npm package and all code use lowercase `webrunner`.
-> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) built 2026-10-21 on `v02-all-rounder`, pending the owner's review into `main`.
+> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) merged into `main` 2026-10-21; phase 6 (section 15, model calls through the owner's Claude and Codex subscriptions) planned 2026-10-26.
 > Audience: an orchestrator model (Claude Fable 5.1) that delegates work packages to implementer models (Claude Sonnet 5.5), and the human owner who reviews PRs.
 
 ## 0. How to use this document
@@ -38,9 +38,9 @@ A single MCP server, run locally over stdio, that gives Claude Code and Codex fo
 - **DECIDED: TypeScript, Node 22+.** The MCP SDK and Playwright are TypeScript-first, and Codex and Claude Code both launch stdio servers via `node`/`npx`.
 - **DECIDED: stdio transport only for v1.** No HTTP transport. Simpler security story for a personal tool.
 - **DECIDED: all logging to stderr.** stdout is the MCP protocol channel. A single stray `console.log` breaks the server. Lint rule enforces this.
-- **DECIDED: the server calls the Claude API directly** for research and extraction, via the official `@anthropic-ai/sdk`. Claude Code and Codex see one tool call, not forty.
+- **DECIDED: the server calls the model itself** for research and extraction, so Claude Code and Codex see one tool call, not forty. Originally the Claude API through the official `@anthropic-ai/sdk`; since 2026-10-26 (section 15) it can instead run each call through the owner's Claude subscription (`claude -p`), with Codex as the fallback.
 - **DECIDED: MCP SDK 1.32.x (the v1 line) for v1 of this project.** The SDK's v2 packages (`@modelcontextprotocol/server`) became the stable line in July 2026 and v1 is in maintenance for at least six months from then. v1 is what the scaffold, tests and docs are built on; WP14 evaluates the migration.
-- **DECIDED: `ANTHROPIC_API_KEY` is optional at startup.** Search and fetch work without it. Tools that need the LLM (`deep_research`, `browse_task`, LLM extraction in recipes) return error code `config` when it is unset.
+- **DECIDED: a model backend is optional at startup.** Search and fetch work without one. Tools that need the LLM (`deep_research`, `browse_task`, LLM extraction in recipes) return error code `config` when no backend is available: neither `ANTHROPIC_API_KEY` nor, since section 15, a usable `claude` executable.
 - Terms of service: scraping Google Flights violates Google's ToS. Acceptable for personal use by the owner's explicit decision. The repo README must say so and the server must not be published as a hosted service.
 
 ---
@@ -536,6 +536,8 @@ Implementer notes for the Anthropic SDK (verify against the current SDK README b
 
 Implemented shape (WP6, `src/core/llm/`): `Usage` is camelCase (`inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`); `LlmResponse` adds `model` (the serving model) and `stopReason`; `LlmRequest` adds optional `meter` and `signal`; `LlmError` carries `code` (maps onto the envelope) and `kind` (`refusal | rate_limit | api | network | not_configured | schema`). Budgets: create one `CostMeter({ maxCostUsd })` per `deep_research` or `browse_task` call and pass it as `req.meter` on every call; the client checks it before each request so overshoot is at most one call. `max_tokens` includes adaptive-thinking tokens: planner and reflect calls at `high` effort must pass `maxTokens: 16000` (the streaming threshold) rather than the 8192 default or structured JSON gets truncated. There is no tool-use path by design (forced `tool_choice` returns 400 on these models); the browse agent's one-action-per-step decision uses structured output with a discriminated union.
 
+Backends (section 15): the interface above is unchanged; `createLlmClient` returns the Claude API client described here, a `claude -p` client that uses the owner's subscription, or a router that sends a call to Codex when Claude's plan limit is hit. The implementer notes above apply to the API backend only.
+
 ### 4.7 `Cache`
 
 Content-addressed JSON files under `config.cache_dir`, key = sha256 of a canonical JSON key, with TTL stored alongside. No external dependency. Clearing is `rm -rf`.
@@ -568,6 +570,13 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | RESEARCH_MAX_COST_USD   | no       | default 3.00 per deep_research call      |
 | WEBRUNNER_CACHE_DIR  | no       | default ~/.cache/webrunner            |
 | WEBRUNNER_LOG_LEVEL  | no       | default info                             |
+| WEBRUNNER_LLM_BACKEND | no      | `auto` (default), `api` or `claude-cli` (section 15.2) |
+| WEBRUNNER_LLM_FALLBACK | no     | `none` (default) or `codex-cli`: where a call goes when Claude's plan limit is hit |
+| WEBRUNNER_CLAUDE_PATH | no      | the `claude` executable; default `claude` on `PATH` |
+| WEBRUNNER_CODEX_PATH  | no      | the `codex` executable; default `codex` on `PATH` |
+| WEBRUNNER_CODEX_MODEL | no      | model for the Codex fallback; default Codex's own |
+| WEBRUNNER_LLM_CONCURRENCY | no  | most CLI model processes at once; default 4 |
+| WEBRUNNER_CLAUDE_MAX_UTILIZATION | no | 0 to 1; above this share of any Claude plan window, calls go to the fallback; default 1 (only when the limit is hit) |
 
 \* Optional at startup by decision (Section 1). Config-file keys are the lowercase variable names with the `WEBRUNNER_` prefix dropped (`brave_api_key`, `cache_dir`, `currency`, `model_planner`, `browser_profile_dir`, `save_screenshots`, ...); unknown keys are rejected; the environment overrides the file; empty env vars count as unset. All keys above already exist in `src/config.ts`; work packages read them from `deps.config` and do not edit `config.ts` unless their brief says so.
 
@@ -779,7 +788,7 @@ Fixtures are recorded once per provider and refreshed only when a mapping breaks
 | `search_flights` via Google Flights | $0.02 to $0.08 (one extraction call) |
 | `browse_task` 15 steps | $0.20 to $0.60 |
 
-Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.cost_usd` field reports actuals.
+Figures assume the model routing table in 4.6 and 2026-10 pricing. The `stats.cost_usd` field reports actuals. With a subscription backend (section 15) nothing is billed: the same figures are API-equivalent estimates of the plan quota a call uses, and `cost_usd` reports them on that basis.
 
 ---
 
@@ -1308,3 +1317,147 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
   - **Installer redaction** now covers `*_SECRET` and `*_CLIENT_ID` as well as `*_KEY` when printing the `claude mcp add` command.
   - **Open for the owner's first live run**: whether organic Google Hotels cards print ratings from a home IP or signed-in profile; the Google Finance exchange-suffix table beyond `LON` and `NASDAQ`; the `accounts` login URLs; the X, Facebook, old.reddit, Google Maps, Google Play and Amazon recipes against the live sites with a connected account; Reddit API and YouTube with real keys; the Trustpilot budget.
 - **2026-10-18, WP15**: phase 5 planned at the owner's request. Seven tools, three groups, same provider-and-recipe architecture as flights. Logged-in browsing is passive and account connection is explicit through the `accounts` tool. Keyless sources first. Browser session gains cookie access without ever exposing values. Caps, config keys and contracts fixed here so WP16 to WP20 run in parallel on disjoint files.
+
+---
+
+## 15. Phase 6: model calls through the owner's subscriptions (v0.3)
+
+On 2026-10-26 the owner chose to run webrunner's model calls through their Claude and Codex subscriptions instead of an API key: **Claude for every role, Codex only when Claude's plan limit is hit** (DECIDED). `LlmClient` (4.6) does not change. This section adds two implementations behind it, a router, seven config keys and a `health` field.
+
+### 15.0 Scope and principles
+
+- **Same interface.** Every caller keeps calling `deps.llm.complete(req)`; backends differ only inside `src/core/llm/`.
+- **The subscription, never a surprise bill.** The `claude-cli` backend removes `ANTHROPIC_API_KEY` from the child's environment, so `claude` signs in with the owner's subscription even when a key is set in the shell.
+- **Isolated child processes.** A backend process gets no tools, no MCP servers, no settings, hooks or plugins, and an empty working directory. It cannot call webrunner (no recursion), read the owner's projects or run commands; it answers one prompt and exits.
+- **Budgets keep working.** Calls report API-equivalent cost (what the same tokens would cost on the API), so `CostMeter`, `RESEARCH_MAX_COST_USD` and `WEBRUNNER_DAILY_COST_CAP_USD` still bound how much work a run does. Nothing is billed; plan quota is what is used.
+
+### 15.1 Backends
+
+| backend | how | signs in with | measured on the owner's machine, 2026-10-26 |
+|---|---|---|---|
+| `api` | `@anthropic-ai/sdk`, as 4.6 | `ANTHROPIC_API_KEY` | (unchanged) |
+| `claude-cli` | `claude -p` (Claude Code 2.1.302) | the owner's Claude subscription | 3.7 to 3.8 s for a short structured call (about 2 s of it process start); four in parallel 6.1 s; about 1.6k tokens of fixed prompt per call |
+| `codex-cli` | `codex exec` | the owner's ChatGPT/Codex sign-in | 13 s and about 17.7k input tokens for a trivial structured call (Codex's own agent prompt) |
+
+Codex is too slow and too heavy for the scorer's volume, so it is the fallback only.
+
+### 15.2 Selection, fallback and config
+
+Keys (also in 4.8; config-file names are the lowercase forms without `WEBRUNNER_`):
+
+- `WEBRUNNER_LLM_BACKEND` / `llm_backend`: `auto` (default), `api` or `claude-cli`. `auto` is `api` when `ANTHROPIC_API_KEY` is set, else `claude-cli` when the `claude` executable resolves, else no backend. The owner sets `claude-cli`.
+- `WEBRUNNER_LLM_FALLBACK` / `llm_fallback`: `none` (default) or `codex-cli`. The owner sets `codex-cli` once WP35 lands.
+- `WEBRUNNER_CLAUDE_PATH` / `claude_path` and `WEBRUNNER_CODEX_PATH` / `codex_path`: the executables; default `claude` and `codex` looked up on `PATH`.
+- `WEBRUNNER_CODEX_MODEL` / `codex_model`: unset by default (Codex's own default model).
+- `WEBRUNNER_LLM_CONCURRENCY` / `llm_concurrency`: the most CLI model processes one server runs at once; default 4 (`deep_research` reads 3 pages at a time and scores in parallel batches).
+- `WEBRUNNER_CLAUDE_MAX_UTILIZATION` / `claude_max_utilization`: a number in (0, 1]; default 1. The quota is shared with the owner's own Claude Code use (the 7-day window stood at 60 % when this was written); at 0.9, new calls go to the fallback once any Claude window passes 90 %, which leaves headroom.
+
+**Router.** With a fallback configured, `createLlmClient` returns a `FallbackLlmClient` over the primary and the fallback. A call goes to the primary unless the primary is marked limited. When the primary throws an `LlmError` with `kind: "rate_limit"` and `details.plan_limit: true`, the router marks it limited until `details.resets_at` (15 minutes when unknown) and replays the same request on the fallback. Other errors are not retried on the fallback: a schema error or a refusal would repeat, and network errors have the backend's own handling. Without a fallback, the plan-limit error reaches the caller as `provider`, `retryable: false`, with the reset time in the message.
+
+### 15.3 `claude-cli`: how a request runs
+
+```
+claude -p --input-format stream-json --output-format stream-json --verbose
+  --model <config.models[role]> --effort <req.effort, else the role default>
+  --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence
+  --system-prompt-file <temp file> [--json-schema <req.schema as JSON Schema>]
+```
+
+All flags were checked against claude 2.1.302. The behaviours below were checked live on 2026-10-26.
+
+- **Never `--bare`.** It reads only `ANTHROPIC_API_KEY` or `apiKeyHelper`, so it cannot use the subscription.
+- **Input goes on stdin** as one stream-json user message: `{"type":"user","message":{"role":"user","content":[...]}}`. It carries the request's user content blocks in order, text and base64 images; a PNG screenshot was read correctly. No caller sends an assistant turn today. If one ever does, the earlier turns are rendered as a labelled text transcript.
+- **Prompts stay off the command line.** stdin and the system-prompt file keep them out of a command line, which Windows caps at 32,767 characters. The largest output schema in the codebase is 2.8k characters as JSON Schema; a schema over 24k characters is an `internal` error.
+- **Environment and working directory.** The child gets the server's environment minus `ANTHROPIC_API_KEY`, plus `CLAUDE_CODE_MAX_OUTPUT_TOKENS=<req.maxTokens, else the role default>`. It runs in an empty directory under `<cache_dir>/llm-cli/`.
+- **Output** is newline-delimited events.
+  - The last `result` event has `is_error`, `subtype`, `result` (text), `structured_output`, `stop_reason`, `usage`, `modelUsage`, `total_cost_usd` and `api_error_status`.
+  - A `rate_limit_event` has `rate_limit_info`: `status` (`allowed` when fine), `resetsAt` (epoch seconds) and `unifiedWindows.five_hour` / `seven_day`, each with `utilization` (0 to 1) and `resetsAt`.
+- **Response mapping.**
+
+  | `LlmResponse` field | taken from |
+  |---|---|
+  | `parsed` | `req.schema.safeParse(structured_output)`; a failure is `provider`/`schema`, as in the API client |
+  | `text` | `result` |
+  | `usage` | `usage`: input, output, cache read, cache creation |
+  | `costUsd` | `total_cost_usd` |
+  | `model` | the `modelUsage` key with the most output tokens |
+  | `stopReason` | `stop_reason` (`refusal` is `provider`/`refusal`, as 4.6) |
+
+- **Errors.**
+
+  | what happens | `LlmError` |
+  |---|---|
+  | The executable is not found | `config`/`not_configured`, naming `claude_path` and how to install Claude Code |
+  | The CLI is not signed in | `config`/`api` |
+  | `rate_limit_info.status` is neither `allowed` nor `allowed_warning`, or a result error says the usage limit was reached | `provider`/`rate_limit` with `details: { plan_limit: true, resets_at }` |
+  | `req.signal` aborts, or the 180 s per-call timeout passes (`REQUEST_TIMEOUT_MS`) | the child is killed, then `timeout` |
+  | Any other non-zero exit or `is_error` | `provider`/`api`, retryable when `api_error_status` is 500 or more; the last stderr line, with secrets redacted, goes in `details` |
+
+- **Concurrency.** A process-wide limit of `llm_concurrency` children. `meter.check()` runs before a slot is taken and `record()` after the child exits, so budget semantics match 4.6.
+- **Utilization.** The client keeps the latest `rate_limit_info`. When a window's `utilization` reaches `claude_max_utilization` (if that is below 1), the router treats the primary as limited until that window's `resetsAt`. A rejected status always counts as limited.
+
+### 15.4 `codex-cli` (the fallback)
+
+```
+codex exec --skip-git-repo-check --ephemeral -s read-only --json
+  --output-schema <temp file> -o <temp file> [-m <codex_model>]
+  -c model_reasoning_effort="<effort>" [-i <image file>]... -
+```
+
+- **The prompt goes on stdin**: the system prompt, then the user text. Images are written to temporary PNG files and passed with `-i`.
+- **Isolation is unsolved, and it is WP35's first task.** On 2026-10-26, `-c mcp_servers={}` did not stop the 15 MCP servers in the owner's `~/.codex/config.toml` from starting on every call. Two candidates to try:
+  - a dedicated `CODEX_HOME` holding only what sign-in needs;
+  - per-server `-c mcp_servers.<name>.enabled=false`.
+
+  The fallback must start no MCP server, for speed and to rule out recursion if webrunner is ever registered in Codex.
+- **Effort is always passed.** The owner's Codex defaults are model `gpt-6.1-sol` at effort `ultra`, so the backend always sends the role's effort.
+- **Output schema.** OpenAI structured outputs need every property to be required and `additionalProperties: false`. Optional fields become nullable, and nulls are dropped before `safeParse`.
+- **Usage and cost.** Usage comes from the `turn.completed` event (`input_tokens`, `cached_input_tokens`, `output_tokens`). Codex reports no cost, so `costUsd` comes from GPT rows added to the price table in `models.ts`, API-equivalent as for Claude.
+- **Windows.**
+  - The npm `codex` is a `.cmd` shim, which Node can start only through a shell. The backend resolves the shim to its `node` entry point (or a native `codex.exe`), and kills the process tree on timeout.
+  - The owner's npm `codex` 0.125.0 cannot read the `~/.codex/config.toml` the Codex desktop app wrote (`service_tier = "default"`). It needs 0.164 or later, or `codex_path` set to a current binary.
+
+### 15.5 What else changes
+
+- **The two tools that check for a key.** `deep_research` and `browse_task` check that a backend is available instead of checking for `ANTHROPIC_API_KEY`. Their `config` error, and the not-configured `LlmError`, name both ways to get one.
+- **`health`.** It adds `llm: { backend: "api" | "claude-cli" | "none", fallback: "codex-cli" | "none" }`; `anthropic_api_key` stays.
+- **Startup warning.** The warning about a missing `ANTHROPIC_API_KEY` appears only when no backend resolves.
+- **`cost_usd`.** Fields named `cost_usd` mean what they did with the API backend, and are API-equivalent estimates with a subscription backend; the README says so.
+- **`summarize` descriptions.** The descriptions in `src/schemas/{social,reviews}.ts` say the option needs a model backend, instead of `ANTHROPIC_API_KEY`.
+
+### 15.6 Work breakdown, phase 6
+
+**WP33: plan** (orchestrator)
+- Deliver: this section and the pointers in Section 1, 4.6, 4.8 and 10.
+
+**WP34: `claude-cli` backend, router and wiring**
+- Depends on: WP33.
+- Files:
+  - new: `src/core/llm/claude-cli.ts`, `src/core/llm/router.ts`, `src/core/llm/process.ts` (spawn, stdin, timeout, kill, concurrency);
+  - `src/core/llm/index.ts`, `src/core/llm/client.ts` (the not-configured message only), `src/config.ts` (the seven keys), `src/deps.ts`;
+  - `src/tools/{deep_research,browse_task,health}.ts`, the two schema descriptions, `README.md`, `scripts/install-*.sh` (the new variables);
+  - tests under `test/unit/llm/`, plus the config, health and script tests.
+- Accept, with a fake `claude` (a Node script the tests point `claude_path` at, recording argv, stdin and environment and replaying recorded stream-json):
+  - the exact flags of 15.3 are passed;
+  - `ANTHROPIC_API_KEY` is absent from the child's environment;
+  - images reach stdin;
+  - structured output is validated against `req.schema`;
+  - usage, cost and model are mapped;
+  - every row of the 15.3 error table is mapped;
+  - an abort kills the child;
+  - no more than `llm_concurrency` children run at once (asserted);
+  - the router replays a plan-limited call on a fake fallback, and sends later calls there until the reset;
+  - `auto` selection is table-tested.
+- One gated integration test (`RUN_INTEGRATION=1`) runs a real `claude -p` scorer call and an image call.
+
+**WP35: `codex-cli` fallback**
+- Depends on: WP34, and the owner's current Codex CLI.
+- Files: `src/core/llm/codex-cli.ts`, GPT rows in `src/core/llm/models.ts`, tests.
+- Accept:
+  - isolation is solved and asserted: the fake `codex` receives the isolating environment or flags, and a live run starts no MCP server;
+  - mapping tests as in WP34;
+  - one gated live call.
+
+### 15.7 Decision log, phase 6
+
+- **2026-10-26, WP33**: the owner chose their subscriptions over an API key: Claude (`claude -p`) for every role, Codex as the fallback when Claude's plan limit is hit. The figures in 15.1 and the facts in 15.3 and 15.4 were measured on the owner's Windows machine that day: tiny prompts on Haiku through Claude, a trivial prompt through Codex, a PNG read through stream-json input, four parallel calls. `LlmClient` stays as it is. Costs stay API-equivalent so the existing budgets keep bounding work.
