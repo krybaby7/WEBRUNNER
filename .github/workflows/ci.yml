@@ -53,3 +53,30 @@ jobs:
           npx vitest run
           test/unit/browser
           test/unit/flights/google-flights-
+
+  # The owner runs webrunner on Windows. The whole suite, browser tests included,
+  # in a time zone other than UTC so that date parsing which depends on the
+  # server's zone fails here rather than on the owner's machine. Git Bash runs the
+  # steps, so the install-script tests find the same bash the README tells
+  # Windows users to run the scripts from.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      TZ: Africa/Cairo
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Verify Chromium launches
+        run: node --input-type=module -e "import { chromium } from 'playwright'; const b = await chromium.launch({ headless: true }); console.log('Chromium', b.version()); await b.close();"
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test

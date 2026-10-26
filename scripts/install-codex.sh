@@ -89,6 +89,11 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTRY="$ROOT/dist/index.js"
+# Git Bash, MSYS2 and Cygwin print /c/Users/...; Codex starts the server outside
+# this shell, so write the Windows path (C:/Users/...) instead.
+if command -v cygpath >/dev/null 2>&1; then
+  ENTRY="$(cygpath -m "$ENTRY")"
+fi
 CONFIG_DIR="$HOME/.codex"
 CONFIG="$CONFIG_DIR/config.toml"
 

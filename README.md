@@ -45,7 +45,7 @@ The quality of `deep_research` is judged with the eval set (see Evals).
 
 ## Install
 
-Clone the repository, then run one of the install scripts from anywhere. Each builds the project (`npm ci && npm run build`) and registers `node <checkout>/dist/index.js` with the client. Both are safe to run again.
+Clone the repository, then run one of the install scripts from anywhere. Each builds the project (`npm ci && npm run build`) and registers `node <checkout>/dist/index.js` with the client. Both are safe to run again. On Windows, run them from Git Bash (part of Git for Windows); they register the Windows form of the path (`C:/Users/...`), which the client can start outside that shell.
 
 Export the keys you want first. The scripts only pass on variables that are set in your shell:
 
