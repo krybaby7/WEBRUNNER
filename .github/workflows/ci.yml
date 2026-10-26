@@ -76,7 +76,13 @@ jobs:
       - run: npm ci
       - run: npx playwright install chromium
       - name: Verify Chromium launches
-        run: node --input-type=module -e "import { chromium } from 'playwright'; const b = await chromium.launch({ headless: true }); console.log('Chromium', b.version()); await b.close();"
+        run: |
+          node --input-type=module -e "
+            import { chromium } from 'playwright';
+            const browser = await chromium.launch({ headless: true });
+            console.log('Chromium', browser.version());
+            await browser.close();
+          "
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
