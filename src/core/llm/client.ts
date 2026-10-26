@@ -76,7 +76,7 @@ export function createLlmClient(config: Config, opts: LlmClientOptions = {}): Ll
       throw new LlmError(
         "config",
         "not_configured",
-        "ANTHROPIC_API_KEY is not set; this operation needs the Claude API",
+        "ANTHROPIC_API_KEY is not set; this operation needs the Claude API (or set llm_backend to claude-cli to use your Claude subscription)",
         { retryable: false },
       );
     }

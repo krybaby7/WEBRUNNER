@@ -31,12 +31,33 @@ export const DEFAULT_MODELS: ModelRoles = {
   writer: "claude-opus-5-5",
 };
 
+/** Where model calls go, PLAN.md 15.2. */
+export const LLM_BACKENDS = ["auto", "api", "claude-cli"] as const;
+export type LlmBackendSetting = (typeof LLM_BACKENDS)[number];
+export const LLM_FALLBACKS = ["none", "codex-cli"] as const;
+export type LlmFallbackSetting = (typeof LLM_FALLBACKS)[number];
+
 export interface Config {
   /**
    * Optional at startup by decision (PLAN.md section 1): search and fetch work
-   * without it. Tools that need the LLM return error code "config" when unset.
+   * without it. Tools that need the LLM return error code "config" when no
+   * model backend is available (this key, or the claude CLI, PLAN.md 15.2).
    */
   anthropic_api_key?: string;
+  /** Model backend, PLAN.md 15.2. Unset means "auto". */
+  llm_backend?: LlmBackendSetting;
+  /** Where a call goes when Claude's plan limit is hit. Unset means "none". */
+  llm_fallback?: LlmFallbackSetting;
+  /** The claude executable. Unset means `claude` on PATH. */
+  claude_path?: string;
+  /** The codex executable. Unset means `codex` on PATH. */
+  codex_path?: string;
+  /** Model for the Codex fallback. Unset means Codex's own default. */
+  codex_model?: string;
+  /** Most CLI model processes at once. Unset means 4. */
+  llm_concurrency?: number;
+  /** Share (0 to 1] of any Claude plan window above which calls go to the fallback. Unset means 1. */
+  claude_max_utilization?: number;
   brave_api_key?: string;
   exa_api_key?: string;
   tavily_api_key?: string;
@@ -114,6 +135,13 @@ const ENV_VARS = {
   model_scorer: "WEBRUNNER_MODEL_SCORER",
   model_extractor: "WEBRUNNER_MODEL_EXTRACTOR",
   model_writer: "WEBRUNNER_MODEL_WRITER",
+  llm_backend: "WEBRUNNER_LLM_BACKEND",
+  llm_fallback: "WEBRUNNER_LLM_FALLBACK",
+  claude_path: "WEBRUNNER_CLAUDE_PATH",
+  codex_path: "WEBRUNNER_CODEX_PATH",
+  codex_model: "WEBRUNNER_CODEX_MODEL",
+  llm_concurrency: "WEBRUNNER_LLM_CONCURRENCY",
+  claude_max_utilization: "WEBRUNNER_CLAUDE_MAX_UTILIZATION",
 } as const;
 
 type RawKey = keyof typeof ENV_VARS;
@@ -165,6 +193,29 @@ const logLevel = z.preprocess(
   z.enum(LOG_LEVELS, { error: `must be one of: ${LOG_LEVELS.join(", ")}` }),
 );
 
+const oneOf = <const T extends readonly [string, ...string[]]>(values: T) =>
+  z.preprocess(
+    (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+    z.enum(values, { error: `must be one of: ${values.join(", ")}` }),
+  );
+
+const concurrency = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? Number(v) : v),
+  z
+    .number({ error: "must be a whole number from 1 to 16" })
+    .int({ error: "must be a whole number from 1 to 16" })
+    .min(1, { error: "must be at least 1" })
+    .max(16, { error: "must be at most 16" }),
+);
+
+const utilization = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? Number(v) : v),
+  z
+    .number({ error: "must be a number above 0 and at most 1, for example 0.9" })
+    .gt(0, { error: "must be above 0" })
+    .max(1, { error: "must be at most 1" }),
+);
+
 const ResolvedSchema = z.object({
   anthropic_api_key: nonEmptyString.optional(),
   brave_api_key: nonEmptyString.optional(),
@@ -203,6 +254,13 @@ const ResolvedSchema = z.object({
   model_scorer: nonEmptyString.default(DEFAULT_MODELS.scorer),
   model_extractor: nonEmptyString.default(DEFAULT_MODELS.extractor),
   model_writer: nonEmptyString.default(DEFAULT_MODELS.writer),
+  llm_backend: oneOf(LLM_BACKENDS).optional(),
+  llm_fallback: oneOf(LLM_FALLBACKS).optional(),
+  claude_path: nonEmptyString.optional(),
+  codex_path: nonEmptyString.optional(),
+  codex_model: nonEmptyString.optional(),
+  llm_concurrency: concurrency.optional(),
+  claude_max_utilization: utilization.optional(),
 });
 
 export interface LoadConfigOptions {
@@ -305,6 +363,13 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
 
   const config: Config = {
     ...(r.anthropic_api_key !== undefined && { anthropic_api_key: r.anthropic_api_key }),
+    ...(r.llm_backend !== undefined && { llm_backend: r.llm_backend }),
+    ...(r.llm_fallback !== undefined && { llm_fallback: r.llm_fallback }),
+    ...(r.claude_path !== undefined && { claude_path: expandHome(r.claude_path, home) }),
+    ...(r.codex_path !== undefined && { codex_path: expandHome(r.codex_path, home) }),
+    ...(r.codex_model !== undefined && { codex_model: r.codex_model }),
+    ...(r.llm_concurrency !== undefined && { llm_concurrency: r.llm_concurrency }),
+    ...(r.claude_max_utilization !== undefined && { claude_max_utilization: r.claude_max_utilization }),
     ...(r.brave_api_key !== undefined && { brave_api_key: r.brave_api_key }),
     ...(r.exa_api_key !== undefined && { exa_api_key: r.exa_api_key }),
     ...(r.tavily_api_key !== undefined && { tavily_api_key: r.tavily_api_key }),
@@ -347,13 +412,9 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
   return config;
 }
 
+// A missing ANTHROPIC_API_KEY is not warned about here: the claude CLI may stand in for it, and
+// whether one is installed is decided where the model client is built (PLAN.md 15.5).
 function warnAboutMissingKeys(config: Config): void {
-  if (config.anthropic_api_key === undefined) {
-    log.warn(
-      `${ENV_VARS.anthropic_api_key} is not set; deep_research, browse_task and LLM extraction will be unavailable`,
-      { var: ENV_VARS.anthropic_api_key },
-    );
-  }
   for (const key of SEARCH_KEYS) {
     if (config[key] === undefined) {
       log.warn(`${ENV_VARS[key]} is not set; the ${key.replace("_api_key", "")} search provider is disabled`, {

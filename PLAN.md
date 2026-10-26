@@ -1460,4 +1460,19 @@ codex exec --skip-git-repo-check --ephemeral -s read-only --json
 
 ### 15.7 Decision log, phase 6
 
+- **2026-10-26, WP34 (`claude-cli` backend, router, wiring)**:
+  - **Where the choice is made.** `createLlmClient` stays the Claude API client. A new `createModelClient` picks the backend and is what `buildDeps` calls; `deps.llmInfo` records the choice. If `createLlmClient` had auto-detected `claude`, every test that builds a keyless client would have launched the real CLI on a machine that has it. For the same reason the stdio end-to-end test pins `WEBRUNNER_LLM_BACKEND=api`: before that, its keyless `deep_research` call started a real `claude -p` planner call on the owner's machine.
+  - **Tool gates.** `deep_research` and `browse_task` ask `modelBackend(deps)`, which falls back to the API key for hand-built deps.
+  - **Additions to 15.3.**
+    - `ANTHROPIC_AUTH_TOKEN` is stripped too, case-insensitively, since it would also bypass the subscription.
+    - An empty system prompt is written as a neutral sentence, because an empty file would bring back Claude Code's own prompt.
+    - Only the current call's `rate_limit_event` decides a plan limit, and only when that call failed; an earlier rejection must not fail a call that worked.
+    - An HTTP 429 (`api_error_status`) is a retryable `rate_limit` without `plan_limit`.
+    - A warning is logged if `claude` reports `apiKeySource` other than `none`.
+    - A `.js` or `.mjs` `claude_path` runs under Node, which is how the tests' fake works. An npm `.cmd` shim is resolved to its script.
+  - **Startup.** The missing-key warning moved from `loadConfig` to `createModelClient` and fires only when no backend resolves. `llm_fallback: "codex-cli"` is accepted, warned about and reported as `none` until WP35.
+  - **Verified live on the owner's machine.**
+    - The gated integration test passes: a structured scorer call, and a PNG read through stream-json input.
+    - Over stdio with `llm_backend: claude-cli`, `health` reports `{ backend: "claude-cli", fallback: "none" }`, and `search_reviews` (App Store, `summarize: true`) returned 15 reviews and a cited summary written by Sonnet through `claude -p`, in 12 to 15 s.
+    - One earlier run of that call returned a tool error in 360 ms and did not recur in the next three runs; it was not investigated further.
 - **2026-10-26, WP33**: the owner chose their subscriptions over an API key: Claude (`claude -p`) for every role, Codex as the fallback when Claude's plan limit is hit. The figures in 15.1 and the facts in 15.3 and 15.4 were measured on the owner's Windows machine that day: tiny prompts on Haiku through Claude, a trivial prompt through Codex, a PNG read through stream-json input, four parallel calls. `LlmClient` stays as it is. Costs stay API-equivalent so the existing budgets keep bounding work.

@@ -50,7 +50,7 @@ export const SocialSearchInputSchema = z
     per_platform: z.number().int().min(1).max(MAX_PER_PLATFORM).default(DEFAULT_PER_PLATFORM),
     subreddits: z.array(z.string().trim().min(1).max(50)).min(1).optional().describe("Reddit only: restrict to these subreddits."),
     lang: LangSchema.optional().describe("Language filter for platforms that support one (bluesky, x)."),
-    summarize: z.boolean().default(false).describe("Also write a short 'what people are saying' summary with themes and sentiment. Needs ANTHROPIC_API_KEY."),
+    summarize: z.boolean().default(false).describe("Also write a short 'what people are saying' summary with themes and sentiment. Needs a model backend (ANTHROPIC_API_KEY or the claude CLI)."),
     max_cost_usd: z.number().positive().default(DEFAULT_SOCIAL_MAX_COST_USD).describe("Cap on Claude API spend for this call."),
   })
   .refine((i) => i.query !== undefined || i.url !== undefined, { error: "give a query or a url", path: ["query"] });

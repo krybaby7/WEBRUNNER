@@ -40,7 +40,9 @@ function runServer(requests: object[]): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entry], {
       cwd: root,
-      env: { PATH: process.env["PATH"] ?? "", HOME: home },
+      // llm_backend "api" with no key means no backend, whether or not this machine has the claude CLI:
+      // the default ("auto") would find an installed claude and spend the owner's subscription.
+      env: { PATH: process.env["PATH"] ?? "", HOME: home, WEBRUNNER_LLM_BACKEND: "api" },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stdout = "";

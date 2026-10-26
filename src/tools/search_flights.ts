@@ -91,7 +91,7 @@ export function registerSearchFlightsTool(server: McpServer, deps: Deps, options
         if (input.sources === undefined && configured.length === 0) {
           return toolError(
             "config",
-            "No flight source is configured. Google Flights needs the browser and ANTHROPIC_API_KEY; Duffel needs DUFFEL_API_KEY.",
+            "No flight source is configured. Google Flights needs the browser and a model backend (ANTHROPIC_API_KEY or the claude CLI); Duffel needs DUFFEL_API_KEY.",
             false,
           );
         }

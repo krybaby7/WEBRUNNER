@@ -16,7 +16,7 @@ const DESCRIPTION =
   "Platforms: reddit (public JSON endpoints without keys; the Reddit API with REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET), hackernews and bluesky (no key), " +
   "youtube (needs YOUTUBE_API_KEY; each search costs 100 of the 10,000 daily quota units), x and facebook (read through a real browser with your own connected account: connect one with the accounts tool, otherwise they report needs_login). " +
   "Give `query` to search, or `url` (a Reddit, Hacker News, Bluesky, YouTube, X or Facebook post URL) to get that thread's comments: the first item is the post, the rest are its comments. " +
-  "Results are merged across platforms, deduplicated by URL and sorted by engagement (score) or recency; `summarize: true` adds a short 'what people are saying' summary with themes and sentiment (needs ANTHROPIC_API_KEY, capped by max_cost_usd). " +
+  "Results are merged across platforms, deduplicated by URL and sorted by engagement (score) or recency; `summarize: true` adds a short 'what people are saying' summary with themes and sentiment (needs a model backend: ANTHROPIC_API_KEY or the claude CLI; capped by max_cost_usd). " +
   "This tool reads only and never posts, likes, follows or replies. For personal, low-volume use: reading X and Facebook automatically through your own account is against their terms of service and can get the account rate-limited or suspended. " +
   "API platforms get 15 seconds each and browser platforms 60; the whole call is capped at 180 seconds; past that it returns error code timeout (retryable).";
 

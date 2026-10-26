@@ -146,10 +146,49 @@ describe("loadConfig", () => {
     const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
     expect(() => load({})).not.toThrow();
     const messages = warn.mock.calls.map((c) => c[0]);
-    for (const name of ["BRAVE_API_KEY", "EXA_API_KEY", "TAVILY_API_KEY", "PERPLEXITY_API_KEY", "ANTHROPIC_API_KEY"]) {
+    for (const name of ["BRAVE_API_KEY", "EXA_API_KEY", "TAVILY_API_KEY", "PERPLEXITY_API_KEY"]) {
       expect(messages.some((m) => m.includes(name))).toBe(true);
     }
     expect(messages.some((m) => m.includes("No search provider key"))).toBe(true);
+    // A missing ANTHROPIC_API_KEY is warned about when the model client is built, since the claude CLI may stand in (PLAN.md 15.5).
+    expect(messages.some((m) => m.includes("ANTHROPIC_API_KEY"))).toBe(false);
+  });
+
+  it("parses the model backend keys (PLAN.md 15.2) from the environment and the file, with ~ expanded", () => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    const config = load({
+      WEBRUNNER_LLM_BACKEND: " Claude-CLI ",
+      WEBRUNNER_LLM_FALLBACK: "codex-cli",
+      WEBRUNNER_CLAUDE_PATH: "~/bin/claude.exe",
+      WEBRUNNER_CODEX_MODEL: "gpt-6.1-sol",
+      WEBRUNNER_LLM_CONCURRENCY: "2",
+      WEBRUNNER_CLAUDE_MAX_UTILIZATION: "0.9",
+    });
+    expect(config).toMatchObject({
+      llm_backend: "claude-cli",
+      llm_fallback: "codex-cli",
+      claude_path: join(home, "bin/claude.exe"),
+      codex_model: "gpt-6.1-sol",
+      llm_concurrency: 2,
+      claude_max_utilization: 0.9,
+    });
+    expect(config.codex_path).toBeUndefined();
+    const defaults = load({});
+    for (const key of ["llm_backend", "llm_fallback", "claude_path", "codex_path", "codex_model", "llm_concurrency", "claude_max_utilization"] as const) {
+      expect(defaults[key]).toBeUndefined();
+    }
+  });
+
+  it.each([
+    ["WEBRUNNER_LLM_BACKEND", "openai", /one of: auto, api, claude-cli/],
+    ["WEBRUNNER_LLM_FALLBACK", "gemini", /one of: none, codex-cli/],
+    ["WEBRUNNER_LLM_CONCURRENCY", "0", /at least 1/],
+    ["WEBRUNNER_LLM_CONCURRENCY", "2.5", /whole number/],
+    ["WEBRUNNER_CLAUDE_MAX_UTILIZATION", "0", /above 0/],
+    ["WEBRUNNER_CLAUDE_MAX_UTILIZATION", "1.5", /at most 1/],
+  ])("rejects %s=%s", (name, value, message) => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    expect(() => load({ [name]: value })).toThrow(message);
   });
 
   it("does not warn about a provider whose key is set", () => {

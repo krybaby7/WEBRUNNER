@@ -94,6 +94,7 @@ interface Health {
     finnhub_api_key: boolean;
     currency: string;
     models: Record<string, string>;
+    llm: { backend: string; fallback: string };
     cache_dir: string;
     browser: { mode: string; profile_dir?: string; cdp_url?: string; headless_default: boolean };
   };
@@ -164,6 +165,7 @@ describe("health tool", () => {
       finnhub_api_key: true,
       currency: "EUR",
       models: { planner: "p-model", scorer: "s-model", extractor: "e-model", writer: "w-model" },
+      llm: { backend: "api", fallback: "none" },
       cache_dir: cacheDir,
       browser: { mode: "persistent", profile_dir: profileDir, headless_default: true },
     });
@@ -231,6 +233,16 @@ describe("health tool", () => {
     expect(browser.cookieCalls).toBe(1);
   });
 
+  it("reports the model backend buildDeps resolved, such as the claude CLI on a key-less machine (PLAN.md 15.5)", async () => {
+    const config = makeConfig({ cache_dir: join(tempDir(), "cache") });
+    delete config.anthropic_api_key;
+    const deps = { ...makeDeps(config, { browser: fakeBrowser() }), llmInfo: { backend: "claude-cli" as const, fallback: "none" as const } };
+    const { client } = await connect(deps);
+    const health = (await callTool(client, "health")).structuredContent as Health;
+    expect(health.config.llm).toEqual({ backend: "claude-cli", fallback: "none" });
+    expect(health.config.anthropic_api_key).toBe(false);
+  });
+
   it("reports an empty, key-less setup without failing", async () => {
     const missing = join(tempDir(), "does-not-exist");
     const config = makeConfig({ cache_dir: missing });
@@ -243,6 +255,7 @@ describe("health tool", () => {
     const health = result.structuredContent as Health;
     const expected = expectedSources(config, deps);
     expect(health.config.anthropic_api_key).toBe(false);
+    expect(health.config.llm).toEqual({ backend: "none", fallback: "none" });
     expect(health.config.search_providers).toEqual([]);
     expect(health.config.fast_fetchers).toEqual(["jina", "direct"]);
     expect(health.config.flight_sources).toEqual(["google_flights"]);

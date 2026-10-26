@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { runResearch, ResearchError, type ResearchDeps } from "../core/research/index.js";
 import { LlmError } from "../core/llm/types.js";
-import type { Deps } from "../deps.js";
+import { modelBackend, type Deps } from "../deps.js";
+import { NO_BACKEND_MESSAGE } from "../core/llm/index.js";
 import {
   DeepResearchInputSchema,
   DeepResearchResultSchema,
@@ -19,7 +20,7 @@ const DESCRIPTION =
   "Calls take from under a minute (quick) to several minutes (deep). stats.stopped_reason tells why the loop ended: converged, iterations, budget, searches, reads, no_results or error. " +
   "The whole call is capped at 15 minutes by default (WEBRUNNER_RESEARCH_MAX_MS); past that the run is cancelled and the tool returns error code timeout (retryable). " +
   "Returns error code budget_exceeded when WEBRUNNER_DAILY_COST_CAP_USD is set and today's LLM spend has reached it. " +
-  'Use focus_domains, exclude_domains and recency to steer sources, and output "brief" for about 300 words. For a single known URL use fetch_page; for a plain lookup use web_search. Requires ANTHROPIC_API_KEY and at least one search provider key.';
+  'Use focus_domains, exclude_domains and recency to steer sources, and output "brief" for about 300 words. For a single known URL use fetch_page; for a plain lookup use web_search. Requires a model backend (ANTHROPIC_API_KEY or the claude CLI) and at least one search provider key.';
 
 /** The research entry point; tests inject a fake. Production uses `runResearch`. */
 export type DeepResearchRunner = (input: DeepResearchInput, deps: ResearchDeps) => Promise<DeepResearchResult>;
@@ -36,8 +37,8 @@ export function registerDeepResearchTool(server: McpServer, deps: Deps, runner: 
     },
     (args) =>
       runWithWallClock("deep_research", deps.config.research_max_ms, async (signal) => {
-        if (deps.config.anthropic_api_key === undefined) {
-          return toolError("config", "ANTHROPIC_API_KEY is not set; deep_research needs the Claude API", false);
+        if (modelBackend(deps) === "none") {
+          return toolError("config", `deep_research needs a model. ${NO_BACKEND_MESSAGE}`, false);
         }
         const overDailyCap = dailyCapResult(deps);
         if (overDailyCap !== undefined) return overDailyCap;
