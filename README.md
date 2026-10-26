@@ -8,15 +8,15 @@ The server calls the Claude API itself for research and extraction, so the clien
 |------|--------------|---------------|
 | `web_search` | Queries every configured search engine in parallel and returns one merged, deduplicated, ranked list. | At least one of `BRAVE_API_KEY`, `EXA_API_KEY`, `TAVILY_API_KEY`, `PERPLEXITY_API_KEY` |
 | `fetch_page` | Turns a URL into Markdown (PDFs included): fast fetchers first, a real Chromium when the page is bot-walled or empty. | None. `JINA_API_KEY` and `FIRECRAWL_API_KEY` are optional; browser mode needs Chromium |
-| `deep_research` | Plans, searches, reads, reflects and writes a cited Markdown report, with depth chosen by the caller. | `ANTHROPIC_API_KEY` and at least one search key |
-| `browse_task` | A Claude-driven agent that clicks and reads through a live page toward a goal; read and extract only. | `ANTHROPIC_API_KEY`, plus Chromium |
-| `search_flights` | Exact fares and schedules from Google Flights (read through the browser) and, optionally, Duffel. | Google Flights: `ANTHROPIC_API_KEY` plus Chromium. Duffel: `DUFFEL_API_KEY` |
-| `search_hotels` | Nightly rates, stay totals, ratings when shown, star class and amenities from Google Hotels, read through the browser. | Chromium. `ANTHROPIC_API_KEY` only as a fallback when the page layout is not recognised |
+| `deep_research` | Plans, searches, reads, reflects and writes a cited Markdown report, with depth chosen by the caller. | a model backend and at least one search key |
+| `browse_task` | A Claude-driven agent that clicks and reads through a live page toward a goal; read and extract only. | a model backend, plus Chromium |
+| `search_flights` | Exact fares and schedules from Google Flights (read through the browser) and, optionally, Duffel. | Google Flights: a model backend plus Chromium. Duffel: `DUFFEL_API_KEY` |
+| `search_hotels` | Nightly rates, stay totals, ratings when shown, star class and amenities from Google Hotels, read through the browser. | Chromium. a model backend only as a fallback when the page layout is not recognised |
 | `market_quote` | Current prices and OHLCV history for stocks, ETFs, indices and crypto from Yahoo Finance, CoinGecko, Finnhub and Google Finance. | None. `FINNHUB_API_KEY` is optional; Google Finance needs Chromium |
 | `weather` | Current conditions and a 1 to 16 day forecast, optionally hourly, from Open-Meteo. | None |
 | `exchange_rate` | Converts an amount at the latest or a historical ECB reference rate, from Frankfurter. | None |
-| `social_search` | What people are saying across Reddit, Hacker News, Bluesky, YouTube, X and Facebook, as posts and comments, or the comments of one thread; optional summary. | None for Reddit, Hacker News and Bluesky. `REDDIT_CLIENT_ID`+`REDDIT_CLIENT_SECRET` and `YOUTUBE_API_KEY` optional; X and Facebook need Chromium and a connected account; summaries need `ANTHROPIC_API_KEY` |
-| `search_reviews` | Reviews of a place, business, product or app from the App Store, Trustpilot, Google Maps, Google Play and Amazon, with the subject each site matched; optional summary. | None for the App Store and Trustpilot; the other three need Chromium (Amazon often a connected account too); summaries need `ANTHROPIC_API_KEY` |
+| `social_search` | What people are saying across Reddit, Hacker News, Bluesky, YouTube, X and Facebook, as posts and comments, or the comments of one thread; optional summary. | None for Reddit, Hacker News and Bluesky. `REDDIT_CLIENT_ID`+`REDDIT_CLIENT_SECRET` and `YOUTUBE_API_KEY` optional; X and Facebook need Chromium and a connected account; summaries need a model backend |
+| `search_reviews` | Reviews of a place, business, product or app from the App Store, Trustpilot, Google Maps, Google Play and Amazon, with the subject each site matched; optional summary. | None for the App Store and Trustpilot; the other three need Chromium (Amazon often a connected account too); summaries need a model backend |
 | `accounts` | Connect your own accounts (Reddit, X, Facebook, Instagram, Google, Amazon, LinkedIn) to the server's browser by logging in yourself in a window it opens; list what is connected; disconnect. | Chromium with a display, or your own Chrome over CDP |
 | `ping` | Liveness check: returns `ok`, the server version and the time. | None |
 | `health` | Reports what is configured (providers, fetchers, every tool's sources, which optional keys are set, models, browser mode, connected accounts by name, cache size, registered tools) without starting a browser or calling any network service. Never includes key or cookie values. | None |
@@ -38,7 +38,7 @@ The quality of `deep_research` is judged with the eval set (see Evals).
 
 - **Node.js 22 or newer.**
 - **Chromium through Playwright**, needed by `browse_task`, `search_flights` (Google Flights), `search_hotels`, the Google Finance source of `market_quote`, the X and Facebook platforms of `social_search` (and Reddit's browser fallback), the Google Maps, Google Play and Amazon sources of `search_reviews`, `accounts`, and the browser mode of `fetch_page`. On a normal machine run `npx playwright install chromium` once from the checkout. Playwright is pinned to 1.56.1 (`package.json`) so that the Chromium revision it expects is a known one; the installer downloads exactly that revision. If you upgrade Playwright, run the install command again.
-- **An Anthropic API key** (`ANTHROPIC_API_KEY`) for `deep_research`, `browse_task`, the Google Flights extractor, the `summarize` option of `social_search` and `search_reviews`, and the fallback extraction the hotel, finance and review recipes use when a page layout is not recognised. The server starts without it, and everything else works; the tools that need it return the error code `config`.
+- **A model backend**, your Claude subscription through the `claude` CLI or an Anthropic API key (`ANTHROPIC_API_KEY`), for `deep_research`, `browse_task`, the Google Flights extractor, the `summarize` option of `social_search` and `search_reviews`, and the fallback extraction the hotel, finance and review recipes use when a page layout is not recognised. The server starts without one, and everything else works; the tools that need it return the error code `config`. See Model backend.
 - **At least one search key** for `web_search` and `deep_research`. Start with **Brave plus Exa**; add Tavily or Perplexity Search later if you see failures in `providers_failed`.
 - Optional: `JINA_API_KEY` (Jina Reader works without one but is rate-limited), `FIRECRAWL_API_KEY` (better PDFs and complex pages) and `DUFFEL_API_KEY` (licensed flight offers). A reasonable start is Jina only for fetching and no Duffel until the Google Flights recipe has been in use for a few weeks.
 - Optional, for the v0.2 tools: `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (a Reddit "script" app; the API path is far more reliable than the public JSON endpoints, which refuse many IPs), `YOUTUBE_API_KEY` (a Google Cloud key with the YouTube Data API v3 enabled; without it the platform is off) and `FINNHUB_API_KEY` (US stock quotes as a second equity source). Hacker News, Bluesky, CoinGecko, Frankfurter, Open-Meteo, Yahoo Finance, the App Store feed and Trustpilot need no key.
@@ -122,7 +122,7 @@ webrunner reads environment variables first, then `~/.config/webrunner/config.js
 
 | Environment variable | Config-file key | Default | Purpose |
 |----------------------|-----------------|---------|---------|
-| `ANTHROPIC_API_KEY` | `anthropic_api_key` | none | Research, browsing and extraction. Optional at startup; LLM tools return `config` when it is unset. |
+| `ANTHROPIC_API_KEY` | `anthropic_api_key` | none | The Claude API, one of the two model backends (see Model backend). Optional at startup; LLM tools return `config` when no backend is available. |
 | `BRAVE_API_KEY` | `brave_api_key` | none | Brave Search. |
 | `EXA_API_KEY` | `exa_api_key` | none | Exa search. |
 | `TAVILY_API_KEY` | `tavily_api_key` | none | Tavily search. |
@@ -149,12 +149,34 @@ webrunner reads environment variables first, then `~/.config/webrunner/config.js
 | `WEBRUNNER_MODEL_SCORER` | `model_scorer` | `claude-haiku-5-5` | Model that scores search results for relevance. |
 | `WEBRUNNER_MODEL_EXTRACTOR` | `model_extractor` | `claude-sonnet-5-5` | Model for page notes, browse extraction and Google Flights extraction. |
 | `WEBRUNNER_MODEL_WRITER` | `model_writer` | `claude-opus-5-5` | Model that writes the final report (standard and deep depth). |
+| `WEBRUNNER_LLM_BACKEND` | `llm_backend` | `auto` | `api`, `claude-cli` or `auto`: the API when `ANTHROPIC_API_KEY` is set, else the `claude` CLI when it is installed. |
+| `WEBRUNNER_LLM_FALLBACK` | `llm_fallback` | `none` | `codex-cli` sends calls to Codex when Claude's plan limit is hit (not built yet; accepted and reported). |
+| `WEBRUNNER_CLAUDE_PATH` | `claude_path` | `claude` on `PATH` | The `claude` executable for the `claude-cli` backend. |
+| `WEBRUNNER_CODEX_PATH` | `codex_path` | `codex` on `PATH` | The `codex` executable for the fallback. |
+| `WEBRUNNER_CODEX_MODEL` | `codex_model` | Codex's default | Model for the Codex fallback. |
+| `WEBRUNNER_LLM_CONCURRENCY` | `llm_concurrency` | `4` | Most `claude` processes one server runs at once (1 to 16). |
+| `WEBRUNNER_CLAUDE_MAX_UTILIZATION` | `claude_max_utilization` | `1` | Above this share (0 to 1) of any Claude plan window, calls go to the fallback; `1` means only when the limit is hit. |
 
 Notes on the table:
 
 - Booleans accept `true`/`false`, `1`/`0`, `yes`/`no` and `on`/`off`. Paths accept a leading `~/`.
 - The config-file key is the variable name in lowercase **without** the `WEBRUNNER_` prefix where there is one (`WEBRUNNER_CACHE_DIR` is `cache_dir`, `WEBRUNNER_MODEL_PLANNER` is `model_planner`).
 - At quick depth the report is written by the extractor model (Sonnet class) rather than the writer model, per the depth table below.
+
+### Model backend
+
+Every model call (research, browsing, extraction, summaries) goes to one backend:
+
+- **Your Claude subscription, through the `claude` CLI** (`llm_backend: "claude-cli"`). Install Claude Code and sign in once (`claude`, then follow the login). Each call runs `claude -p` as a short child process with no tools, no MCP servers, no settings or hooks and an empty working directory, so it cannot call webrunner or touch your files. `ANTHROPIC_API_KEY` is removed from its environment, so it never falls back to API billing. A call takes about 4 seconds at least (2 of them starting the process); `llm_concurrency` runs up to 4 at once.
+- **The Claude API** (`llm_backend: "api"`), with `ANTHROPIC_API_KEY`: faster and billed per token.
+
+`auto`, the default, picks the API when the key is set and otherwise the `claude` CLI when it is installed. To use the subscription even with a key in your shell, put this in `~/.config/webrunner/config.json`:
+
+```json
+{ "llm_backend": "claude-cli" }
+```
+
+With the subscription, nothing is billed: the plan quota is what is used, and it is the same quota your own Claude Code sessions use. The `cost_usd` figures and the cost caps (`RESEARCH_MAX_COST_USD`, `WEBRUNNER_DAILY_COST_CAP_USD`) then count API-equivalent dollars, which still bounds how much one run can use. `health` reports the backend under `config.llm`. A Codex fallback for when Claude's limit is reached (`llm_fallback: "codex-cli"`) is planned (PLAN.md 15.4) and not built yet.
 
 ### Config file
 
@@ -665,7 +687,7 @@ Give `query` to search, or `url` (a Reddit, Hacker News, Bluesky, YouTube, X or 
 
 ### health
 
-`health` takes no arguments. It returns the server version and uptime; under `config`, which search providers, fast fetchers, flight sources, hotel sources, market sources, social platforms (with `api` or `browser` access) and review sources are configured, whether `ANTHROPIC_API_KEY`, the Reddit API pair, `YOUTUBE_API_KEY` and `FINNHUB_API_KEY` are set (booleans, never values), the model per role, and the browser mode (persistent profile or CDP attach, with `cdp_url` reduced to scheme and host); under `browser`, whether a browser is currently open and its page pool; under `accounts.connected`, the platforms whose session cookies are present **when the browser is already open**, and `null` when it is not (health never starts Chromium to look); cache directory statistics; and the list of registered tools. It makes no network calls. When any tool returns a `config` error, call `health` first to see which key or service is missing.
+`health` takes no arguments. It returns the server version and uptime; under `config`, which search providers, fast fetchers, flight sources, hotel sources, market sources, social platforms (with `api` or `browser` access) and review sources are configured, whether `ANTHROPIC_API_KEY`, the Reddit API pair, `YOUTUBE_API_KEY` and `FINNHUB_API_KEY` are set (booleans, never values), the model per role, the model backend and fallback (`llm`), and the browser mode (persistent profile or CDP attach, with `cdp_url` reduced to scheme and host); under `browser`, whether a browser is currently open and its page pool; under `accounts.connected`, the platforms whose session cookies are present **when the browser is already open**, and `null` when it is not (health never starts Chromium to look); cache directory statistics; and the list of registered tools. It makes no network calls. When any tool returns a `config` error, call `health` first to see which key or service is missing.
 
 ### Errors
 

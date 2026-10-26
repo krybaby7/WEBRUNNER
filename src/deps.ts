@@ -5,7 +5,7 @@ import { createCache, type Cache } from "./core/cache/index.js";
 import { createFetchService, type FetchService } from "./core/fetch/index.js";
 import { BrowserFetcher } from "./core/fetch/browser.js";
 import { buildFastFetchers } from "./core/fetch/fast/index.js";
-import { createLlmClient } from "./core/llm/index.js";
+import { createModelClient, type LlmBackendName, type LlmInfo } from "./core/llm/index.js";
 import { DailyCostCap } from "./core/llm/daily-cap.js";
 import type { LlmClient } from "./core/llm/types.js";
 import { createSearchService, type SearchService } from "./core/search/index.js";
@@ -25,10 +25,13 @@ export interface Deps {
   /** Merged web search. Set by buildDeps even when no provider is configured. */
   search?: SearchService;
   /**
-   * Claude API client. Always set; `complete()` throws an LlmError with code
-   * "config" when ANTHROPIC_API_KEY is unset (PLAN.md section 1).
+   * Model client: the Claude API, the claude CLI on the owner's subscription,
+   * or none (PLAN.md 15.2). Always set by buildDeps; with no backend,
+   * `complete()` throws an LlmError with code "config".
    */
   llm?: LlmClient;
+  /** Which backend `llm` is. Set by buildDeps; hand-built deps fall back to the API key (see `modelBackend`). */
+  llmInfo?: LlmInfo;
   /**
    * Shared Playwright session (PLAN.md 4.3). Launches lazily on first
    * `acquire()`; `closeDeps` closes it on shutdown.
@@ -64,7 +67,7 @@ export function buildDeps(config: Config): Deps {
     config.daily_cost_cap_usd !== undefined
       ? new DailyCostCap({ capUsd: config.daily_cost_cap_usd, dir: config.cache_dir, log })
       : undefined;
-  const llm = createLlmClient(config, dailyCap !== undefined ? { meter: dailyCap } : {});
+  const { client: llm, info: llmInfo } = createModelClient(config, dailyCap !== undefined ? { meter: dailyCap } : {});
   const browser = createBrowserSession(config);
   const fetch = createFetchService({
     fastFetchers: buildFastFetchers(config),
@@ -73,7 +76,12 @@ export function buildDeps(config: Config): Deps {
     log,
     secrets,
   });
-  return { config, log, cache, search, llm, browser, fetch, ...(dailyCap !== undefined && { dailyCap }) };
+  return { config, log, cache, search, llm, llmInfo, browser, fetch, ...(dailyCap !== undefined && { dailyCap }) };
+}
+
+/** The model backend a tool can count on: what buildDeps resolved, or for hand-built deps, whether the API key is set. */
+export function modelBackend(deps: Pick<Deps, "config" | "llmInfo">): LlmBackendName {
+  return deps.llmInfo?.backend ?? (deps.config.anthropic_api_key !== undefined ? "api" : "none");
 }
 
 /** How long `closeDeps` waits for the browser to close before it gives up and lets the process exit. */

@@ -12,7 +12,7 @@ import { buildAllMarketProviders } from "../core/markets/providers/index.js";
 import { buildAllReviewSources } from "../core/reviews/sources/index.js";
 import { buildProviders } from "../core/search/providers/index.js";
 import { buildAllSocialPlatforms } from "../core/social/platforms/index.js";
-import type { Deps } from "../deps.js";
+import { modelBackend, type Deps } from "../deps.js";
 import { AccountPlatformSchema } from "../schemas/accounts.js";
 import { toolError } from "../schemas/error.js";
 import { jsonResult } from "../schemas/result.js";
@@ -53,6 +53,7 @@ const HealthOutputSchema = z.object({
     finnhub_api_key: z.boolean(),
     currency: z.string(),
     models: z.object({ planner: z.string(), scorer: z.string(), extractor: z.string(), writer: z.string() }),
+    llm: z.object({ backend: z.enum(["api", "claude-cli", "none"]), fallback: z.enum(["codex-cli", "none"]) }),
     cache_dir: z.string(),
     browser: z.object({
       mode: z.enum(["persistent", "cdp"]),
@@ -174,6 +175,7 @@ export function registerHealthTool(server: McpServer, deps: Deps, toolNames: rea
             finnhub_api_key: config.finnhub_api_key !== undefined,
             currency: config.currency,
             models: { ...config.models },
+            llm: { backend: modelBackend(deps), fallback: deps.llmInfo?.fallback ?? "none" },
             cache_dir: config.cache_dir,
             browser: browserConfig(config),
           },

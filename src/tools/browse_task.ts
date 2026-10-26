@@ -2,7 +2,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { runBrowseTask, type BrowseTaskRunner } from "../core/browser/agent.js";
 import { JsonSchemaError } from "../core/browser/json-schema.js";
 import { LlmError } from "../core/llm/types.js";
-import type { Deps } from "../deps.js";
+import { modelBackend, type Deps } from "../deps.js";
+import { NO_BACKEND_MESSAGE } from "../core/llm/index.js";
 import { BrowseTaskInputSchema, BrowseTaskOutputSchema } from "../schemas/browse_task.js";
 import { toolError } from "../schemas/error.js";
 import { jsonResult } from "../schemas/result.js";
@@ -47,8 +48,8 @@ export function registerBrowseTaskTool(
         if (browser === undefined || llm === undefined) {
           return toolError("internal", "The browser engine or the LLM client is not available.", false);
         }
-        if (deps.config.anthropic_api_key === undefined) {
-          return toolError("config", "ANTHROPIC_API_KEY is not set; browse_task needs the Claude API", false);
+        if (modelBackend(deps) === "none") {
+          return toolError("config", `browse_task needs a model. ${NO_BACKEND_MESSAGE}`, false);
         }
         const overDailyCap = dailyCapResult(deps);
         if (overDailyCap !== undefined) return overDailyCap;

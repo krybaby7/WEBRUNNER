@@ -18,7 +18,7 @@ import { jsonResult } from "../schemas/result.js";
 import { runWithWallClock, TOOL_WALL_CLOCK_MS } from "./guard.js";
 
 const DESCRIPTION =
-  "Search hotel rates and ratings for a destination and dates. Source: Google Hotels, read through a real browser (no API key needed; ANTHROPIC_API_KEY is used only as a fallback when the page layout is not recognised). " +
+  "Search hotel rates and ratings for a destination and dates. Source: Google Hotels, read through a real browser (no API key needed; a model backend is used only as a fallback when the page layout is not recognised). " +
   "Takes a destination (city, area, landmark or hotel name), check-in and check-out dates, guests, and optional filters (max_price_per_night, min_rating, star_classes) and sort (relevance, price, rating); " +
   "returns hotels with nightly price, stay total when shown, guest rating and review count when shown, star class, type, amenities, badges and the hotel's Google Hotels page. " +
   "Prices are quotes at fetch time; taxes and fees vary by booking site. This tool reads and extracts only: it never opens a booking site and never books. " +

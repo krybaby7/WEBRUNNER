@@ -61,7 +61,7 @@ export const SearchReviewsInputSchema = z
     recency: z.enum(RECENCY_VALUES).optional().describe("Only reviews from the last day, week, month or year."),
     sort: ReviewSortSchema.default("relevance"),
     app_store_country: CountryCode.default("us").describe("App Store storefront, ISO 3166-1 alpha-2; default us."),
-    summarize: z.boolean().default(false).describe("Also write a short summary with themes and sentiment. Needs ANTHROPIC_API_KEY."),
+    summarize: z.boolean().default(false).describe("Also write a short summary with themes and sentiment. Needs a model backend (ANTHROPIC_API_KEY or the claude CLI)."),
     max_cost_usd: z.number().positive().default(DEFAULT_REVIEWS_MAX_COST_USD).describe("Cap on Claude API spend for this call."),
   })
   .refine((i) => i.min_rating === undefined || i.max_rating === undefined || i.min_rating <= i.max_rating, {
