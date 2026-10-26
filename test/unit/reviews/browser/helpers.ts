@@ -50,10 +50,14 @@ export interface ReviewsFixtureServer {
 /**
  * Routes (all under one origin so the recipes can be pointed at it):
  *   Google Maps   /maps/search/<text>   results list by default; "Direct" the place page itself;
- *                                        "Blocked" the unusual-traffic page; "Stalled" a page that never
- *                                        renders; "Nowhere" the empty result; "Unstructured" the place
- *                                        page whose cards carry no data-review-id (LLM path)
+ *                                        "Blocked" the unusual-traffic page; "Stalled" the bare shell
+ *                                        that never starts (no app container); "Loading" the started app
+ *                                        (a search box) whose place never arrives; "Refused" the shell
+ *                                        whose application bundle answers HTTP 403; "Nowhere" the empty
+ *                                        result; "Unstructured" the place page whose cards carry no
+ *                                        data-review-id (LLM path)
  *                 /maps/place/...        the place page (consent dialog first)
+ *                 /maps/_/js/...         the application bundle: HTTP 403, as Maps answers cloud IPs
  *   Google Play   /play/search?q=        the Notion search page; "Nothing" the empty result
  *                 /play/details?id=      notion.id the details page; blocked.app; stalled.app;
  *                                        unstructured.app (no data-review-id); missing.app (404 text)
@@ -76,10 +80,14 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
     const path = u.pathname;
     const stalled = (): void => html(readFixture("google-maps-stalled.html"));
 
-    if (path.startsWith("/maps/search/")) {
+    if (path.startsWith("/maps/_/js/")) {
+      html("<title>403</title><p>Your client does not have permission to get this URL from this server.</p>", 403);
+    } else if (path.startsWith("/maps/search/")) {
       const text = decodeURIComponent(path.slice("/maps/search/".length));
       if (/Blocked/.test(text)) html(readFixture("google-maps-blocked.html"));
       else if (/Stalled/.test(text)) stalled();
+      else if (/Loading/.test(text)) html(readFixture("google-maps-stalled.html").replace('<div class="spinner"', '<input name="q" aria-label="Search Google Maps"><div class="spinner"'));
+      else if (/Refused/.test(text)) html(readFixture("google-maps-script-refused.html"));
       else if (/Nowhere/.test(text)) html(readFixture("google-maps-empty.html"));
       else if (/Unstructured/.test(text)) html(readFixture("google-maps-place.html").replace('el.setAttribute("data-review-id", r.id);', ""));
       else if (/Direct/.test(text)) html(readFixture("google-maps-place.html"));
