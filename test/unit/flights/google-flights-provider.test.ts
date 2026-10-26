@@ -1,11 +1,11 @@
 import type { Page } from "playwright";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../../src/config.js";
-import { createGoogleFlightsRecipe } from "../../../src/core/browser/recipes/google-flights.js";
+import { createGoogleFlightsRecipe, UNRECOGNISED_PAGE_CAVEAT } from "../../../src/core/browser/recipes/google-flights.js";
 import { RecipeError, type Recipe } from "../../../src/core/browser/recipes/types.js";
 import { createBrowserSession } from "../../../src/core/browser/session.js";
 import type { BrowserSession } from "../../../src/core/browser/types.js";
-import { GoogleFlightsProvider } from "../../../src/core/flights/providers/google-flights.js";
+import { GoogleFlightsProvider, NO_REASON_CAVEAT } from "../../../src/core/flights/providers/google-flights.js";
 import { buildAllFlightProviders, buildFlightProviders } from "../../../src/core/flights/providers/index.js";
 import { FlightProviderError } from "../../../src/core/flights/types.js";
 import { LlmError } from "../../../src/core/llm/types.js";
@@ -71,6 +71,24 @@ describe("GoogleFlightsProvider (fake browser and recipe)", () => {
     expect(seen.deadline! - before).toBeLessThan(13_500);
     expect(hooks.caveats).toEqual(["a note"]);
     expect(browser.release).toHaveBeenCalledWith(browser.page);
+  });
+
+  it("never returns an empty list silently: no offers and no caveat from the recipe gets one", async () => {
+    const provider = (caveat?: string) =>
+      new GoogleFlightsProvider({
+        browser: fakeBrowser(),
+        llm: scriptedLlm(() => ({})),
+        recipe: fakeRecipe(async (_p, _q, ctx) => {
+          if (caveat !== undefined) ctx.caveats?.push(caveat);
+          return [];
+        }),
+      });
+    const silent = { caveats: [] as string[] };
+    await expect(provider().search(ROUND_TRIP, never(), silent)).resolves.toEqual([]);
+    expect(silent.caveats).toEqual([NO_REASON_CAVEAT]);
+    const explained = { caveats: [] as string[] };
+    await provider("Google Flights showed no results for this route and date.").search(ROUND_TRIP, never(), explained);
+    expect(explained.caveats).toEqual(["Google Flights showed no results for this route and date."]);
   });
 
   it("defaults the budget to 60 seconds", async () => {
@@ -260,6 +278,20 @@ describe.skipIf(!probe.available)(`GoogleFlightsProvider with a real browser${pr
     const err = await provider("/blocked").search(ROUND_TRIP, never()).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(FlightProviderError);
     expect((err as FlightProviderError).code).toBe("blocked");
+    expect(session.stats().activePages).toBe(0);
+  });
+
+  it("returns an unrecognised page as an empty list whose caveat reaches the caller", async () => {
+    const hooks = { caveats: [] as string[] };
+    const offers = await new GoogleFlightsProvider({
+      browser: session,
+      llm: labelReadingLlm(),
+      timeoutMs: 20_000,
+      logger: makeLogger(),
+      recipe: createGoogleFlightsRecipe({ baseUrl: `${server.url}/unrecognised`, pollMs: 50, noResultsGraceMs: 600 }),
+    }).search(ROUND_TRIP, never(), hooks);
+    expect(offers).toEqual([]);
+    expect(hooks.caveats).toEqual([UNRECOGNISED_PAGE_CAVEAT]);
     expect(session.stats().activePages).toBe(0);
   });
 

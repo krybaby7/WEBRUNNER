@@ -30,14 +30,48 @@ function listPage(labels: string[]): string {
 }
 
 /**
+ * The bare list, re-rendered by the recipe's "View more flights" click: the rows
+ * and the heading go and the page shows the loading state; `backMs` later they
+ * come back, without the button. Stands in for the page re-rendering under the
+ * recipe, as the live canary saw from GitHub runners (WP32).
+ */
+function vanishingPage(labels: string[], backMs: number): string {
+  return listPage(labels).replace(
+    "</main>",
+    `<button id="more" type="button">View more flights</button></main>
+<script>
+  var list = document.querySelector('ul[role="list"]');
+  var heading = document.querySelector("h3");
+  document.getElementById("more").addEventListener("click", function () {
+    var rows = list.innerHTML;
+    list.innerHTML = "";
+    heading.hidden = true;
+    this.remove();
+    var loading = document.createElement("div");
+    loading.textContent = "Best Cheapest from Fetching results";
+    list.before(loading);
+    setTimeout(function () { loading.remove(); heading.hidden = false; list.innerHTML = rows; }, ${backMs});
+  });
+</script>`,
+  );
+}
+
+const liveLabels = (): string[] => readFixture("google-flights-aria-labels.txt").split("\n").filter((l) => l.trim() !== "");
+
+/**
  * Local stand-in for Google Flights.
  *   /results  results fixture with consent dialog (round trip labels)
  *   /sticky  the results page whose "View more flights" button never goes away
  *   /oneway   the same page with " round trip total" removed from the labels
  *   /live     real labels captured from Google Flights, rendered as a bare list
+ *   /stops    the real labels with at least one stop, as a bare list
+ *   /vanish   the real labels, gone for 5 s after "View more flights" is clicked
  *   /blocked  the unusual-traffic interstitial
  *   /empty    a route with no flights
  *   /stalled  a page where results never arrive
+ *   /unrecognised  a page with no results region, no list and no message
+ *   /consent  the results page whose consent buttons do nothing
+ *   /away     a redirect to a sign-in page on another host (localhost instead of 127.0.0.1)
  *   /status/N a bare HTTP status
  */
 export async function startFlightsServer(): Promise<FlightsServer> {
@@ -50,11 +84,18 @@ export async function startFlightsServer(): Promise<FlightsServer> {
     else if (path === "/sticky") {
       html(readFixture("google-flights-results.html").replace('document.getElementById("more").hidden = true;', ""));
     } else if (path === "/oneway") html(readFixture("google-flights-results.html").replaceAll(" round trip total", ""));
-    else if (path === "/live") {
-      html(listPage(readFixture("google-flights-aria-labels.txt").split("\n").filter((l) => l.trim() !== "")));
-    } else if (path === "/blocked") html(readFixture("google-flights-blocked.html"));
+    else if (path === "/live") html(listPage(liveLabels()));
+    else if (path === "/stops") html(listPage(liveLabels().filter((l) => !/\bNonstop flight\b/.test(l))));
+    else if (path === "/vanish") html(vanishingPage(liveLabels(), 5000));
+    else if (path === "/blocked") html(readFixture("google-flights-blocked.html"));
     else if (path === "/empty") html(readFixture("google-flights-empty.html"));
     else if (path === "/stalled") html(readFixture("google-flights-stalled.html"));
+    else if (path === "/unrecognised") html(readFixture("google-flights-unrecognised.html"));
+    else if (path === "/consent") html(readFixture("google-flights-results.html").replace("function dismiss(choice) {", "function dismiss(choice) { return;"));
+    else if (path === "/away") {
+      const { port } = server.address() as AddressInfo;
+      res.writeHead(302, { location: `http://localhost:${port}/signin` }).end();
+    } else if (path === "/signin") html("<title>Sign in - Google Accounts</title><h1>Sign in</h1><p>to continue to Google Flights</p>");
     else if (/^\/status\/\d+$/.test(path)) html("<title>status</title>", Number(path.split("/")[2]));
     else res.writeHead(404).end("not found");
   });

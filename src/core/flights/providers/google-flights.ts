@@ -10,6 +10,9 @@ import { FlightProviderError, type FlightProvider } from "../types.js";
 /** Default time budget for one Google Flights search, page load and extraction included. */
 export const GOOGLE_FLIGHTS_DEFAULT_TIMEOUT_MS = 60_000;
 
+/** Added when the recipe returns no offers and no caveat, so an empty list is never silent. */
+export const NO_REASON_CAVEAT = 'Google Flights returned no offers without saying why; this is not a confirmed "no flights" answer.';
+
 export interface GoogleFlightsProviderOptions {
   /** Shared browser session. Without it the provider is not configured. */
   browser?: BrowserSession;
@@ -90,6 +93,7 @@ export class GoogleFlightsProvider implements FlightProvider {
         caveats,
         ...(this.meter !== undefined && { meter: this.meter }),
       });
+      if (offers.length === 0 && caveats.length === 0) caveats.push(NO_REASON_CAVEAT);
       if (hooks.caveats !== undefined) for (const c of caveats) if (!hooks.caveats.includes(c)) hooks.caveats.push(c);
       return [...offers].sort((a, b) => a.price.amount - b.price.amount).slice(0, MAX_OFFERS);
     } catch (err) {
