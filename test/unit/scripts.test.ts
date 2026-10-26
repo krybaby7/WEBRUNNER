@@ -11,6 +11,8 @@ const scripts = {
   codex: join(root, "scripts", "install-codex.sh"),
   uninstall: join(root, "scripts", "uninstall.sh"),
 };
+// The server entry the scripts register. Under Git Bash on Windows they write C:/Users/... (cygpath -m).
+const entry = process.platform === "win32" ? join(root, "dist", "index.js").replaceAll("\\", "/") : join(root, "dist", "index.js");
 
 /** Every variable the install scripts know about; cleared from the child environment unless a test sets it. */
 const WEBRUNNER_VARS = [
@@ -114,7 +116,7 @@ describe("install-codex.sh", () => {
     const once = readFileSync(codexConfig(), "utf8");
     expect(count(once, "[mcp_servers.webrunner]")).toBe(1);
     expect(once).toContain('command = "node"');
-    expect(once).toContain(`args = ["${join(root, "dist", "index.js")}"]`);
+    expect(once).toContain(`args = ["${entry}"]`);
     expect(once).toContain('env_vars = ["ANTHROPIC_API_KEY", "BRAVE_API_KEY", "EXA_API_KEY"]');
     expect(once).not.toContain("TAVILY_API_KEY");
 
@@ -223,13 +225,14 @@ describe("install-claude-code.sh", () => {
     expect(r.stdout).toContain("--env BRAVE_API_KEY=REDACTED");
     expect(r.stdout).toContain("--env WEBRUNNER_CURRENCY=EUR");
     expect(r.stdout).toContain("--transport stdio webrunner -- node");
-    expect(r.stdout).toContain(join(root, "dist", "index.js"));
+    expect(r.stdout).toContain(entry);
     expect(r.stdout).not.toContain("EXA_API_KEY");
     expect(r.all).not.toContain(SECRET_BRAVE);
     expect(existsSync(claudeLog)).toBe(false);
   });
 
-  it("--dry-run works without the claude CLI installed, a real run explains what to install", () => {
+  // The stripped PATH is built from symlinks, which Windows only lets administrators and developer mode create.
+  it.skipIf(process.platform === "win32")("--dry-run works without the claude CLI installed, a real run explains what to install", () => {
     // A PATH holding only the tools the script needs, so no real claude is visible.
     const bare = join(work, "bare-bin");
     mkdirSync(bare);
@@ -257,7 +260,7 @@ describe("install-claude-code.sh", () => {
     const calls = readFileSync(claudeLog, "utf8").trim().split("\n");
     expect(calls).toEqual([
       "mcp remove --scope user webrunner",
-      `mcp add --scope user --env BRAVE_API_KEY=${SECRET_BRAVE} --env WEBRUNNER_CURRENCY=EUR --transport stdio webrunner -- node ${join(root, "dist", "index.js")}`,
+      `mcp add --scope user --env BRAVE_API_KEY=${SECRET_BRAVE} --env WEBRUNNER_CURRENCY=EUR --transport stdio webrunner -- node ${entry}`,
     ]);
     // The key reaches claude (that is the point) but is not echoed by the script.
     expect(r.all).not.toContain(SECRET_BRAVE);

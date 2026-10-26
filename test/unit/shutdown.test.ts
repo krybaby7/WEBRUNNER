@@ -17,6 +17,8 @@ import { probeChromium, startFixtureServer, type FixtureServer } from "./browser
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const entry = join(root, "dist", "index.js");
 const EXIT_DEADLINE_MS = 10_000;
+// Windows has no SIGTERM: child.kill() ends the process at once without running its handlers.
+const isWindows = process.platform === "win32";
 
 const probe = await probeChromium();
 if (!probe.available) console.warn(`[shutdown test] ${probe.reason}: the shutdown tests that need Chromium are skipped`);
@@ -26,8 +28,19 @@ interface Proc {
   args: string;
 }
 
-/** Every process's command line. /proc where it exists, else `ps`. */
+/** Every process's command line. /proc where it exists, CIM on Windows, else `ps`. */
 function listProcesses(): Proc[] {
+  if (process.platform === "win32") {
+    const cim = spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }'],
+      { encoding: "utf8" },
+    );
+    return cim.stdout
+      .split(/\r?\n/)
+      .map((line) => /^(\d+)\s+(.+)$/.exec(line))
+      .flatMap((m) => (m !== null ? [{ pid: Number(m[1]), args: m[2] ?? "" }] : []));
+  }
   if (existsSync("/proc/self/cmdline")) {
     const out: Proc[] = [];
     for (const name of readdirSync("/proc")) {
@@ -120,7 +133,8 @@ describe("shutdown", () => {
     }
     await fixtures?.close();
     fixtures = undefined;
-    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+    // Windows keeps a dead process's files locked for a moment.
+    for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }, 30_000);
 
   function start(extraEnv: Record<string, string> = {}): Running {
@@ -226,7 +240,7 @@ describe("shutdown", () => {
     expect(left.map((p) => `${p.pid} ${p.args.slice(0, 120)}`), "orphaned browser processes").toEqual([]);
   }
 
-  it("exits 0 on SIGTERM when no browser was ever started", async () => {
+  it.skipIf(isWindows)("exits 0 on SIGTERM when no browser was ever started", async () => {
     const server = start();
     await handshake(server);
     const started = Date.now();
@@ -245,7 +259,7 @@ describe("shutdown", () => {
   }, 30_000);
 
   describe.skipIf(!probe.available)(`with a real Chromium${probe.available ? "" : ` (skipped: ${probe.reason})`}`, () => {
-    it("SIGTERM in the middle of a browser fetch leaves no Chromium behind", async () => {
+    it.skipIf(isWindows)("SIGTERM in the middle of a browser fetch leaves no Chromium behind", async () => {
       fixtures = await startFixtureServer();
       const server = start();
       await handshake(server);
@@ -260,7 +274,7 @@ describe("shutdown", () => {
       await expectCleanShutdown(server, () => server.child.kill("SIGTERM"));
     }, 60_000);
 
-    it("SIGTERM with an idle browser after a finished fetch leaves no Chromium behind", async () => {
+    it.skipIf(isWindows)("SIGTERM with an idle browser after a finished fetch leaves no Chromium behind", async () => {
       fixtures = await startFixtureServer();
       const server = start();
       await handshake(server);
@@ -276,7 +290,7 @@ describe("shutdown", () => {
       await expectCleanShutdown(server, () => server.child.kill("SIGTERM"));
     }, 60_000);
 
-    it("SIGTERM while Chromium is still starting does not orphan it either", async () => {
+    it.skipIf(isWindows)("SIGTERM while Chromium is still starting does not orphan it either", async () => {
       fixtures = await startFixtureServer();
       const server = start();
       await handshake(server);
@@ -303,6 +317,28 @@ describe("shutdown", () => {
       });
       await until("Chromium to start", 30_000, () => (browserProcesses(server.profileDir).length > 0 ? true : undefined));
       await expectCleanShutdown(server, () => server.child.stdin.end());
+    }, 60_000);
+
+    // What a client does on Windows when it gives up on a server: no handler runs, so nothing in
+    // webrunner closes the browser. Chromium must still not outlive the server.
+    it.runIf(isWindows)("a hard kill in the middle of a browser fetch leaves no Chromium behind (Windows)", async () => {
+      fixtures = await startFixtureServer();
+      const server = start();
+      await handshake(server);
+      server.send({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "fetch_page", arguments: { url: `${fixtures.url}/hang`, mode: "browser" } },
+      });
+      await until("Chromium to start", 30_000, () => (browserProcesses(server.profileDir).length > 0 ? true : undefined));
+      server.child.kill();
+      await server.exited;
+      const left = await until("the browser processes to disappear", EXIT_DEADLINE_MS, () => {
+        const remaining = browserProcesses(server.profileDir);
+        return remaining.length === 0 ? [] : undefined;
+      }).catch(() => browserProcesses(server.profileDir));
+      expect(left.map((p) => `${p.pid} ${p.args.slice(0, 120)}`), "orphaned browser processes").toEqual([]);
     }, 60_000);
   });
 });

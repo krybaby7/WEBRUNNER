@@ -156,7 +156,8 @@ describe("parseReviewDate", () => {
   it.each<[string, { iso: string; approximate: boolean } | undefined]>([
     ["2026-10-02T10:11:12.000Z", { iso: "2026-10-02T10:11:12.000Z", approximate: false }],
     ["2026-10-15T17:37:32-07:00", { iso: "2026-10-16T00:37:32.000Z", approximate: false }],
-    ["Oct 2, 2026", { iso: new Date(Date.parse("Oct 2, 2026")).toISOString(), approximate: false }],
+    // A date with no zone is read as UTC midnight, whatever the server's time zone.
+    ["Oct 2, 2026", { iso: "2026-10-02T00:00:00.000Z", approximate: false }],
     ["2 months ago", { iso: new Date(NOW - 60 * day).toISOString(), approximate: true }],
     ["2 weeks ago", { iso: new Date(NOW - 14 * day).toISOString(), approximate: true }],
     ["a day ago", { iso: new Date(NOW - day).toISOString(), approximate: true }],

@@ -156,7 +156,8 @@ describe("createCache", () => {
     expect(await cache.get("k")).toBeUndefined();
   });
 
-  it.skipIf(process.getuid?.() === 0)("treats an unreadable file as a miss and logs a warning (EACCES)", async () => {
+  // Root reads anything, and Windows ignores POSIX mode bits, so chmod cannot make the file unreadable there.
+  it.skipIf(process.getuid?.() === 0 || process.platform === "win32")("treats an unreadable file as a miss and logs a warning (EACCES)", async () => {
     const log = spyLog();
     const cache = createCache(dir, { log });
     await cache.set("k", "v", 1000);

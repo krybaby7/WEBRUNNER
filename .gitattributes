@@ -1,0 +1,4 @@
+# LF everywhere, also in Windows checkouts (core.autocrlf would otherwise turn
+# README examples and fixture pages into CRLF and break the tests that read them).
+* text=auto eol=lf
+*.pdf binary

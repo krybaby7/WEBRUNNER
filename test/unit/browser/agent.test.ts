@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -794,7 +794,7 @@ describe.skipIf(!probe.available)(`runBrowseTask${probe.available ? "" : ` (${pr
     const llm = new ScriptedLlm([{ action: "screenshot" }, { action: "done", summary: "ok" }]);
     const out = await run({ goal: "g", start_url: `${site.url}/index.html` }, llm, { config: cfg });
     const path = out.screenshots?.[0] as string;
-    expect(path.startsWith(join(cfg.cache_dir, "runs") + "/")).toBe(true);
+    expect(path.startsWith(join(cfg.cache_dir, "runs") + sep)).toBe(true);
     expect(existsSync(path)).toBe(true);
   });
 });

@@ -369,7 +369,7 @@ describe("TrustpilotSource", () => {
         verified: true,
         response: { text: "Thank you, Marta! We are glad the change went smoothly." },
       });
-      expect(out.reviews[0]?.created_at).toBe(new Date(Date.parse("Oct 2, 2026")).toISOString());
+      expect(out.reviews[0]?.created_at).toBe("2026-10-02T00:00:00.000Z");
       // "2 weeks ago" is approximated from the clock and flagged.
       expect(out.reviews[1]?.created_at).toBe(new Date(NOW - 14 * 86_400_000).toISOString());
       expect(caveats).toContain(APPROXIMATE_DATE_CAVEAT);
