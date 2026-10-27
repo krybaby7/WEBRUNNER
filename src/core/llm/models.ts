@@ -53,7 +53,39 @@ export const PRICES: Readonly<Record<string, ModelPrice>> = {
     cacheReadPerMTok: 0.25,
     cacheWritePerMTok: 12.5,
   },
+  // The GPT models the codex-cli fallback can use (PLAN.md 15.4): OpenAI standard
+  // tier, 2026-10. Cache writes use the 30-minute rate; long context is over 272K
+  // input tokens. Only API-equivalent estimates: Codex calls use the ChatGPT plan.
+  ...gptPrices({
+    "gpt-6-astra": [10, 50, 1, 12.5, 20, 75, 2, 25],
+    "gpt-6.1-sol": [2, 10, 0.1, 2.5, 4, 15, 0.2, 5],
+    "gpt-6.1-terra": [1, 5, 0.05, 1.25, 2, 7.5, 0.1, 2.5],
+    "gpt-6-sol": [2, 10, 0.2, 2.5, 4, 15, 0.4, 5],
+    "gpt-6-luna": [0.1, 0.5, 0.01, 0.125, 0.2, 0.75, 0.02, 0.25],
+    "gpt-5.6-sol": [4, 20, 0.4, 5, 8, 30, 0.8, 10],
+    "gpt-5.6-terra": [2, 12, 0.2, 2.5, 4, 18, 0.4, 5],
+    "gpt-5.6-luna": [0.2, 1.2, 0.02, 0.25, 0.4, 1.8, 0.04, 0.5],
+  }),
 };
+
+/** The model the codex-cli fallback uses unless `codex_model` is set: Codex's own default as of 0.164. */
+export const DEFAULT_CODEX_MODEL = "gpt-6.1-sol";
+
+/** Rows from `[input, output, cache read, cache write]` at short and then long context. */
+function gptPrices(rows: Record<string, readonly number[]>): Record<string, ModelPrice> {
+  return Object.fromEntries(
+    Object.entries(rows).map(([model, [i = 0, o = 0, cr = 0, cw = 0, li = 0, lo = 0, lcr = 0, lcw = 0]]) => [
+      model,
+      {
+        inputPerMTok: i,
+        outputPerMTok: o,
+        cacheReadPerMTok: cr,
+        cacheWritePerMTok: cw,
+        longContext: { thresholdTokens: 272_000, inputPerMTok: li, outputPerMTok: lo, cacheReadPerMTok: lcr, cacheWritePerMTok: lcw },
+      },
+    ]),
+  );
+}
 
 /** Used for models missing from the table: the most expensive known rates, so budgets err on the safe side. */
 export const FALLBACK_PRICE: ModelPrice = {

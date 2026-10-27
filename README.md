@@ -150,11 +150,11 @@ webrunner reads environment variables first, then `~/.config/webrunner/config.js
 | `WEBRUNNER_MODEL_EXTRACTOR` | `model_extractor` | `claude-sonnet-5-5` | Model for page notes, browse extraction and Google Flights extraction. |
 | `WEBRUNNER_MODEL_WRITER` | `model_writer` | `claude-opus-5-5` | Model that writes the final report (standard and deep depth). |
 | `WEBRUNNER_LLM_BACKEND` | `llm_backend` | `auto` | `api`, `claude-cli` or `auto`: the API when `ANTHROPIC_API_KEY` is set, else the `claude` CLI when it is installed. |
-| `WEBRUNNER_LLM_FALLBACK` | `llm_fallback` | `none` | `codex-cli` sends calls to Codex when Claude's plan limit is hit (not built yet; accepted and reported). |
+| `WEBRUNNER_LLM_FALLBACK` | `llm_fallback` | `none` | `codex-cli` sends calls to Codex (your ChatGPT plan) while Claude's plan limit is hit. |
 | `WEBRUNNER_CLAUDE_PATH` | `claude_path` | `claude` on `PATH` | The `claude` executable for the `claude-cli` backend. |
 | `WEBRUNNER_CODEX_PATH` | `codex_path` | `codex` on `PATH` | The `codex` executable for the fallback. |
-| `WEBRUNNER_CODEX_MODEL` | `codex_model` | Codex's default | Model for the Codex fallback. |
-| `WEBRUNNER_LLM_CONCURRENCY` | `llm_concurrency` | `4` | Most `claude` processes one server runs at once (1 to 16). |
+| `WEBRUNNER_CODEX_MODEL` | `codex_model` | `gpt-6.1-sol` | Model for the Codex fallback, for every role. |
+| `WEBRUNNER_LLM_CONCURRENCY` | `llm_concurrency` | `4` | Most `claude` and `codex` processes one server runs at once (1 to 16). |
 | `WEBRUNNER_CLAUDE_MAX_UTILIZATION` | `claude_max_utilization` | `1` | Above this share (0 to 1) of any Claude plan window, calls go to the fallback; `1` means only when the limit is hit. |
 
 Notes on the table:
@@ -176,7 +176,13 @@ Every model call (research, browsing, extraction, summaries) goes to one backend
 { "llm_backend": "claude-cli" }
 ```
 
-With the subscription, nothing is billed: the plan quota is what is used, and it is the same quota your own Claude Code sessions use. The `cost_usd` figures and the cost caps (`RESEARCH_MAX_COST_USD`, `WEBRUNNER_DAILY_COST_CAP_USD`) then count API-equivalent dollars, which still bounds how much one run can use. `health` reports the backend under `config.llm`. A Codex fallback for when Claude's limit is reached (`llm_fallback: "codex-cli"`) is planned (PLAN.md 15.4) and not built yet.
+With the subscription, nothing is billed: the plan quota is what is used, and it is the same quota your own Claude Code sessions use. The `cost_usd` figures and the cost caps (`RESEARCH_MAX_COST_USD`, `WEBRUNNER_DAILY_COST_CAP_USD`) then count API-equivalent dollars, which still bounds how much one run can use. `health` reports the backend and the fallback under `config.llm`.
+
+**Codex as the fallback.** With `"llm_fallback": "codex-cli"`, a call that hits Claude's plan limit is replayed on Codex, signed in with your ChatGPT plan, and later calls go there until Claude's limit resets. Install the Codex CLI 0.164 or later (`npm install -g @openai/codex`) and run `codex login` once. Each call runs `codex exec` with `--ignore-user-config`, so your `~/.codex/config.toml` and its MCP servers stay out of it; the shell, apps, plugins, subagents, browser and web search are switched off, and it runs read-only in an empty directory. `OPENAI_API_KEY` is removed from its environment. It is slower than Claude (8 to 10 seconds a call, with about 11k tokens of Codex's own prompt), which is why it is only the fallback. Set `claude_max_utilization` (say `0.9`) to move to Codex before Claude's limit is reached, leaving headroom for your own Claude Code use:
+
+```json
+{ "llm_backend": "claude-cli", "llm_fallback": "codex-cli", "claude_max_utilization": 0.9 }
+```
 
 ### Config file
 

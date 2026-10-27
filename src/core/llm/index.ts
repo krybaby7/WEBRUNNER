@@ -1,5 +1,6 @@
 export { createLlmClient, type AnthropicLike, type LlmClientOptions } from "./client.js";
 export { createClaudeCliClient, type ClaudeCliClient, type ClaudeCliOptions, type PlanStatus } from "./claude-cli.js";
+export { createCodexCliClient, type CodexCliOptions } from "./codex-cli.js";
 export {
   createFallbackClient,
   createModelClient,
@@ -12,7 +13,7 @@ export {
   type ModelClientOptions,
 } from "./router.js";
 export { computeCost, CostMeter, type CostMeterOptions } from "./cost.js";
-export { priceFor, resolveModel, PRICES, ROLE_DEFAULTS, type ModelPrice } from "./models.js";
+export { priceFor, resolveModel, DEFAULT_CODEX_MODEL, PRICES, ROLE_DEFAULTS, type ModelPrice } from "./models.js";
 export {
   LlmError,
   ROLES,

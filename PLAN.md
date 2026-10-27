@@ -574,7 +574,7 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | WEBRUNNER_LLM_FALLBACK | no     | `none` (default) or `codex-cli`: where a call goes when Claude's plan limit is hit |
 | WEBRUNNER_CLAUDE_PATH | no      | the `claude` executable; default `claude` on `PATH` |
 | WEBRUNNER_CODEX_PATH  | no      | the `codex` executable; default `codex` on `PATH` |
-| WEBRUNNER_CODEX_MODEL | no      | model for the Codex fallback; default Codex's own |
+| WEBRUNNER_CODEX_MODEL | no      | model for the Codex fallback; default `gpt-6.1-sol` (Codex's own default, always passed) |
 | WEBRUNNER_LLM_CONCURRENCY | no  | most CLI model processes at once; default 4 |
 | WEBRUNNER_CLAUDE_MAX_UTILIZATION | no | 0 to 1; above this share of any Claude plan window, calls go to the fallback; default 1 (only when the limit is hit) |
 
@@ -1337,7 +1337,7 @@ On 2026-10-26 the owner chose to run webrunner's model calls through their Claud
 |---|---|---|---|
 | `api` | `@anthropic-ai/sdk`, as 4.6 | `ANTHROPIC_API_KEY` | (unchanged) |
 | `claude-cli` | `claude -p` (Claude Code 2.1.302) | the owner's Claude subscription | 3.7 to 3.8 s for a short structured call (about 2 s of it process start); four in parallel 6.1 s; about 1.6k tokens of fixed prompt per call |
-| `codex-cli` | `codex exec` | the owner's ChatGPT/Codex sign-in | 13 s and about 17.7k input tokens for a trivial structured call (Codex's own agent prompt) |
+| `codex-cli` | `codex exec` (Codex CLI 0.164) | the owner's ChatGPT/Codex sign-in | 8.4 s and about 10.9k input tokens for a trivial structured call, isolated as in 15.4 (13 s and 17.7k with the owner's config and MCP servers loaded) |
 
 Codex is too slow and too heavy for the scorer's volume, so it is the fallback only.
 
@@ -1346,9 +1346,9 @@ Codex is too slow and too heavy for the scorer's volume, so it is the fallback o
 Keys (also in 4.8; config-file names are the lowercase forms without `WEBRUNNER_`):
 
 - `WEBRUNNER_LLM_BACKEND` / `llm_backend`: `auto` (default), `api` or `claude-cli`. `auto` is `api` when `ANTHROPIC_API_KEY` is set, else `claude-cli` when the `claude` executable resolves, else no backend. The owner sets `claude-cli`.
-- `WEBRUNNER_LLM_FALLBACK` / `llm_fallback`: `none` (default) or `codex-cli`. The owner sets `codex-cli` once WP35 lands.
+- `WEBRUNNER_LLM_FALLBACK` / `llm_fallback`: `none` (default) or `codex-cli`. The owner sets `codex-cli` (built in WP35).
 - `WEBRUNNER_CLAUDE_PATH` / `claude_path` and `WEBRUNNER_CODEX_PATH` / `codex_path`: the executables; default `claude` and `codex` looked up on `PATH`.
-- `WEBRUNNER_CODEX_MODEL` / `codex_model`: unset by default (Codex's own default model).
+- `WEBRUNNER_CODEX_MODEL` / `codex_model`: `gpt-6.1-sol` by default, which is Codex's own default; the backend always passes it, so the model and its price are known.
 - `WEBRUNNER_LLM_CONCURRENCY` / `llm_concurrency`: the most CLI model processes one server runs at once; default 4 (`deep_research` reads 3 pages at a time and scores in parallel batches).
 - `WEBRUNNER_CLAUDE_MAX_UTILIZATION` / `claude_max_utilization`: a number in (0, 1]; default 1. The quota is shared with the owner's own Claude Code use (the 7-day window stood at 60 % when this was written); at 0.9, new calls go to the fallback once any Claude window passes 90 %, which leaves headroom.
 
@@ -1399,23 +1399,40 @@ All flags were checked against claude 2.1.302. The behaviours below were checked
 ### 15.4 `codex-cli` (the fallback)
 
 ```
-codex exec --skip-git-repo-check --ephemeral -s read-only --json
-  --output-schema <temp file> -o <temp file> [-m <codex_model>]
-  -c model_reasoning_effort="<effort>" [-i <image file>]... -
+codex exec [--image <file>]... --ignore-user-config --ignore-rules --skip-git-repo-check --ephemeral
+  -s read-only --json -C <empty dir> -m <codex_model>
+  -c model_reasoning_effort="<effort>" -c web_search="disabled" -c project_doc_max_bytes=0
+  -c features.<name>=false (for each feature below)
+  [--output-schema <temp file>] -
 ```
 
-- **The prompt goes on stdin**: the system prompt, then the user text. Images are written to temporary PNG files and passed with `-i`.
-- **Isolation is unsolved, and it is WP35's first task.** On 2026-10-26, `-c mcp_servers={}` did not stop the 15 MCP servers in the owner's `~/.codex/config.toml` from starting on every call. Two candidates to try:
-  - a dedicated `CODEX_HOME` holding only what sign-in needs;
-  - per-server `-c mcp_servers.<name>.enabled=false`.
+All flags were checked against Codex CLI 0.164.0; the behaviours below were checked live on 2026-10-27.
 
-  The fallback must start no MCP server, for speed and to rule out recursion if webrunner is ever registered in Codex.
-- **Effort is always passed.** The owner's Codex defaults are model `gpt-6.1-sol` at effort `ultra`, so the backend always sends the role's effort.
-- **Output schema.** OpenAI structured outputs need every property to be required and `additionalProperties: false`. Optional fields become nullable, and nulls are dropped before `safeParse`.
-- **Usage and cost.** Usage comes from the `turn.completed` event (`input_tokens`, `cached_input_tokens`, `output_tokens`). Codex reports no cost, so `costUsd` comes from GPT rows added to the price table in `models.ts`, API-equivalent as for Claude.
+- **Isolation (solved).** `--ignore-user-config` skips `$CODEX_HOME/config.toml`, and with it the owner's MCP servers, model, effort and `service_tier`, while sign-in still comes from `CODEX_HOME`. A live call started only Codex's own `codex.exe`: no MCP server, nothing on stderr. On top of that:
+  - every agent tool is off: `shell_tool`, `unified_exec`, `apps`, `plugins`, `multi_agent`, `browser_use`, `computer_use`, `image_generation`, `goals`, `skill_search`, `tool_suggest`, `view_image`, `sleep_tool`, `hooks` and `workspace_dependencies`. That also cut Codex's fixed prompt from about 19.2k to 10.9k tokens;
+  - features go in as `-c features.<name>=false`, which a Codex release without that feature ignores with a warning item; `--disable <name>` fails on an unknown name;
+  - web search is off, `AGENTS.md` files are not read (`project_doc_max_bytes=0`), execpolicy rules are skipped, the sandbox is read-only and the working directory is an empty temporary one;
+  - `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from the child's environment, so it signs in with the ChatGPT plan.
+- **The prompt goes on stdin**: the system prompt, then the user text. Images are written to temporary files in the call's directory and passed with `--image`, before every other flag, because `--image` takes several values. A live call read a PNG screenshot correctly.
+- **Effort is always passed** (the owner's own Codex default is `ultra`), and so is the model, so the reply's model and price are known: Codex's JSON events name neither.
+- **No output-token cap.** Codex 0.164 has no setting for one (`model_max_output_tokens` is ignored as unknown), so `req.maxTokens` does not apply.
+- **Output schema.** OpenAI structured outputs need every property required and `additionalProperties: false` on every object, accept only some string formats (`uri` is not one) and need an object at the root. The backend converts the JSON Schema accordingly: optional properties become nullable, unsupported formats are dropped, and a non-object root is wrapped as `{ value }` and unwrapped. The reply is validated with `safeParse` as it is, then once more with the nulls of optional properties removed.
+- **Output.** `--json` events: the last `item.completed` with an `agent_message` is the answer; `turn.completed` carries `usage`; `turn.failed` and `error` events are failures. `error` items are warnings (such as an unknown setting) and are only logged.
+- **Usage and cost.** `input_tokens` includes `cached_input_tokens` and `cache_write_input_tokens`, which `Usage` keeps apart; `output_tokens` includes reasoning. Codex reports no cost, so `costUsd` comes from the GPT rows in `models.ts` (OpenAI's standard tier, long context above 272K tokens), API-equivalent as for Claude.
+- **Errors.**
+
+  | what happens | `LlmError` |
+  |---|---|
+  | The executable is not found | `config`/`not_configured`, naming `codex_path` and how to install Codex |
+  | Not signed in (401, `codex login`) | `config`/`api` |
+  | The ChatGPT plan's usage limit | `provider`/`rate_limit`, `details: { plan_limit: true }`, not retryable |
+  | A 429 or other rate limit | `provider`/`rate_limit`, retryable |
+  | Abort, or the 180 s timeout | the process tree is killed, then `timeout` |
+  | Any other failure | `provider`/`api`, retryable for 5xx and dropped streams |
+
 - **Windows.**
-  - The npm `codex` is a `.cmd` shim, which Node can start only through a shell. The backend resolves the shim to its `node` entry point (or a native `codex.exe`), and kills the process tree on timeout.
-  - The owner's npm `codex` 0.125.0 cannot read the `~/.codex/config.toml` the Codex desktop app wrote (`service_tier = "default"`). It needs 0.164 or later, or `codex_path` set to a current binary.
+  - The npm `codex` is a `.cmd` shim, resolved to its Node entry point (`codex.js`), which starts the native `codex.exe`. Killing the Node process alone would leave `codex.exe` running and holding the pipes, so on Windows `runProcess` kills the whole tree with `taskkill /T /F`.
+  - The npm `codex` 0.125.0 could not read the `~/.codex/config.toml` the Codex desktop app wrote. 0.164 reads it, and `--ignore-user-config` makes it irrelevant to the fallback anyway.
 
 ### 15.5 What else changes
 
@@ -1460,6 +1477,12 @@ codex exec --skip-git-repo-check --ephemeral -s read-only --json
 
 ### 15.7 Decision log, phase 6
 
+- **2026-10-27, WP35 (`codex-cli` fallback)**:
+  - **Isolation.** Codex 0.164 added `--ignore-user-config`, which solves 15.4's open question without a separate `CODEX_HOME` (which would have meant copying sign-in files) or a per-server list that goes stale. A live run of the gated integration test watches every process below the test while Codex answers and allows only Codex's own.
+  - **The model is always passed.** `codex_model` defaults to `gpt-6.1-sol`, Codex's default, instead of being left unset: Codex's events do not name the model, and the cost needs it. One model serves every role, at the role's effort.
+  - **Wiring.** `createModelClient` puts the Codex client behind the primary with `createFallbackClient` when `llm_fallback` is `codex-cli` and `codex` resolves, and passes `claude_max_utilization`. Both CLI backends share one `llm_concurrency` limit. With no primary, or no `codex`, it warns and reports `fallback: "none"`.
+  - **Process trees.** `runProcess` now kills the whole tree on Windows (`taskkill /T /F`), which the npm Codex shim needs (15.4); the claude backend gets it too.
+  - **Verified live on the owner's machine.** The gated integration test passes: a structured scorer call through `gpt-6.1-sol` that starts no MCP server, and a PNG read through `--image`. The usage-limit and sign-in error texts are matched by pattern and could not be produced on demand.
 - **2026-10-26, WP34 (`claude-cli` backend, router, wiring)**:
   - **Where the choice is made.** `createLlmClient` stays the Claude API client. A new `createModelClient` picks the backend and is what `buildDeps` calls; `deps.llmInfo` records the choice. If `createLlmClient` had auto-detected `claude`, every test that builds a keyless client would have launched the real CLI on a machine that has it. For the same reason the stdio end-to-end test pins `WEBRUNNER_LLM_BACKEND=api`: before that, its keyless `deep_research` call started a real `claude -p` planner call on the owner's machine.
   - **Tool gates.** `deep_research` and `browse_task` ask `modelBackend(deps)`, which falls back to the API key for hand-built deps.

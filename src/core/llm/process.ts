@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, join } from "node:path";
 
@@ -52,7 +52,7 @@ export const runProcess: RunProcess = (opts) =>
     const kill = (why: "timeout" | "abort"): void => {
       if (killed !== undefined || child.exitCode !== null) return;
       killed = why;
-      child.kill();
+      killTree(child);
     };
     const timer = setTimeout(() => kill("timeout"), opts.timeoutMs);
     const onAbort = (): void => kill("abort");
@@ -81,6 +81,21 @@ export const runProcess: RunProcess = (opts) =>
     });
     child.stdin.end(opts.stdin);
   });
+
+/**
+ * Kills the child and everything it started. On Windows a killed Node shim
+ * (npm's `codex`) would leave the native binary it launched running, holding
+ * our pipes open, so the whole tree goes. Elsewhere SIGTERM reaches the child,
+ * and the npm shims forward it.
+ */
+function killTree(child: ChildProcess): void {
+  if (process.platform === "win32" && child.pid !== undefined) {
+    const taskkill = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    taskkill.on("error", () => child.kill());
+    return;
+  }
+  child.kill();
+}
 
 /**
  * How to start `command`. A Node script (`.js`, `.mjs`, `.cjs`) runs under
