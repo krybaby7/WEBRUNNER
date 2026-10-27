@@ -282,6 +282,15 @@ describe("createSocialService: cache", () => {
     expect(calls).toBe(2);
   });
 
+  it("does not cache a platform that returned no items, so the next call asks again", async () => {
+    const empty = fakePlatform("bluesky", { search: () => Promise.resolve([]) });
+    const { svc, cache } = service([empty]);
+    await svc.search(input());
+    await svc.search(input());
+    expect(empty.searches).toHaveLength(2);
+    expect(cache.sets).toBe(0);
+  });
+
   it("ignores a cache entry that does not match the item schema", async () => {
     const hn = fakePlatform("hackernews");
     const { svc, cache, log } = service([hn]);

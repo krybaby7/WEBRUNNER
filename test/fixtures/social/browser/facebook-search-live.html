@@ -1,0 +1,91 @@
+<!doctype html>
+<!--
+  Facebook "Posts" search results as they rendered live on 2026-10-27 for a
+  logged-in profile from a home IP (WP36), reduced to what the recipe depends
+  on. Names, groups, pages and ids are invented.
+  - div[role=feed] has one child per result. Post dates are drawn as one
+    character per line followed by U+034F, and timestamp anchors are
+    placeholders (?__cft__...#?abc) with no permalink.
+  - The advert carries a U+2060 word joiner after the advertiser's name and a
+    utm_medium=paid link.
+  - The feed is virtualised: a result scrolled well above the viewport is
+    emptied to "Facebook" placeholder lines.
+  - The page's own data (the JSON script below) holds permalink_url values
+    with escaped slashes. Scrolling near the end fetches ../../api/graphql/,
+    whose answer (plain slashes) adds one more result and its permalink.
+  - Group 333 has two results and only one permalink, so neither can be told
+    apart from the other.
+  - The search tabs' links (one matches "/videos/") are on the page at once;
+    the results arrive 400 ms later.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>keyboard - Posts | Search Results | Facebook</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  [role="feed"] > div { min-height: 520px; border-bottom: 1px solid #ddd; }
+</style>
+<script type="application/json" data-sjs>{"require":[["ScheduledServerJS","handle",null,[{"__bbox":{"result":{"data":{"serpResponse":{"results":{"edges":[
+{"node":{"post_id":"9001","permalink_url":"https:\/\/www.facebook.com\/groups\/111\/posts\/9001\/"}},
+{"node":{"post_id":"9002","permalink_url":"https:\/\/www.facebook.com\/groups\/222\/posts\/9002\/"}},
+{"node":{"post_id":"9003","permalink_url":"https:\/\/www.facebook.com\/groups\/333\/posts\/9003\/"}}
+]}}}}}}]]]}</script>
+</head>
+<body>
+<div role="banner">Facebook <input type="search" aria-label="Search Facebook" value="keyboard"></div>
+<div role="navigation"><a href="/search/top/?q=keyboard">All</a> <a href="/search/videos/?q=keyboard">Videos</a> <a href="/reel/?s=tab">Reels</a></div>
+<div role="main">
+  <h2>Posts</h2>
+  <div role="feed" id="feed"></div>
+</div>
+<script>
+  const glyphs = (word) => word.split("").map((c) => `<span style="display:block">${c}͏</span>`).join("");
+  const stamp = (tag) => `<a href="?__cft__[0]=AZx&__tn__=%2CO%2CP-R#?${tag}">${glyphs("2d")}</a>`;
+  const POSTS = [
+    `<div><a href="/groups/111/">Keyboard Makers</a> · Join</div><div><a href="/groups/111/user/5001/">Ana R.</a> · ${stamp("aaa")}</div>
+     <div>Finished my first hand-wired build this weekend. Gateron yellows, lubed, sound test in the comments.</div>
+     <a href="https://www.facebook.com/photo/?fbid=1&set=pcb.9001">photo</a><div>12 · 4 comments</div>`,
+    `<div><a href="/cobrashop">Cobra Shop</a> ⁠${glyphs("Sponsored")}</div>
+     <div>Every keyboard you need in one place. Free delivery this week only.</div>
+     <a href="https://shop.example/kb?utm_source=fb&utm_medium=paid">Shop now</a>`,
+    `<div><a href="/groups/222/">Keebs Marketplace</a> · Join</div><div><a href="/groups/222/user/5002/">Ben T.</a> · ${stamp("bbb")}</div>
+     <div>Selling a tofu60 with holy pandas, barely used. Pickup only.</div><div>3 comments</div>`,
+    `<div><a href="/groups/333/">Switch Talk</a> · Join</div><div><a href="/groups/333/user/5003/">Cara M.</a> · ${stamp("ccc")}</div>
+     <div>Linear or tactile for long writing sessions? Ten hours a day here.</div><div>41 comments</div>`,
+    `<div><a href="/groups/333/">Switch Talk</a> · Join</div><div><a href="/groups/333/user/5004/">Dev P.</a> · ${stamp("ddd")}</div>
+     <div>Silent switches that are actually silent: what has worked for you?</div><div>17 comments</div>`,
+    `<div><a href="/keebshop">Keeb Shop</a> · Follow · ${stamp("eee")}</div>
+     <div>New arrival: the 75 percent aluminium kit in three colours, preorders open now.</div>
+     <a href="https://www.facebook.com/photo/?fbid=2&set=pcb.9005">photo</a>`,
+  ];
+  const LATE = `<div><a href="/potatokeebs">Potato Keebs</a> · Follow · ${stamp("fff")}</div>
+     <div>After twenty days with the MK75 I can say it is one of the best boards under 100 dollars.</div>`;
+
+  const feed = document.getElementById("feed");
+  const addPost = (html) => {
+    const d = document.createElement("div");
+    d.innerHTML = html;
+    feed.appendChild(d);
+  };
+  // The search tabs' links are there at once; the results arrive a moment later.
+  setTimeout(() => POSTS.forEach(addPost), 400);
+
+  let fetched = false;
+  window.addEventListener("scroll", () => {
+    for (const child of feed.children) {
+      if (child.dataset.gone) continue;
+      if (child.getBoundingClientRect().bottom < -300) {
+        child.dataset.gone = "1";
+        child.innerHTML = "<div>Facebook</div><div>Facebook</div>";
+      }
+    }
+    const nearEnd = window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 600;
+    if (nearEnd && !fetched) {
+      fetched = true;
+      fetch("../../api/graphql/", { method: "POST" }).then((r) => r.json()).then(() => addPost(LATE));
+    }
+  });
+</script>
+</body>
+</html>

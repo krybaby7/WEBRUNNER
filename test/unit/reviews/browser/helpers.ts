@@ -55,7 +55,8 @@ export interface ReviewsFixtureServer {
  *                                        (a search box) whose place never arrives; "Refused" the shell
  *                                        whose application bundle answers HTTP 403; "Nowhere" the empty
  *                                        result; "Unstructured" the place page whose cards carry no
- *                                        data-review-id (LLM path)
+ *                                        data-review-id (LLM path); "Overview" the live 2026-10-27 layout
+ *                                        whose overview shows preview cards that the Reviews tab replaces
  *                 /maps/place/...        the place page (consent dialog first)
  *                 /maps/_/js/...         the application bundle: HTTP 403, as Maps answers cloud IPs
  *   Google Play   /play/search?q=        the Notion search page; "Nothing" the empty result
@@ -91,6 +92,7 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
       else if (/Nowhere/.test(text)) html(readFixture("google-maps-empty.html"));
       else if (/Unstructured/.test(text)) html(readFixture("google-maps-place.html").replace('el.setAttribute("data-review-id", r.id);', ""));
       else if (/Direct/.test(text)) html(readFixture("google-maps-place.html"));
+      else if (/Overview/.test(text)) html(readFixture("google-maps-place-live.html"));
       else html(readFixture("google-maps-results.html"));
     } else if (path.startsWith("/maps/place/")) {
       html(readFixture("google-maps-place.html"));

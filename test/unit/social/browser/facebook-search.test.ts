@@ -1,12 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  assignPermalinks,
   buildFacebookSearchUrl,
   canonicalFacebookPostUrl,
+  cleanFacebookText,
   createFacebookSearchRecipe,
   facebookIdFromUrl,
+  facebookPostRefs,
   facebookSearchRecipe,
   isFacebookUrl,
+  looksSponsored,
+  permalinksFromBody,
   recentPostsFilter,
+  type FacebookPostRefs,
   type FacebookSearchExtraction,
   type FacebookThreadExtraction,
 } from "../../../../src/core/browser/recipes/facebook-search.js";
@@ -67,6 +73,89 @@ describe("Facebook URLs", () => {
     expect(facebookIdFromUrl(POST_URL)).toBe("02ZkAbCdEfGhIjKlMnOpQrStUvWxYz1234567890");
     expect(facebookIdFromUrl("https://www.facebook.com/watch/?v=777")).toBe("777");
     expect(facebookIdFromUrl("https://www.facebook.com/odd/path")).toMatch(/^[0-9a-f]{12}$/);
+    expect(facebookIdFromUrl("https://www.facebook.com/122371567538011353")).toBe("122371567538011353");
+  });
+});
+
+describe("Facebook results text and permalinks (live layout, 2026-10-27)", () => {
+  it("removes the one-letter obfuscation lines, placeholder lines and word joiners", () => {
+    const raw = ["Keeb Shop", "⁠", "S͏", "p͏", " ͏", "o͏", " · ", "Great board, see more", "Facebook", "Facebook", "", "12 comments"].join("\n");
+    expect(cleanFacebookText(raw)).toBe("Keeb Shop\n ·\nGreat board, see more\n12 comments");
+  });
+
+  it("flags an advert by its word joiner or a paid-campaign link", () => {
+    expect(looksSponsored("Cobra Shop ⁠\nS͏", [])).toBe(true);
+    expect(looksSponsored("Cobra Shop", ["https://shop.example/?utm_source=fb&utm_medium=paid"])).toBe(true);
+    expect(looksSponsored("Keyboard Makers · Join", ["https://www.facebook.com/groups/111/"])).toBe(false);
+  });
+
+  it("reads permalink_url from page data with escaped or plain slashes, canonical and once", () => {
+    const body =
+      '{"permalink_url":"https:\\/\\/www.facebook.com\\/groups\\/111\\/posts\\/9001\\/"},' +
+      '{"permalink_url":"https://www.facebook.com/potatokeebs/posts/pfbid0Abc?__cft__[0]=x"},' +
+      '{"permalink_url":"https:\\/\\/www.facebook.com\\/permalink.php?story_fbid=pfbid0Q\\u0026id=6155"},' +
+      '{"permalink_url":"https:\\/\\/www.facebook.com\\/groups\\/111\\/posts\\/9001\\/"},' +
+      '{"permalink_url":"https://www.facebook.com/somepage"}';
+    expect(permalinksFromBody(body)).toEqual([
+      "https://www.facebook.com/groups/111/posts/9001",
+      "https://www.facebook.com/potatokeebs/posts/pfbid0Abc",
+      "https://www.facebook.com/permalink.php?story_fbid=pfbid0Q&id=6155",
+    ]);
+  });
+
+  it("collects groups, owners, photo post ids and ready permalinks from a result's links", () => {
+    expect(
+      facebookPostRefs([
+        "https://www.facebook.com/groups/111/",
+        "https://www.facebook.com/groups/111/user/5001/?__cft__[0]=x",
+        "https://www.facebook.com/photo/?fbid=1&set=pcb.9001",
+        "https://www.facebook.com/search/posts/?q=keyboard&__cft__[0]=x#?aaa",
+        "https://www.facebook.com/hashtag/keebs",
+        "https://shop.example/kb",
+      ]),
+    ).toEqual({ links: [], groups: ["111"], owners: ["5001"], pcb: ["9001"] });
+    expect(facebookPostRefs(["https://www.facebook.com/KeebShop?__cft__[0]=x", "https://www.facebook.com/profile.php?id=42", "https://www.facebook.com/devtoolsdaily/posts/pfbid02Z"])).toEqual({
+      links: ["https://www.facebook.com/devtoolsdaily/posts/pfbid02Z"],
+      groups: [],
+      owners: ["keebshop", "42", "devtoolsdaily"],
+      pcb: [],
+    });
+  });
+
+  it("matches permalinks to results by photo post id, by a group or page they alone share, else builds one from the photo id", () => {
+    const refs = (over: Partial<FacebookPostRefs>): FacebookPostRefs => ({ links: [], groups: [], owners: [], pcb: [], ...over });
+    const data = [
+      "https://www.facebook.com/groups/mechanicalmarket/posts/9001",
+      "https://www.facebook.com/groups/222/posts/9002",
+      "https://www.facebook.com/groups/333/posts/9003",
+      "https://www.facebook.com/potatokeebs/posts/pfbid0Late",
+    ];
+    expect(
+      assignPermalinks(
+        [
+          refs({ groups: ["111"], pcb: ["9001"] }), // by photo id, though the data names the group by vanity
+          refs({ owners: ["cobrashop"] }), // nothing
+          refs({ groups: ["222"] }), // the only result and the only permalink in group 222
+          refs({ groups: ["333"] }), // two results share group 333 and one permalink: neither
+          refs({ groups: ["333"] }),
+          refs({ owners: ["keebshop"], pcb: ["9005"] }), // no data: built from the photo id
+          refs({ groups: ["444"], pcb: ["9007"] }), // built, in its group
+          refs({ owners: ["potatokeebs"] }), // the page's only permalink
+          refs({ links: ["https://www.facebook.com/devtoolsdaily/posts/pfbid02Z"], pcb: ["9001"] }), // an anchor wins
+        ],
+        data,
+      ),
+    ).toEqual([
+      "https://www.facebook.com/groups/mechanicalmarket/posts/9001",
+      undefined,
+      "https://www.facebook.com/groups/222/posts/9002",
+      undefined,
+      undefined,
+      "https://www.facebook.com/9005",
+      "https://www.facebook.com/groups/444/posts/9007",
+      "https://www.facebook.com/potatokeebs/posts/pfbid0Late",
+      "https://www.facebook.com/devtoolsdaily/posts/pfbid02Z",
+    ]);
   });
 });
 
@@ -118,25 +207,25 @@ describe.skipIf(!probe.available)(`facebook-search recipe in Chromium${probe.ava
     }
   }
 
-  it("reaches the LLM path with the visible text and canonical permalinks, and validates the result", async () => {
+  it("reaches the LLM path with one block per result, takes permalinks from the results' anchors, and validates the result", async () => {
     const meter = new CostMeter();
     const llm = scriptedLlm((req): FacebookSearchExtraction => {
       const prompt = promptOf(req);
-      expect(prompt).toContain("[0] https://www.facebook.com/groups/pythondevs/posts/1122334455667788");
-      expect(prompt).toContain(`[1] ${POST_URL}`);
-      expect(prompt).toContain("[2] https://www.facebook.com/permalink.php?story_fbid=9988776655443322&id=100000000000001");
+      expect(prompt).toMatch(/Post \[0\]:\nPython Developers\nAna Ribeiro/);
+      expect(prompt).toContain("Post [3]:\nStartup Stories");
+      expect(prompt).not.toContain("Post [4]");
       expect(prompt).not.toContain("__cft__");
       expect(prompt).toContain("We let Claude Code loose on our billing module");
       expect(prompt).not.toContain("People also search for");
-      const post = (author: string, text: string, permalink: number | null, likes: number, comments: number, shares: number | null, community: string | null = null) => ({
-        author, community, text, created_at: null, likes, comments, shares, permalink,
+      const post = (author: string, text: string, n: number | null, likes: number, comments: number, shares: number | null, community: string | null = null) => ({
+        author, community, text, created_at: null, likes, comments, shares, post: n,
       });
       return {
         posts: [
           post("Ana Ribeiro", "We let Claude Code loose on our billing module for a day. It found two real bugs and introduced one new one.", 0, 143, 37, 12, "Python Developers"),
           post("Dev Tools Daily", "Claude Code vs. Cursor vs. Copilot: we ran the same 20 tickets through each.", 1, 2100, 310, 88),
           post("Marcus L.", "Finally got claude code working with our monorepo. The trick was a CLAUDE.md per package.", 2, 18, 4, null),
-          post("Startup Stories", "Is claude code worth $200 a month for a two-person team?", null, 56, 71, 3),
+          post("Startup Stories", "Is claude code worth $200 a month for a two-person team?", 3, 56, 71, 3),
         ],
       };
     });
@@ -177,11 +266,55 @@ describe.skipIf(!probe.available)(`facebook-search recipe in Chromium${probe.ava
 
   it("caveats the recency filter and cuts at per_platform", async () => {
     const llm = scriptedLlm((): FacebookSearchExtraction => ({
-      posts: [0, 1, 2].map((n) => ({ author: `A${n}`, community: null, text: `post ${n}`, created_at: null, likes: null, comments: null, shares: null, permalink: n })),
+      posts: [0, 1, 2].map((n) => ({ author: `A${n}`, community: null, text: `post ${n}`, created_at: null, likes: null, comments: null, shares: null, post: n })),
     }));
     const r = await runRecipe("fb-ok", { ...SEARCH_QUERY, per_platform: 2, recency: "week" }, llm);
     expect(r.items).toHaveLength(2);
     expect(r.caveats.some((c) => /recency filter was not applied/.test(c))).toBe(true);
+  });
+
+  it("reads a virtualised feed after every scroll step, strips the obfuscation, labels the advert and links posts from page data", async () => {
+    const llm = scriptedLlm((req): FacebookSearchExtraction => {
+      const prompt = promptOf(req);
+      // The first result was emptied by the time scrolling ended; it was read before that.
+      expect(prompt).toContain("Post [0]:\nKeyboard Makers · Join\nAna R. ·\nFinished my first hand-wired build");
+      expect(prompt).toContain("Post [1] (Facebook marks this post as sponsored):\nCobra Shop");
+      // Arrived with the GraphQL answer after scrolling.
+      expect(prompt).toContain("Post [6]:\nPotato Keebs · Follow ·\nAfter twenty days with the MK75");
+      expect(prompt).not.toContain("Post [7]");
+      expect(prompt).not.toMatch(/͏|⁠|^Facebook$/m);
+      const post = (n: number, author: string, community: string | null, text: string) => ({ author, community, text, created_at: null, likes: null, comments: null, shares: null, post: n });
+      return {
+        posts: [
+          post(0, "Ana R.", "Keyboard Makers", "Finished my first hand-wired build this weekend."),
+          post(2, "Ben T.", "Keebs Marketplace", "Selling a tofu60 with holy pandas, barely used."),
+          post(3, "Cara M.", "Switch Talk", "Linear or tactile for long writing sessions?"),
+          post(4, "Dev P.", "Switch Talk", "Silent switches that are actually silent?"),
+          post(5, "Keeb Shop", null, "New arrival: the 75 percent aluminium kit."),
+          post(6, "Potato Keebs", null, "After twenty days with the MK75 I can say it is one of the best boards under 100 dollars."),
+        ],
+      };
+    });
+    const r = await runRecipe("fb-live", { ...SEARCH_QUERY, query: "keyboard" }, llm);
+    expect(r.error).toBeUndefined();
+    expect(llm.calls).toHaveLength(1);
+    expect(server.requests.some((x) => x.startsWith("POST /s/fb-live/api/graphql/"))).toBe(true);
+    const items = r.items!;
+    for (const i of items) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    const search = `${server.scenario("fb-live")}/search/posts/?q=keyboard`;
+    expect(items.map((i) => [i.author, i.url])).toEqual([
+      ["Ana R.", "https://www.facebook.com/groups/111/posts/9001"], // page data, by the photo's post id
+      ["Ben T.", "https://www.facebook.com/groups/222/posts/9002"], // page data, the group's only result
+      ["Cara M.", search], // two results in group 333 and one permalink: no guess
+      ["Dev P.", search],
+      ["Keeb Shop", "https://www.facebook.com/9005"], // built from the photo's post id
+      ["Potato Keebs", "https://www.facebook.com/potatokeebs/posts/pfbid0TestLate"], // the GraphQL answer
+    ]);
+    expect(items.map((i) => i.id).slice(0, 2)).toEqual(["facebook:9001", "facebook:9002"]);
+    expect(items[4]!.id).toBe("facebook:9005");
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
+    expect(r.caveats).toContain("Some Facebook posts had no permalink on the results page; their url is the search page.");
+    expect(r.spy.forbidden).toEqual([]);
   });
 
   it("the login page (live capture) is blocked with needsLogin, naming accounts connect facebook", async () => {
