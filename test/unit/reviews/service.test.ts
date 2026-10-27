@@ -166,6 +166,15 @@ describe("createReviewsService", () => {
       expect(a.search).toHaveBeenCalledTimes(4);
     });
 
+    it("does not cache a source that found no reviews, so the next call asks again", async () => {
+      const empty = sourceWith("app_store", []);
+      const { service, cache } = make([empty]);
+      await service.search(parsedInput());
+      await service.search(parsedInput());
+      expect(empty.search).toHaveBeenCalledTimes(2);
+      expect(cache.store.size).toBe(0);
+    });
+
     it("does not cache failures, and ignores an entry that fails the schema", async () => {
       let calls = 0;
       const flaky = fakeSource("app_store", () => {

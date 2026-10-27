@@ -141,6 +141,26 @@ describe.skipIf(!probe.available)(`google-maps-reviews recipe in Chromium${probe
     expect(r.caveats).toContain(CONSENT_CAVEAT);
   });
 
+  it("reads the Reviews tab's cards, not the overview's preview cards it replaces (live layout, 2026-10-27)", async () => {
+    // per_source 3: the three preview cards alone would have satisfied the old wait.
+    const few = await runRecipe(session, recipe(), makeQuery({ subject: "Overview Tower", per_source: 3 }), neverLlm());
+    expect(few.error).toBeUndefined();
+    expect(few.result!.reviews.map((x) => x.author)).toEqual(["Nadia K.", "Omar F.", "Lena B."]);
+
+    const r = await runRecipe(session, recipe(), makeQuery({ subject: "Overview Tower" }), neverLlm());
+    expect(r.error).toBeUndefined();
+    expect(r.spy.forbidden).toEqual([]);
+    const { subject, reviews } = r.result!;
+    expect(subject).toMatchObject({ name: "Nile View Tower", rating_avg: 4.3, review_count: 30_700 });
+    // 10 cards, then 14 after one scroll; the previews never appear.
+    expect(reviews).toHaveLength(14);
+    expect(reviews.some((x) => x.author?.startsWith("Preview"))).toBe(false);
+    for (const review of reviews) expect(ReviewSchema.safeParse(review).success).toBe(true);
+    expect(reviews[0]).toMatchObject({ author: "Nadia K.", rating: 5, url: "https://www.google.com/maps/contrib/200000" });
+    expect(reviews[0]!.text).toContain("telescopes on the deck");
+    expect(reviews.find((x) => x.author === "Tarek E.")?.rating).toBe(1);
+  });
+
   it("opens a place URL given as subject_url without searching", async () => {
     const before = server.requests.length;
     const url = `${server.url}/maps/place/Direct/data=1`;

@@ -28,7 +28,7 @@ export { summarizeSocialItems } from "./summary.js";
  * merges, caches per platform and optionally summarises.
  */
 
-/** Cache lifetime per platform and query. */
+/** Cache lifetime per platform and query. Empty answers are not cached. */
 export const SOCIAL_CACHE_TTL_MS = 15 * 60_000;
 /** Per-platform timeouts by access kind. */
 export const DEFAULT_SOCIAL_TIMEOUTS_MS: Readonly<Record<SocialPlatformProvider["access"], number>> = {
@@ -307,7 +307,8 @@ export function createSocialService(deps: SocialServiceDeps): SocialService {
         log.warn("social platform returned invalid items, dropped", { platform: p.name, dropped });
         hooks.caveats?.push(`${p.name}: ${dropped} item(s) were dropped because they failed validation.`);
       }
-      await cache.set(key, items, SOCIAL_CACHE_TTL_MS);
+      // An empty answer is often a page that had not finished loading; caching it would repeat it.
+      if (items.length > 0) await cache.set(key, items, SOCIAL_CACHE_TTL_MS);
       return { platform: p.name, ok: true, items, cached: false };
     } catch (err) {
       return { platform: p.name, ok: false, failure: classify(err, p.name) };

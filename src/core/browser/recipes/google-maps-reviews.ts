@@ -64,6 +64,17 @@ import { RecipeError, type RecipeContext } from "./types.js";
  * 2026-10-26 from a home IP: the rendered page had a search input, map
  * canvases and headings by its load event; with the bundle answered 403 (via
  * request interception) the body held only scripts and a `<noscript>`.
+ *
+ * First logged-in run from the home IP, 2026-10-27 (WP36): the selectors
+ * match the live page (`div.jftiEf[data-review-id]` wrapping an inner
+ * `div[data-review-id]` that holds the reviewer button, the star img, the
+ * relative time and `span.wiI7pd`). The overview tab already shows three
+ * cards, and opening the Reviews tab replaces them: the recipe used to take
+ * those as the tab's cards and read the page in the gap that followed, so it
+ * found none. It now waits for cards that were not there before the click.
+ * It also counted the outer and inner div of each card when deciding whether
+ * to scroll, so 10 reviews looked like 20; only the innermost count now.
+ * `google-maps-place-live.html` reproduces that page.
  */
 
 export const GOOGLE_MAPS_REVIEWS_SITE = "google_maps_reviews";
@@ -283,6 +294,26 @@ const COLLECT_JS = `(() => {
   return out;
 })()`;
 
+/**
+ * Remember the review cards on the page now, so `FRESH_CARDS_JS` can tell them
+ * from the cards the Reviews tab brings. The place overview shows a few cards
+ * of its own; opening the tab removes them and builds a new pane. Live on
+ * 2026-10-27 (Cairo Tower): 3 cards at the click, 0 at +230 ms, 10 at +850 ms.
+ */
+const REMEMBER_CARDS_JS = `(() => {
+  window.__webrunnerMapsCards = new WeakSet(document.querySelectorAll("div[data-review-id]"));
+  return document.querySelectorAll("div[data-review-id]").length;
+})()`;
+
+/** Reviews on the page: live cards nest one div[data-review-id] in another, so only the innermost count. */
+const CARD_COUNT_JS = `(() => Array.from(document.querySelectorAll("div[data-review-id]")).filter((c) => !c.querySelector("div[data-review-id]")).length)()`;
+
+/** Cards that were not on the page when `REMEMBER_CARDS_JS` ran. */
+const FRESH_CARDS_JS = `(() => {
+  const seen = window.__webrunnerMapsCards;
+  return Array.from(document.querySelectorAll("div[data-review-id]")).filter((c) => !seen || !seen.has(c)).length;
+})()`;
+
 /** Visible text of the pane that holds the reviews (or the whole page). */
 const PANE_TEXT_JS = `(() => {
   const first = document.querySelector("div[data-review-id]");
@@ -486,33 +517,43 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
     }
   }
 
-  /** Open the Reviews tab (or "More reviews") and wait for the first cards. */
+  /**
+   * Open the Reviews tab (or "More reviews") and wait for the cards it brings.
+   * Cards already on the place overview do not count: the tab replaces them,
+   * and reading before the new pane arrives finds nothing.
+   */
   async function openReviews(page: Page, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
     o.guard.check("before opening the reviews tab");
-    const existing = await page.locator("div[data-review-id]").count();
+    const existing = await page.evaluate<number>(REMEMBER_CARDS_JS);
     const tab = page.getByRole("tab", { name: REVIEWS_TAB_RE }).first();
     const more = page.getByRole("button", { name: MORE_REVIEWS_RE }).first();
     try {
-      if ((await tab.count()) > 0) await tab.click({ timeout: o.guard.cap(5000) });
-      else if ((await more.count()) > 0) await more.click({ timeout: o.guard.cap(5000) });
-      else if (existing === 0) {
-        ctx.log.debug("google maps: no reviews tab or button on the place page");
+      if ((await tab.count()) > 0) {
+        // Already on the Reviews tab (a place URL can open there): its cards are the ones to read.
+        if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click({ timeout: o.guard.cap(5000) });
+        else if (existing > 0) return;
+      } else if ((await more.count()) > 0) await more.click({ timeout: o.guard.cap(5000) });
+      else {
+        if (existing === 0) ctx.log.debug("google maps: no reviews tab or button on the place page");
         return;
       }
     } catch (err) {
       ctx.log.warn("google maps: could not open the reviews tab", { error: errMsg(err) });
     }
     const until = Date.now() + o.guard.cap(reviewsWaitMs);
+    let streak = 0;
     while (Date.now() < until) {
-      const n = await page.locator("div[data-review-id]").count();
-      if (n > 0 && (n !== existing || existing > 0)) return;
+      streak = (await page.evaluate<number>(FRESH_CARDS_JS)) > 0 ? streak + 1 : 0;
+      // Two polls in a row, so cards that flash up while the tab switches do not count.
+      if (streak >= 2) return;
       await sleep(pollMs);
     }
+    ctx.log.debug("google maps: no new review cards after opening the reviews", { overview_cards: existing });
   }
 
   /** Scroll the pane at most `maxScrolls` times until `per_source` cards exist, then expand the "More" buttons. */
   async function loadMore(page: Page, q: NormalizedReviewsQuery, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
-    let count = await page.locator("div[data-review-id]").count();
+    let count = await page.evaluate<number>(CARD_COUNT_JS);
     for (let i = 0; i < maxScrolls && count < q.per_source && count > 0; i++) {
       o.guard.check("while scrolling the reviews");
       const before = count;
@@ -525,7 +566,7 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       const until = Date.now() + o.guard.cap(3000);
       do {
         await sleep(pollMs);
-        count = await page.locator("div[data-review-id]").count();
+        count = await page.evaluate<number>(CARD_COUNT_JS);
       } while (count <= before && Date.now() < until);
       if (count <= before) break;
     }

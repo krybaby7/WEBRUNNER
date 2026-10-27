@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nile View Tower - Google Maps</title>
+<!--
+  Stand-in for a Google Maps place page as it rendered live on 2026-10-27
+  from a home IP with a logged-in profile (WP36), class names and nesting as
+  seen there. The overview tab already shows three preview cards. Clicking
+  "Reviews for ..." selects the tab at once, removes the overview (its cards
+  and the h1) 100 ms later, and builds the reviews pane 400 ms after that:
+  the gap that made the recipe read an empty page. Each card is a
+  div.jftiEf[data-review-id] wrapping an inner div[data-review-id]. The pane
+  shows 10 cards, then 14 after one scroll. Place and reviewer names are
+  invented.
+-->
+<style>
+  body { font-family: sans-serif; margin: 0; }
+  .pane { height: 300px; overflow-y: auto; }
+  .jftiEf { padding: 8px; border-bottom: 1px solid #eee; min-height: 90px; }
+</style>
+</head>
+<body>
+<div role="main" aria-label="Nile View Tower">
+  <h1>Nile View Tower</h1>
+  <div>
+    <span>4.3</span>
+    <span role="img" aria-label="4.3 stars"><span>★★★★</span></span>
+    <button type="button" aria-label="30,700 reviews">(30,700)</button>
+  </div>
+  <button type="button" data-item-id="address" aria-label="Address: 1 Corniche Street, Cairo">1 Corniche Street, Cairo</button>
+  <div role="tablist">
+    <button type="button" role="tab" aria-selected="true" aria-label="Overview of Nile View Tower">Overview</button>
+    <button type="button" role="tab" aria-selected="false" aria-label="Reviews for Nile View Tower">Reviews</button>
+    <button type="button" role="tab" aria-selected="false" aria-label="About Nile View Tower">About</button>
+  </div>
+  <div id="panel" class="pane"></div>
+</div>
+
+<script>
+  const PREVIEWS = [
+    { id: "ChdPVkVSVklFVzFfUFJFVklFV19BAQ", name: "Preview Ann", stars: 5, when: "a week ago", text: "Lovely view at sunset." },
+    { id: "ChdPVkVSVklFVzFfUFJFVklFV19CAQ", name: "Preview Ben", stars: 4, when: "2 weeks ago", text: "Good restaurant at the top." },
+    { id: "ChdPVkVSVklFVzFfUFJFVklFV19DAQ", name: "Preview Cat", stars: 3, when: "a month ago", text: "Long queue for the lift." },
+  ];
+  const REVIEWS = [
+    { name: "Nadia K.", stars: 5, when: "3 months ago", text: "Visiting the tower was one of the highlights of my trip.", more: " The telescopes on the deck are worth it." },
+    { name: "Omar F.", stars: 4, when: "a month ago", text: "Great panorama of the city and the river." },
+    { name: "Lena B.", stars: 2, when: "2 days ago", text: "Overpriced tickets for foreigners and a slow lift." },
+    { name: "Yusuf A.", stars: 5, when: "5 months ago", text: "Best place for photos of the Nile at dusk." },
+    { name: "Grace P.", stars: 4, when: "6 months ago", text: "The revolving restaurant is slow to turn but the food is fine." },
+    { name: "Karim S.", stars: 3, when: "8 months ago", text: "Crowded on Fridays." },
+    { name: "Mia R.", stars: 5, when: "a year ago", text: "Do not miss it." },
+    { name: "Tarek E.", stars: 1, when: "a year ago", text: "Closed without notice the day we came." },
+    { name: "Sofia L.", stars: 4, when: "2 years ago", text: "Clean, safe and well run." },
+    { name: "Ahmed H.", stars: 5, when: "3 years ago", text: "A classic." },
+    { name: "Ines V.", stars: 4, when: "3 years ago", text: "Go before sunset." },
+    { name: "Paul D.", stars: 3, when: "4 years ago", text: "Fine but short visit." },
+    { name: "Rana M.", stars: 5, when: "4 years ago", text: "Beautiful at night." },
+    { name: "Hugo T.", stars: 2, when: "5 years ago", text: "Dirty windows spoil the view." },
+  ].map((r, i) => ({ ...r, id: "ChdSRVZJRVdfTklMRV9WSUVXXz" + String(i).padStart(2, "0") + "AQ" }));
+
+  function card(r, n) {
+    const outer = document.createElement("div");
+    outer.className = "jftiEf fontBodyMedium";
+    outer.setAttribute("data-review-id", r.id);
+    outer.setAttribute("aria-label", r.name);
+    const contrib = "https://www.google.com/maps/contrib/" + (200000 + n);
+    outer.innerHTML =
+      `<div data-review-id="${r.id}" jsaction="mouseover:pane.review.in"><div class="jJc9Ad">` +
+      `<div><button class="WEBjve" data-review-id="${r.id}" aria-label="Photo of ${r.name}" data-href="${contrib}"><img class="NBa7we" alt=""></button></div>` +
+      `<div class="GHT2ce NsCY4"><div class="m44Iib"></div><div><div class="WNxzHc qLhwHc">` +
+      `<button class="al6Kxe" data-review-id="${r.id}" data-href="${contrib}"><div class="d4r55 fontTitleMedium">${r.name}</div><div class="RfnDt">Local Guide · 12 reviews</div></button></div>` +
+      `<button class="PP3Y3d S1qRNe" data-review-id="${r.id}" aria-label="Actions for ${r.name}'s review"></button></div></div>` +
+      `<div class="GHT2ce"><div class="DU9Pgb"><span class="kvMYJc" role="img" aria-label="${r.stars} star${r.stars === 1 ? "" : "s"}"><span>${"★".repeat(r.stars)}</span></span><span class="rsqaWe">${r.when}</span></div>` +
+      `<div><div class="MyEned"><span class="wiI7pd">${r.text}${r.more ? "…" : ""}</span>` +
+      (r.more ? `<span><button class="w8nwRe kyuRq" data-review-id="${r.id}" aria-label="See more">More</button></span>` : "") + `</div></div>` +
+      `<div class="Upo0Ec"><button class="gllhef" data-review-id="${r.id}" aria-label="Like">Like</button><button class="gllhef" data-review-id="${r.id}" aria-label="Share ${r.name}'s review.">Share</button></div>` +
+      `</div></div></div>`;
+    const more = outer.querySelector('button[aria-label="See more"]');
+    if (more) more.addEventListener("click", () => {
+      outer.querySelector(".wiI7pd").textContent = r.text + r.more;
+      more.remove();
+    });
+    return outer;
+  }
+
+  const panel = document.getElementById("panel");
+  PREVIEWS.forEach((r, i) => panel.appendChild(card(r, 100 + i)));
+
+  const tabs = document.querySelectorAll('[role="tab"]');
+  tabs[1].addEventListener("click", () => {
+    tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
+    tabs[1].setAttribute("aria-selected", "true");
+    setTimeout(() => {
+      panel.replaceChildren();
+      document.querySelector("h1").textContent = "";
+      setTimeout(() => {
+        const list = document.createElement("div");
+        panel.appendChild(list);
+        let shown = 0;
+        const add = (n) => { for (; shown < Math.min(n, REVIEWS.length); shown++) list.appendChild(card(REVIEWS[shown], shown)); };
+        add(10);
+        panel.addEventListener("scroll", () => {
+          if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 5) setTimeout(() => add(14), 60);
+        });
+      }, 400);
+    }, 100);
+  });
+</script>
+</body>
+</html>

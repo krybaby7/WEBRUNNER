@@ -35,6 +35,8 @@ export interface SocialServer {
  *   x-403         /search -> HTTP 403, empty body (as live headless Chromium saw)
  *   x-empty       /search -> "No results for ..."
  *   fb-ok         /search/posts/ -> results; /<page>/posts/<id> -> post page
+ *   fb-live       /search/posts/ -> the live 2026-10-27 layout (virtualised feed, obfuscated dates, an
+ *                 advert, permalinks only in page data); POST /api/graphql/ -> one more permalink
  *   fb-login      /search/posts/ -> 302 to /login/ -> login page (from the live capture)
  *   fb-404        /search/posts/ -> HTTP 404 "Not Found" (as live)
  *   fb-checkpoint /search/posts/ -> 302 to /checkpoint/... -> checkpoint page
@@ -92,6 +94,14 @@ export async function startSocialServer(): Promise<SocialServer> {
         if (path.startsWith("/login")) return html(readFixture("facebook-login.html"));
         return redirect(`${base}/login/?next=${dest}`);
       case "fb-404":
+        return html("Not Found", 404);
+      case "fb-live":
+        if (path === "/search/posts/") return html(readFixture("facebook-search-live.html"));
+        if (path === "/api/graphql/") {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end('{"data":{"node":{"post_id":"9006","permalink_url":"https://www.facebook.com/potatokeebs/posts/pfbid0TestLate"}}}');
+          return;
+        }
         return html("Not Found", 404);
       case "fb-checkpoint":
         if (path.startsWith("/checkpoint/")) return html(readFixture("facebook-checkpoint.html"));

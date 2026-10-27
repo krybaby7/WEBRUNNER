@@ -21,7 +21,8 @@ import { ReviewSourceError, type ReviewSearchResult, type ReviewSourceProvider }
 /**
  * The `search_reviews` service, PLAN.md 14.6: normalise, pick sources, run
  * them in parallel under per-source timeouts, cache each source's answer for
- * an hour, filter, sort, cut, and optionally summarise.
+ * an hour (not when it found no reviews), filter, sort, cut, and optionally
+ * summarise.
  */
 
 export const REVIEWS_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -226,7 +227,8 @@ export function createReviewsService(deps: ReviewsServiceDeps): ReviewsService {
       });
     }
     log.debug("search_reviews: source done", { source: provider.name, reviews: checked.data.reviews.length, elapsed_ms: Math.max(0, now() - started) });
-    await cache.set(key, checked.data, REVIEWS_CACHE_TTL_MS);
+    // An empty answer is often a page that had not finished loading; caching it would repeat it for an hour.
+    if (checked.data.reviews.length > 0) await cache.set(key, checked.data, REVIEWS_CACHE_TTL_MS);
     return checked.data;
   }
 
