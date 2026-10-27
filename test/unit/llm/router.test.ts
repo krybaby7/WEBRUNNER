@@ -1,5 +1,10 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { PlanStatus } from "../../../src/core/llm/claude-cli.js";
+import { DEFAULT_CODEX_MODEL } from "../../../src/core/llm/models.js";
 import {
   createFallbackClient,
   createModelClient,
@@ -11,6 +16,9 @@ import { LlmError, type LlmClient, type LlmRequest, type LlmResponse } from "../
 import type { Config } from "../../../src/config.js";
 import { makeConfig, makeLogger } from "./helpers.js";
 
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "fixtures", "llm");
+const FAKE_CLAUDE = join(FIXTURES, "fake-claude.mjs");
+const FAKE_CODEX = join(FIXTURES, "fake-codex.mjs");
 const REQ: LlmRequest = { role: "scorer", system: "s", messages: [{ role: "user", content: "q" }] };
 const response = (model: string): LlmResponse => ({
   model,
@@ -72,12 +80,53 @@ describe("createModelClient", () => {
     expect(createModelClient(noKey(), { which: found("/bin/claude"), logger: makeLogger() }).info.backend).toBe("claude-cli");
   });
 
-  it("warns that the codex-cli fallback is not built yet and reports no fallback", () => {
+  it("with llm_fallback codex-cli and codex installed, puts Codex behind the primary and reports it", () => {
     const logger = makeLogger();
-    const { info } = createModelClient(noKey({ llm_fallback: "codex-cli" }), { which: found("/bin/claude"), logger });
-    expect(info.fallback).toBe("none");
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("codex-cli"));
+    const which = (n: string) => ({ claude: "/bin/claude", "/opt/codex": "/opt/codex" })[n];
+    const { info } = createModelClient(noKey({ llm_fallback: "codex-cli", codex_path: "/opt/codex" }), { which, logger });
+    expect(info).toEqual({ backend: "claude-cli", fallback: "codex-cli" });
+    expect(logger.info).toHaveBeenCalledWith("model fallback", { fallback: "codex-cli", codex_path: "/opt/codex", model: DEFAULT_CODEX_MODEL });
+    expect(logger.warn).not.toHaveBeenCalled();
   });
+
+  it("reports no fallback, with a warning, when codex is missing or there is no primary for it to stand in for", () => {
+    const missing = makeLogger();
+    expect(createModelClient(noKey({ llm_fallback: "codex-cli" }), { which: found("/bin/claude"), logger: missing }).info.fallback).toBe("none");
+    expect(missing.warn).toHaveBeenCalledWith(expect.stringContaining('no codex executable was found at "codex"'));
+    const alone = makeLogger();
+    const which = (n: string) => (n === "codex" ? "/bin/codex" : undefined);
+    expect(createModelClient(noKey({ llm_fallback: "codex-cli" }), { which, logger: alone }).info).toEqual({ backend: "none", fallback: "none" });
+    expect(alone.warn).toHaveBeenCalledWith(expect.stringContaining("there is none"));
+  });
+
+  it("replays a call that hits Claude's plan limit on Codex, through both CLIs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "webrunner-router-"));
+    try {
+      const which = (n: string) => ({ claude: FAKE_CLAUDE, codex: FAKE_CODEX })[n];
+      const env = {
+        ...process.env,
+        FAKE_CLAUDE_SCENARIO: JSON.stringify({
+          events: [
+            { type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 4102444800 } },
+            { type: "result", subtype: "success", is_error: true, result: "You've hit your limit", api_error_status: null },
+          ],
+          exitCode: 1,
+        }),
+        FAKE_CODEX_SCENARIO: JSON.stringify({
+          events: [
+            { type: "item.completed", item: { id: "i", type: "agent_message", text: "from codex" } },
+            { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } },
+          ],
+        }),
+      };
+      const { client, info } = createModelClient(noKey({ llm_fallback: "codex-cli", cache_dir: dir }), { which, env, logger: makeLogger() });
+      expect(info).toEqual({ backend: "claude-cli", fallback: "codex-cli" });
+      const res = await client.complete(REQ);
+      expect(res).toMatchObject({ text: "from codex", model: DEFAULT_CODEX_MODEL });
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 30_000);
 });
 
 describe("createFallbackClient (PLAN.md 15.2)", () => {

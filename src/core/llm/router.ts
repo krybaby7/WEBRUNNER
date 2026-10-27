@@ -2,7 +2,9 @@ import type { Config } from "../../config.js";
 import { log, type Logger } from "../../log.js";
 import { createClaudeCliClient, type ClaudeCliClient, type PlanStatus } from "./claude-cli.js";
 import { createLlmClient } from "./client.js";
+import { createCodexCliClient } from "./codex-cli.js";
 import type { CostMeter } from "./cost.js";
+import { DEFAULT_CODEX_MODEL } from "./models.js";
 import { resolveExecutable, Slots, type RunProcess } from "./process.js";
 import { LlmError, type LlmClient, type LlmRequest, type LlmResponse } from "./types.js";
 
@@ -69,18 +71,19 @@ export interface ModelClientOptions {
 export function createModelClient(config: Config, opts: ModelClientOptions = {}): { client: LlmClient; info: LlmInfo } {
   const logger = opts.logger ?? log;
   const choice = resolveBackend(config, opts.which);
+  // One limit on CLI processes for the whole server, whichever backend runs them.
+  const cli = {
+    logger,
+    slots: new Slots(config.llm_concurrency ?? 4),
+    ...(opts.meter !== undefined && { meter: opts.meter }),
+    ...(opts.run !== undefined && { run: opts.run }),
+    ...(opts.env !== undefined && { env: opts.env }),
+  };
   let primary: LlmClient;
   if (choice.backend === "api") {
     primary = createLlmClient(config, { logger, ...(opts.meter !== undefined && { meter: opts.meter }) });
   } else if (choice.backend === "claude-cli") {
-    primary = createClaudeCliClient(config, {
-      command: choice.claudePath as string,
-      logger,
-      slots: new Slots(config.llm_concurrency ?? 4),
-      ...(opts.meter !== undefined && { meter: opts.meter }),
-      ...(opts.run !== undefined && { run: opts.run }),
-      ...(opts.env !== undefined && { env: opts.env }),
-    });
+    primary = createClaudeCliClient(config, { command: choice.claudePath as string, ...cli });
   } else {
     logger.warn(`${choice.note ?? "no model backend"}; deep_research, browse_task and LLM extraction will be unavailable`, {
       llm_backend: config.llm_backend ?? "auto",
@@ -89,11 +92,24 @@ export function createModelClient(config: Config, opts: ModelClientOptions = {})
   }
   if (choice.backend !== "none") logger.info("model backend", { backend: choice.backend, ...(choice.claudePath !== undefined && { claude_path: choice.claudePath }) });
 
-  // The codex-cli fallback arrives with WP35 (PLAN.md 15.4); until then the setting is reported and ignored.
-  if (config.llm_fallback === "codex-cli") {
-    logger.warn("llm_fallback is codex-cli, but the Codex fallback is not built yet; a call that hits Claude's plan limit fails instead");
+  if (config.llm_fallback !== "codex-cli") return { client: primary, info: { backend: choice.backend, fallback: "none" } };
+  const codexName = config.codex_path ?? "codex";
+  const codexPath = (opts.which ?? resolveExecutable)(codexName);
+  if (choice.backend === "none" || codexPath === undefined) {
+    logger.warn(
+      choice.backend === "none"
+        ? "llm_fallback is codex-cli, but Codex only stands in for a primary backend and there is none"
+        : `llm_fallback is codex-cli, but no codex executable was found at "${codexName}"; a call that hits Claude's plan limit fails instead`,
+    );
+    return { client: primary, info: { backend: choice.backend, fallback: "none" } };
   }
-  return { client: primary, info: { backend: choice.backend, fallback: "none" } };
+  const fallback = createCodexCliClient(config, { command: codexPath, ...cli });
+  logger.info("model fallback", { fallback: "codex-cli", codex_path: codexPath, model: config.codex_model ?? DEFAULT_CODEX_MODEL });
+  const client = createFallbackClient(primary, fallback, {
+    logger,
+    ...(config.claude_max_utilization !== undefined && { maxUtilization: config.claude_max_utilization }),
+  });
+  return { client, info: { backend: choice.backend, fallback: "codex-cli" } };
 }
 
 /** A client for a server with no backend: every call is a `config` error naming both ways to get one. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addUsage, computeCost, CostMeter, EMPTY_USAGE } from "../../../src/core/llm/cost.js";
-import { FALLBACK_PRICE, PRICES, priceFor } from "../../../src/core/llm/models.js";
+import { DEFAULT_CODEX_MODEL, FALLBACK_PRICE, PRICES, priceFor } from "../../../src/core/llm/models.js";
 import { LlmError, type Usage } from "../../../src/core/llm/types.js";
 import { makeLogger } from "./helpers.js";
 
@@ -12,6 +12,19 @@ describe("price table", () => {
     expect(PRICES["claude-sonnet-5-5"]).toMatchObject({ inputPerMTok: 2, outputPerMTok: 10, cacheReadPerMTok: 0.2 });
     expect(PRICES["claude-haiku-5-5"]).toMatchObject({ inputPerMTok: 0.1, outputPerMTok: 0.5 });
     expect(PRICES["claude-fable-5-1"]).toMatchObject({ inputPerMTok: 10, outputPerMTok: 50, cacheReadPerMTok: 0.25 });
+  });
+
+  it("prices the Codex fallback's GPT models at OpenAI's standard tier, long context above 272K (PLAN.md 15.4)", () => {
+    expect(PRICES[DEFAULT_CODEX_MODEL]).toEqual({
+      inputPerMTok: 2,
+      outputPerMTok: 10,
+      cacheReadPerMTok: 0.1,
+      cacheWritePerMTok: 2.5,
+      longContext: { thresholdTokens: 272_000, inputPerMTok: 4, outputPerMTok: 15, cacheReadPerMTok: 0.2, cacheWritePerMTok: 5 },
+    });
+    expect(PRICES["gpt-6-luna"]).toMatchObject({ inputPerMTok: 0.1, outputPerMTok: 0.5, cacheReadPerMTok: 0.01 });
+    // 300K prompt tokens cross the threshold: 0.3 * 4 + 0.1 * 15
+    expect(computeCost(DEFAULT_CODEX_MODEL, usage({ inputTokens: 300_000, outputTokens: 100_000 }))).toBeCloseTo(2.7, 10);
   });
 
   it("prices cache writes at 1.25x input and Haiku cache reads at 0.1x input", () => {

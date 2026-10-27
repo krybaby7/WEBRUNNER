@@ -52,7 +52,7 @@ export interface Config {
   claude_path?: string;
   /** The codex executable. Unset means `codex` on PATH. */
   codex_path?: string;
-  /** Model for the Codex fallback. Unset means Codex's own default. */
+  /** Model for the Codex fallback. Unset means DEFAULT_CODEX_MODEL (gpt-6.1-sol, Codex's own default). */
   codex_model?: string;
   /** Most CLI model processes at once. Unset means 4. */
   llm_concurrency?: number;
