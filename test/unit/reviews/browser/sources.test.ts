@@ -344,6 +344,11 @@ describe("review assembly helpers", () => {
     expect(assembleSubject("amazon", {}, "Sony WH-1000XM5")).toEqual({ source: "amazon", name: "Sony WH-1000XM5" });
     expect(assembleSubject("amazon", { distribution: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 } }, "x").rating_distribution).toEqual({ "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 });
     expect(assembleSubject("amazon", { distribution: { "1": 1 } }, "x").rating_distribution).toBeUndefined();
+    expect(assembleSubject("google_maps", { hours: [" Monday:  9 AM to 12 AM ", "Monday: 9 AM to 12 AM", "", "Friday: Closed"] }, "x").hours).toEqual([
+      "Monday: 9 AM to 12 AM",
+      "Friday: Closed",
+    ]);
+    expect(assembleSubject("google_maps", { hours: [] }, "x")).not.toHaveProperty("hours");
   });
 });
 

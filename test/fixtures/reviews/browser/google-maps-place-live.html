@@ -13,6 +13,11 @@
   div.jftiEf[data-review-id] wrapping an inner div[data-review-id]. The pane
   shows 10 cards, then 14 after one scroll. Place and reviewer names are
   invented.
+  Added for WP41 from the live page of 2026-10-28: a place opened directly
+  shows only "Open · Closes 11 PM · See more hours" on its Overview tab, which
+  the Reviews tab removes and the Overview tab brings back. That button opens
+  an "Hours" view in place of the panel, with one "Copy open hours" button per
+  day starting today, and leaves a hidden set of other hours in the page.
 -->
 <style>
   body { font-family: sans-serif; margin: 0; }
@@ -29,6 +34,7 @@
     <button type="button" aria-label="30,700 reviews">(30,700)</button>
   </div>
   <button type="button" data-item-id="address" aria-label="Address: 1 Corniche Street, Cairo">1 Corniche Street, Cairo</button>
+  <div id="overview-info"><button type="button" class="CsEnBe" aria-label="Open · Closes 11 PM · See more hours">Open · Closes 11 PM</button></div>
   <div role="tablist">
     <button type="button" role="tab" aria-selected="true" aria-label="Overview of Nile View Tower">Overview</button>
     <button type="button" role="tab" aria-selected="false" aria-label="Reviews for Nile View Tower">Reviews</button>
@@ -88,11 +94,30 @@
   const panel = document.getElementById("panel");
   PREVIEWS.forEach((r, i) => panel.appendChild(card(r, 100 + i)));
 
+  const main = document.querySelector('[role="main"]');
+  const info = document.getElementById("overview-info");
+  const HOURS = ["Wednesday, 9 AM to 11 PM", "Thursday, 9 AM to 11 PM", "Friday, 1 PM to 11 PM", "Saturday, 9 AM to 11 PM", "Sunday, 9 AM to 11 PM", "Monday, 9 AM to 11 PM", "Tuesday, 9 AM to 11 PM"];
+  const OTHER_HOURS = ["Wednesday, 8 AM to 6 PM", "Thursday, 8 AM to 6 PM"];
+  info.querySelector("button").addEventListener("click", () => {
+    setTimeout(() => {
+      main.removeAttribute("aria-label");
+      main.innerHTML =
+        `<h1>Hours</h1><div>${HOURS.map((h) => `<button class="mWUh3d" aria-label="${h}, Copy open hours"></button>`).join("")}</div>` +
+        `<div style="display:none">${OTHER_HOURS.map((h) => `<button class="mWUh3d" aria-label="${h}, Copy open hours"></button>`).join("")}</div>`;
+    }, 200);
+  });
+
   const tabs = document.querySelectorAll('[role="tab"]');
+  tabs[0].addEventListener("click", () => {
+    tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
+    tabs[0].setAttribute("aria-selected", "true");
+    setTimeout(() => document.querySelector('[role="tablist"]').before(info), 150);
+  });
   tabs[1].addEventListener("click", () => {
     tabs.forEach((t) => t.setAttribute("aria-selected", "false"));
     tabs[1].setAttribute("aria-selected", "true");
     setTimeout(() => {
+      info.remove();
       panel.replaceChildren();
       document.querySelector("h1").textContent = "";
       setTimeout(() => {

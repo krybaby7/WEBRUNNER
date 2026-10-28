@@ -75,6 +75,18 @@ import { RecipeError, type RecipeContext } from "./types.js";
  * It also counted the outer and inner div of each card when deciding whether
  * to scroll, so 10 reviews looked like 20; only the innermost count now.
  * `google-maps-place-live.html` reproduces that page.
+ *
+ * Lists of matches, live on 2026-10-28 (WP41): a search with several matches
+ * shows a list in a `[role="main"]` whose `h1` reads "Results" and whose cards
+ * carry star ratings, which the place check took for a place: the recipe read
+ * "Results" as the name, mixed the first cards' rating and count, and found no
+ * reviews. Opening a result adds a second `[role="main"]`, labelled with the
+ * place's name, and leaves the list in the page. So a place is now the last
+ * main panel with a heading and no results feed, the subject is read only from
+ * it, and a list opens the result whose name best matches the search. The
+ * weekly hours are one "Copy open hours" button per day ("Wednesday, 9 AM to
+ * 12 AM, Copy open hours") over a hidden table. `google-maps-list-live.html`
+ * and `google-maps-list-place-live.html` reproduce those pages.
  */
 
 export const GOOGLE_MAPS_REVIEWS_SITE = "google_maps_reviews";
@@ -116,6 +128,8 @@ export interface GoogleMapsReviewsRecipeOptions {
   reviewsWaitMs?: number;
   /** How long a fully loaded page may show no app container before it counts as refused. Default 5000. */
   appStartMs?: number;
+  /** How long a place page may take to show its Reviews tab (or "More reviews") after its name. Default 3000. */
+  tabWaitMs?: number;
 }
 
 /** True for a URL on a google.* host under /maps/ (search, place), or a short maps.app.goo.gl link. */
@@ -149,9 +163,98 @@ function withEnglish(url: string): string {
   }
 }
 
+/** Lower-case words without accents, for matching a result's name to the search. */
+function nameWords(s: string): string[] {
+  return s
+    .normalize("NFD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length > 1);
+}
+
+const LATIN_RE = /\p{Script=Latin}/u;
+
+/**
+ * Which result of a list to open: Google's first, which also weighs the
+ * location, unless its name is written in the subject's script, lacks some of
+ * the subject's words, and a later result has them all. Live on 2026-10-28:
+ * "Koshary El Tahrir" listed "Al Tahreer Koshary Restaurant" first and the
+ * place itself second; "Koshary Sayed Hanafy Downtown" listed the Downtown
+ * branch first under an Arabic name, then a Nasr City branch named in English.
+ */
+export function bestResultIndex(subject: string, labels: readonly string[]): number {
+  const wanted = nameWords(subject);
+  const first = labels[0];
+  if (first === undefined || wanted.length === 0) return 0;
+  const hasAll = (label: string): boolean => {
+    const words = new Set(nameWords(label));
+    return wanted.every((w) => words.has(w));
+  };
+  if (hasAll(first) || LATIN_RE.test(first) !== LATIN_RE.test(subject)) return 0;
+  return Math.max(0, labels.findIndex(hasAll));
+}
+
 // ---------------------------------------------------------------------------
 // Page probes (strings: the project compiles without the DOM lib)
 // ---------------------------------------------------------------------------
+
+/**
+ * `placeRoot()`: the opened place's own panel, the last `[role="main"]` with a
+ * heading and no results feed. A list of matches stays in the page under an
+ * opened place, so the page's first `h1` and star rating may be the list's.
+ * A page with no such panel is a place only when it shows no results feed.
+ */
+const PLACE_ROOT_JS = `const placeRoot = () => {
+    const panes = Array.from(document.querySelectorAll('[role="main"]')).filter((m) => {
+      const h = m.querySelector("h1");
+      return !m.querySelector('[role="feed"]') && !!h && (h.textContent || "").trim() !== "";
+    });
+    if (panes.length > 0) return panes[panes.length - 1];
+    return document.querySelector('[role="feed"]') ? null : document;
+  };`;
+
+/**
+ * `readHours(root, visibleOnly)`: the weekly hours, Monday first, from the
+ * "Copy open hours" buttons ("Wednesday, 9 AM to 12 AM, Copy open hours"),
+ * else from the hours table's rows. Rows whose first cell is not a weekday,
+ * such as the rating distribution's, are skipped.
+ */
+const READ_HOURS_JS = `const readHours = (root, visibleOnly) => {
+    const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+    const shown = (el) => !visibleOnly || el.getClientRects().length > 0;
+    const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const dayOf = (s) => DAYS.find((d) => (s || "").toLowerCase().startsWith(d.toLowerCase()));
+    const byDay = {};
+    for (const el of root.querySelectorAll('[aria-label*="open hours" i]')) {
+      if (!shown(el)) continue;
+      const m = /^([A-Za-z]+)[^,]*,\\s*(.+?),\\s*copy open hours$/i.exec(clean(el.getAttribute("aria-label")));
+      const day = m ? dayOf(m[1]) : undefined;
+      if (day && !byDay[day]) byDay[day] = m[2];
+    }
+    if (Object.keys(byDay).length === 0) {
+      for (const tr of root.querySelectorAll("table tr")) {
+        if (!shown(tr)) continue;
+        const cells = Array.from(tr.querySelectorAll("td, th")).map((c) => clean(c.textContent)).filter((t) => t);
+        const day = cells.length > 1 ? dayOf(cells[0]) : undefined;
+        if (day && !byDay[day]) byDay[day] = cells.slice(1).join(", ");
+      }
+    }
+    return DAYS.filter((d) => byDay[d]).map((d) => d + ": " + byDay[d]);
+  };`;
+
+/** The hours view that "See more hours" opens; another place's hidden hours can linger in the page, so only what is shown counts. */
+const HOURS_VIEW_JS = `(() => {
+  ${READ_HOURS_JS}
+  return readHours(document, true);
+})()`;
+
+/** The read-only button that opens a place's weekly hours ("Open · Closes 1 AM · See more hours"). */
+const SEE_MORE_HOURS_SELECTOR = 'button[aria-label*="See more hours" i]';
+const OVERVIEW_TAB_RE = /^\s*Overview\b/i;
+
+/** The names of the results on a list, in page order. */
+const RESULT_LABELS_JS = `(() => Array.from(document.querySelectorAll('a[href*="/maps/place/"]')).map((a) => (a.getAttribute("aria-label") || a.textContent || "").replace(/\\s+/g, " ").trim()))()`;
 
 interface MapsProbe extends BasicProbe {
   heading: string;
@@ -167,40 +270,47 @@ interface MapsProbe extends BasicProbe {
 }
 
 const PROBE_JS = `(() => {
+  ${PLACE_ROOT_JS}
   const text = document.body ? (document.body.innerText || "") : "";
-  const h1 = document.querySelector("h1");
-  const tabs = Array.from(document.querySelectorAll('button[role="tab"]'));
-  const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+  const root = placeRoot();
+  const scope = root || document;
+  const h1 = root ? root.querySelector("h1") : null;
+  const tabs = Array.from(scope.querySelectorAll('button[role="tab"]'));
+  const buttons = Array.from(scope.querySelectorAll('button, [role="button"]'));
   const name = (el) => ((el.getAttribute("aria-label") || el.textContent || "").replace(/\\s+/g, " ").trim());
   return {${BASIC_PROBE_FIELDS_JS}
     heading: h1 ? (h1.textContent || "").replace(/\\s+/g, " ").trim() : "",
     resultLinks: document.querySelectorAll('a[href*="/maps/place/"]').length,
     hasReviewsTab: tabs.some((t) => /^\\s*Reviews\\b/i.test(name(t))),
     hasMoreReviews: buttons.some((b) => /\\bmore reviews\\b/i.test(name(b))),
-    hasRating: !!document.querySelector('[role="img"][aria-label*="star" i]'),
-    reviewCards: document.querySelectorAll("div[data-review-id]").length,
+    hasRating: !!(root && root.querySelector('[role="img"][aria-label*="star" i]')),
+    reviewCards: scope.querySelectorAll("div[data-review-id]").length,
     ready: document.readyState === "complete",
     hasApp: !!document.querySelector('${APP_SELECTOR}'),
   };
 })()`;
 
-/** Subject fields from a place page. */
+/** Subject fields from the opened place's own panel, hours included (Monday first). */
 const SUBJECT_JS = `(() => {
   const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
-  const h1 = document.querySelector("h1");
-  const ratingEl = document.querySelector('[role="img"][aria-label*="star" i]');
+  ${PLACE_ROOT_JS}
+  const root = placeRoot() || document;
+  const h1 = root.querySelector("h1");
+  const ratingEl = root.querySelector('[role="img"][aria-label*="star" i]');
   let reviewCountText;
-  for (const el of document.querySelectorAll("[aria-label], span, button")) {
+  for (const el of root.querySelectorAll("[aria-label], span, button")) {
     const label = clean(el.getAttribute("aria-label")) || (el.children.length === 0 ? clean(el.textContent) : "");
     const m = /^\\(?([\\d.,]+\\s*[KkMm]?)\\)?\\s*reviews?$/i.exec(label) || /^([\\d.,]+\\s*[KkMm]?)\\s+reviews?\\b/i.exec(label);
     if (m) { reviewCountText = m[1] + " reviews"; break; }
   }
-  const addressEl = document.querySelector('button[data-item-id="address"], [data-item-id="address"], [data-tooltip="Copy address"]');
+  const addressEl = root.querySelector('button[data-item-id="address"], [data-item-id="address"], [data-tooltip="Copy address"]');
   let address = addressEl ? clean(addressEl.getAttribute("aria-label") || addressEl.textContent) : undefined;
   if (address) address = address.replace(/^address:\\s*/i, "");
-  const categories = Array.from(document.querySelectorAll('button[jsaction*="category" i], [data-item-id="category"], a[href*="/maps/search/"][aria-label^="Category" i]'))
+  const categories = Array.from(root.querySelectorAll('button[jsaction*="category" i], [data-item-id="category"], a[href*="/maps/search/"][aria-label^="Category" i]'))
     .map((b) => clean(b.textContent)).filter((t) => t && t.length < 60);
-  const priceEl = Array.from(document.querySelectorAll("[aria-label]")).find((el) => /^price/i.test(el.getAttribute("aria-label") || "") && /^[$€£¥·\\s-]+$/.test(clean(el.textContent)));
+  const priceEl = Array.from(root.querySelectorAll("[aria-label]")).find((el) => /^price/i.test(el.getAttribute("aria-label") || "") && /^[$€£¥·\\s-]+$/.test(clean(el.textContent)));
+  ${READ_HOURS_JS}
+  const shownHours = readHours(root, true);
   return {
     name: h1 ? clean(h1.textContent) : undefined,
     url: location.href,
@@ -209,6 +319,7 @@ const SUBJECT_JS = `(() => {
     address: address || undefined,
     categories,
     priceLevel: priceEl ? clean(priceEl.textContent) : undefined,
+    hours: shownHours.length > 0 ? shownHours : readHours(root, false),
   };
 })()`;
 
@@ -338,6 +449,7 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
   const maxScrolls = options.maxScrolls ?? 3;
   const reviewsWaitMs = options.reviewsWaitMs ?? 8000;
   const appStartMs = options.appStartMs ?? 5000;
+  const tabWaitMs = options.tabWaitMs ?? 3000;
   const site = "Google Maps";
 
   /** A test base URL accepts any URL on its origin as a place page. */
@@ -388,9 +500,11 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       page.on("response", onResponse);
       page.on("requestfailed", onRequestFailed);
       await navigateTo(page, url, ctx, site);
-      await waitForPlace(page, ctx, { caveat, guard, refusal: () => refusal });
+      await waitForPlace(page, ctx, { caveat, guard, refusal: () => refusal, subject: q.subject });
 
       const subjectRaw = await page.evaluate<RawSubject>(SUBJECT_JS).catch(() => ({}) as RawSubject);
+      // Seen now, on the overview: the Reviews tab removes it.
+      const hasHoursButton = (await page.locator(SEE_MORE_HOURS_SELECTOR).count().catch(() => 0)) > 0;
       await openReviews(page, ctx, { guard });
       await loadMore(page, q, ctx, { guard });
 
@@ -401,6 +515,7 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       ctx.log.debug("google maps reviews probe", { cards: raws.length, valid: reviews.length });
 
       if (reviews.length >= MIN_PROBE_REVIEWS) {
+        if (hasHoursButton) await addHours(page, subjectRaw, ctx, { guard });
         return { subject: assembleSubject(source, subjectRaw, q.subject), reviews: dedupeReviews(reviews, q.per_source) };
       }
 
@@ -422,6 +537,7 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       } else {
         caveat("Google Maps reviews were read by the extractor model because the page structure was not recognised; fields may be incomplete.");
       }
+      if (hasHoursButton) await addHours(page, subjectRaw, ctx, { guard });
       return { subject: mergeSubject(source, subjectRaw, extracted.subject, q.subject), reviews: merged };
     } catch (err) {
       throw toRecipeError(err, ctx, site);
@@ -431,11 +547,11 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
     }
   }
 
-  /** Wait for a place page; open the first result when a list appears; dismiss consent; detect walls and a refused script. */
+  /** Wait for a place page; open the best-matching result when a list appears; dismiss consent; detect walls and a refused script. */
   async function waitForPlace(
     page: Page,
     ctx: RecipeContext,
-    o: { caveat: (m: string) => void; guard: ReturnType<typeof timeGuard>; refusal: () => string | undefined },
+    o: { caveat: (m: string) => void; guard: ReturnType<typeof timeGuard>; refusal: () => string | undefined; subject: string },
   ): Promise<void> {
     const start = Date.now();
     const budget = Math.max(0, Math.min(maxWaitMs, o.guard.remaining() * 0.6));
@@ -476,15 +592,20 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
         }
         if (probe.resultLinks > 0 && !clickedResult) {
           clickedResult = true;
-          const first = page.locator('a[href*="/maps/place/"]').first();
-          ctx.log.debug("google maps: opening the first result", { label: await first.getAttribute("aria-label").catch(() => null) });
+          const labels = await page.evaluate<string[]>(RESULT_LABELS_JS).catch(() => [] as string[]);
+          const index = bestResultIndex(o.subject, labels);
+          const label = labels[index] ?? "";
+          ctx.log.debug("google maps: opening a result", { index, label, results: labels.length });
+          if (labels.length > 1 && label !== "") {
+            o.caveat(`Google Maps listed ${labels.length} places for this search; the reviews are for "${label}", ${index > 0 ? "the one whose name matches" : "Google's top result"}.`);
+          }
           try {
-            await first.click({ timeout: Math.min(o.guard.cap(5000), 3000) });
+            await page.locator('a[href*="/maps/place/"]').nth(index).click({ timeout: Math.min(o.guard.cap(5000), 3000) });
           } catch (err) {
             // The result link is an overlay with no box of its own on some layouts: click it in the page instead.
             ctx.log.debug("google maps: locator click failed, clicking the link in the page", { error: errMsg(err) });
-            await page.evaluate(`(() => { const a = document.querySelector('a[href*="/maps/place/"]'); if (a) a.click(); })()`).catch((e: unknown) => {
-              ctx.log.warn("google maps: could not open the first result", { error: errMsg(e) });
+            await page.evaluate(`(() => { const a = document.querySelectorAll('a[href*="/maps/place/"]')[${index}]; if (a) a.click(); })()`).catch((e: unknown) => {
+              ctx.log.warn("google maps: could not open the result", { error: errMsg(e) });
             });
           }
           await sleep(pollMs);
@@ -524,9 +645,12 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
    */
   async function openReviews(page: Page, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
     o.guard.check("before opening the reviews tab");
-    const existing = await page.evaluate<number>(REMEMBER_CARDS_JS);
     const tab = page.getByRole("tab", { name: REVIEWS_TAB_RE }).first();
     const more = page.getByRole("button", { name: MORE_REVIEWS_RE }).first();
+    // A place opened from a list builds its panel in stages: name and rating first, the tabs a moment later.
+    const tabsBy = Date.now() + o.guard.cap(tabWaitMs);
+    while ((await tab.count()) === 0 && (await more.count()) === 0 && Date.now() < tabsBy) await sleep(pollMs);
+    const existing = await page.evaluate<number>(REMEMBER_CARDS_JS);
     try {
       if ((await tab.count()) > 0) {
         // Already on the Reviews tab (a place URL can open there): its cards are the ones to read.
@@ -549,6 +673,39 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
       await sleep(pollMs);
     }
     ctx.log.debug("google maps: no new review cards after opening the reviews", { overview_cards: existing });
+  }
+
+  /**
+   * When the place panel showed no weekly hours but a "See more hours" button
+   * (a place Maps opened directly shows only "Open · Closes 1 AM · See more
+   * hours"), open them: back to the Overview tab if the Reviews tab replaced
+   * it, then that read-only button, whose view replaces the place. Runs after
+   * the reviews are read; a failure only leaves the hours out.
+   */
+  async function addHours(page: Page, subject: RawSubject, ctx: RecipeContext, o: { guard: ReturnType<typeof timeGuard> }): Promise<void> {
+    if ((subject.hours?.length ?? 0) > 0 || o.guard.remaining() < 6000) return;
+    try {
+      const button = page.locator(SEE_MORE_HOURS_SELECTOR).first();
+      if ((await button.count()) === 0) {
+        const overview = page.getByRole("tab", { name: OVERVIEW_TAB_RE }).first();
+        if ((await overview.count()) === 0) return;
+        await overview.click({ timeout: o.guard.cap(3000) });
+        await button.waitFor({ state: "attached", timeout: o.guard.cap(3000) });
+      }
+      await button.click({ timeout: o.guard.cap(3000) });
+      const until = Date.now() + o.guard.cap(4000);
+      while (Date.now() < until) {
+        const hours = await page.evaluate<string[]>(HOURS_VIEW_JS);
+        if (hours.length > 0) {
+          subject.hours = hours;
+          return;
+        }
+        await sleep(pollMs);
+      }
+      ctx.log.debug("google maps: the hours view showed no hours");
+    } catch (err) {
+      ctx.log.debug("google maps: could not read the opening hours", { error: errMsg(err) });
+    }
   }
 
   /** Scroll the pane at most `maxScrolls` times until `per_source` cards exist, then expand the "More" buttons. */

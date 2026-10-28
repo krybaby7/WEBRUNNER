@@ -388,6 +388,8 @@ export interface RawSubject {
   address?: string | undefined;
   categories?: readonly string[] | undefined;
   priceLevel?: string | undefined;
+  /** Weekly opening hours, one "Day: hours" line per day, Monday first. */
+  hours?: readonly string[] | undefined;
 }
 
 /** Validate a subject; `fallbackName` (the query subject) is used when the page gave no name. */
@@ -396,6 +398,7 @@ export function assembleSubject(source: ReviewSource, raw: RawSubject, fallbackN
   const rating = value !== undefined && Number.isFinite(value) && value >= 0 && value <= 5 ? Math.round(value * 10) / 10 : undefined;
   const count = raw.reviewCount ?? parseCount(raw.reviewCountText);
   const categories = [...new Set((raw.categories ?? []).map((c) => c.replace(/\s+/g, " ").trim()).filter((c) => c !== ""))];
+  const hours = [...new Set((raw.hours ?? []).map((h) => h.replace(/\s+/g, " ").trim()).filter((h) => h !== ""))].slice(0, 7);
   const d = raw.distribution;
   const distribution =
     d !== undefined && (["1", "2", "3", "4", "5"] as const).every((k) => typeof d[k] === "number" && Number.isFinite(d[k] as number))
@@ -411,6 +414,7 @@ export function assembleSubject(source: ReviewSource, raw: RawSubject, fallbackN
     ...(clean(raw.address) !== undefined && { address: clean(raw.address) }),
     ...(categories.length > 0 && { categories }),
     ...(clean(raw.priceLevel) !== undefined && { price_level: clean(raw.priceLevel) }),
+    ...(hours.length > 0 && { hours }),
   };
   const checked = ReviewSubjectSchema.safeParse(candidate);
   if (checked.success) return checked.data;
