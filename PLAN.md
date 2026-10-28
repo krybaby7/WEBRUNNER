@@ -1150,6 +1150,7 @@ Output:
     source: ReviewSource; name: string; url?: string; rating_avg?: number; review_count?: number;
     rating_distribution?: { "1": number; "2": number; "3": number; "4": number; "5": number };
     address?: string; categories?: string[]; price_level?: string;
+    hours?: string[];             // google_maps only: the weekly opening hours as the place page shows them, Monday first, "Monday: 9 AM to 12 AM" or "Friday: Closed" (added 2026-10-28, WP40)
   }>;
   reviews: Array<{
     id: string;                   // "<source>:<native id or 12-hex hash>"
@@ -1179,7 +1180,7 @@ Source access (DECIDED):
 
 | source | default for kind | how |
 |--------|------------------|-----|
-| google_maps | place, business, any | browser: `https://www.google.com/maps/search/<subject> <location>?hl=en`, first result, reviews tab, scroll at most 3 times; DOM probe over `div[data-review-id]` (rating from the `aria-label` "N stars", text, relative time), LLM fallback; consent and CAPTCHA handling as in flights |
+| google_maps | place, business, any | browser: `https://www.google.com/maps/search/<subject> <location>?hl=en`; on a list of matches, the result whose name best matches the subject (Google's first on a tie; a caveat names it when there were several), and the subject's fields are read only from the opened place's own panel (changed 2026-10-28, WP40); reviews tab, scroll at most 3 times; DOM probe over `div[data-review-id]` (rating from the `aria-label` "N stars", text, relative time), LLM fallback; consent and CAPTCHA handling as in flights |
 | trustpilot | business, product, any | a raw fetch of `https://www.trustpilot.com/review/<domain>` (subject given as a URL or a bare domain, or a name resolved via `https://www.trustpilot.com/search?query=`; a bare domain with no page falls back to the search); reviews are parsed from the page's embedded JSON (`__NEXT_DATA__` or JSON-LD). A WAF challenge falls back to the shared browser, whose rendered HTML is parsed the same way, then to `FetchService` and LLM extraction over the Markdown |
 | app_store | app, any | keyless: `itunes.apple.com/search?term=&entity=software&country=&limit=5` to find the app, then `itunes.apple.com/<country>/rss/customerreviews/id=<id>/sortBy=mostRecent/page=<n>/json`, pages 1 to 3 at most (50 reviews each) |
 | google_play | app, any | browser: `https://play.google.com/store/search?q=<subject>&c=apps` for the package id, then `/store/apps/details?id=<pkg>&hl=en&showAllReviews=true`; DOM probe, LLM fallback |
@@ -1311,7 +1312,33 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
 
   Checked live through `dist/index.js`: USD to EGP today and on 2026-01-01.
 
+**WP41: Google Maps lists of matches and opening hours** (after WP40, which changed 14.6)
+- Files:
+  - `src/schemas/reviews.ts` (`ReviewSubjectSchema` gains `hours`);
+  - `src/core/reviews/sources/shared-browser.ts` (`RawSubject.hours`, passed through `assembleSubject`);
+  - `src/core/browser/recipes/google-maps-reviews.ts`;
+  - `src/tools/search_reviews.ts` (description);
+  - `test/unit/reviews/**` and `test/fixtures/reviews/browser/**`;
+  - `README.md` (the `search_reviews` section);
+  - the `PLAN.md` decision log.
+- Accept, on real Chromium against stand-in pages with the live layout:
+  - a list whose `h1` reads "Results" and whose cards carry star ratings is not taken for a place;
+  - the result whose name best matches the subject is opened (not the first), with the caveat;
+  - with the list still on the page under the opened place, the name, rating, count, address and hours come from the place's own panel;
+  - the hours read Monday first from the "Copy open hours" buttons, with the hidden hours table as a fallback;
+  - a closed day reads "Closed";
+  - the existing Google Maps tests still pass.
+
+  Checked live through `dist/index.js`: "Koshary El Tahrir Downtown" returns Koshary El Tahrir (4.1 from 6,074 reviews) with its reviews and hours.
+
 ### 14.10 Decision log, phase 5
+
+- **2026-10-28, WP40 (Google Maps lists of matches, and opening hours)**. On "best-rated koshary in Downtown Cairo", webrunner returned a subject named "Results" with no reviews for Koshary El Tahrir, and the rating changed between runs (4.1, then 3.9) with the same 6,074 reviews. Captured live the same day:
+  - **The list was taken for a place.** A search with several matches shows a list whose `h1` reads "Results" and whose cards carry star ratings. The recipe's place check (a heading plus a star rating) took that list for a place, so it never opened one. It read "Results" as the name and took the rating and count from whichever cards came first: "Al Tahreer Koshary Restaurant" (3.9, 5,052) and "Koshary El Tahrir" (4.1, 6,074).
+  - **The list stays under an opened place.** Opening a result adds a second `[role="main"]` labelled with the place's name and leaves the list (and its "Results" `h1`) in the page, so "the first `h1`" is still wrong after the click.
+  - **Opening hours are on the place page.** They show as one "Copy open hours" button per day ("Wednesday, 9 AM to 12 AM, Copy open hours") and a hidden table. Perplexity's answer to the same question listed hours; webrunner had none.
+
+  WP41 builds the change in 14.6 and adds `hours` to the subject.
 
 - **2026-10-28, WP39 (Reddit search came back empty, and would have been off-topic)**. In that day's three-way comparison, `social_search` for "best budget robot vacuum 2026" (Reddit, past year) returned no items and the caveat "Reddit showed no posts". It was reproduced live through `dist/index.js` and the owner's browser profile from the home IP. There were two faults in the browser path on old.reddit; the second is shared with the API path.
   - **The empty page was transient.** old.reddit's search sometimes renders an empty posts group ("there doesn't seem to be anything here") for a query that has results. Loading the same URL a second or two later lists them. One URL went from 15 results to empty to 25 within five minutes. In 32 searches 2.4 s apart, 3 came back empty, two of them in a row; once, a query stayed empty for four loads over about 7 s. The page is the same markup as a query that matches nothing, so the recipe believed the first empty page. It now loads an empty search page again after 1 s, 2 s and 2 s, while the time left allows, before it reports no posts. The caveat says how many times it looked.
