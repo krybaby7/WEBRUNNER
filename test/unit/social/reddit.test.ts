@@ -66,7 +66,7 @@ describe("reddit: step 1, the API with credentials", () => {
     const url = new URL(searchCall?.url ?? "");
     expect(url.origin).toBe("https://oauth.reddit.com");
     expect(url.pathname).toBe("/search");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ q: "rust async", sort: "top", t: "all", limit: "4", type: "link", raw_json: "1" });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ q: "rust async", sort: "relevance", t: "all", limit: "4", type: "link", raw_json: "1" });
     expect(searchCall?.headers["authorization"]).toBe("Bearer test-access-token-placeholder");
     expect(searchCall?.headers["user-agent"]).toBe("webrunner/0.1.0 personal MCP server");
   });
@@ -107,7 +107,7 @@ describe("reddit: step 2, the public .json endpoints", () => {
     expect(f.calls).toHaveLength(1);
     const url = new URL(f.calls[0]?.url ?? "");
     expect(url.origin + url.pathname).toBe("https://www.reddit.com/search.json");
-    expect(Object.fromEntries(url.searchParams)).toEqual({ q: "rust async", sort: "new", t: "week", limit: "4", type: "link", raw_json: "1" });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ q: "rust async", sort: "relevance", t: "week", limit: "4", type: "link", raw_json: "1" });
     expect(f.calls[0]?.headers["user-agent"]).toBe("webrunner/0.1.0 personal MCP server");
     expect(f.calls[0]?.headers["authorization"]).toBeUndefined();
   });

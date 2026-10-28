@@ -23,13 +23,13 @@ const THREAD_URL = `https://www.reddit.com${THREAD_PATH}/`;
 const CANONICAL = `https://www.reddit.com${THREAD_PATH}`;
 
 describe("old.reddit URLs", () => {
-  it("builds the search URL with sort, time and restrict_sr", () => {
-    expect(buildOldRedditSearchUrl(SEARCH_QUERY)).toBe("https://old.reddit.com/search?q=claude+code&sort=top&t=all&restrict_sr=on");
+  it("builds the search URL with sort=relevance whatever the sort (the merge orders), time and restrict_sr", () => {
+    expect(buildOldRedditSearchUrl(SEARCH_QUERY)).toBe("https://old.reddit.com/search?q=claude+code&sort=relevance&t=all&restrict_sr=on");
     expect(buildOldRedditSearchUrl({ ...SEARCH_QUERY, sort: "recent", recency: "week" })).toBe(
-      "https://old.reddit.com/search?q=claude+code&sort=new&t=week&restrict_sr=on",
+      "https://old.reddit.com/search?q=claude+code&sort=relevance&t=week&restrict_sr=on",
     );
     expect(buildOldRedditSearchUrl({ ...SEARCH_QUERY, subreddits: ["ClaudeAI", "r/programming"] })).toBe(
-      "https://old.reddit.com/r/ClaudeAI+programming/search?q=claude+code&sort=top&t=all&restrict_sr=on",
+      "https://old.reddit.com/r/ClaudeAI+programming/search?q=claude+code&sort=relevance&t=all&restrict_sr=on",
     );
     expect(redditSearchRecipe.buildUrl?.(SEARCH_QUERY)).toBe(buildOldRedditSearchUrl(SEARCH_QUERY));
     expect(buildOldRedditSearchUrl(SEARCH_QUERY, "http://127.0.0.1:9/s/rd-ok")).toMatch(/^http:\/\/127\.0\.0\.1:9\/s\/rd-ok\/search\?q=/);
@@ -87,12 +87,13 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     scenario: string,
     query: SocialSearchQuery,
     llm: LlmClient = forbiddenLlm(),
-    over: Partial<RecipeContext> & { maxResultsWaitMs?: number } = {},
+    over: Partial<RecipeContext> & { maxResultsWaitMs?: number; emptyRetryDelaysMs?: number[] } = {},
   ) {
     const recipe = createRedditSearchRecipe({
       baseUrl: server.scenario(scenario),
       pollMs: 50,
       settleMs: 100,
+      emptyRetryDelaysMs: over.emptyRetryDelaysMs ?? [20, 20, 20],
       ...(over.maxResultsWaitMs !== undefined && { maxResultsWaitMs: over.maxResultsWaitMs }),
     });
     const log = makeLogger();
@@ -101,7 +102,7 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     const spy = spyPage(real);
     const before = server.requests.length;
     try {
-      const { maxResultsWaitMs: _omit, ...ctxOver } = over;
+      const { maxResultsWaitMs: _omit, emptyRetryDelaysMs: _omitToo, ...ctxOver } = over;
       const ctx: RecipeContext = { llm, log, deadline: Date.now() + 20_000, caveats, ...ctxOver };
       const settled: { items?: SocialItem[]; error?: unknown } = await recipe.run(spy.page, query, ctx).then(
         (items) => ({ items }),
@@ -136,14 +137,14 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     });
     expect(items[1]).toMatchObject({ id: "reddit:1g6zzzz", community: "programming", score: 957, replies: 488, text: "" });
     expect(items[4]).toMatchObject({ author: "first_year_cs", score: 12, replies: 9 });
-    expect(r.requests).toEqual(["GET /s/rd-ok/search?q=claude+code&sort=top&t=all&restrict_sr=on"]);
+    expect(r.requests).toEqual(["GET /s/rd-ok/search?q=claude+code&sort=relevance&t=all&restrict_sr=on"]);
     expect(r.caveats).toEqual([]);
   });
 
   it("searches within subreddits and cuts at per_platform", async () => {
     const r = await runRecipe("rd-ok", { ...SEARCH_QUERY, kind: "posts", per_platform: 2, subreddits: ["ClaudeAI", "programming"] });
     expect(r.items?.map((i) => i.id)).toEqual(["reddit:1g7abcd", "reddit:1g6zzzz"]);
-    expect(r.requests[0]).toBe("GET /s/rd-ok/r/ClaudeAI+programming/search?q=claude+code&sort=top&t=all&restrict_sr=on");
+    expect(r.requests[0]).toBe("GET /s/rd-ok/r/ClaudeAI+programming/search?q=claude+code&sort=relevance&t=all&restrict_sr=on");
   });
 
   it("kind both opens the top posts for their top-level comments and splits the per_platform budget", async () => {
@@ -236,10 +237,56 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     expect(err.needsLogin).toBe(false);
   });
 
-  it("returns an empty list when old.reddit finds nothing", async () => {
+  it("reads the live 2026-10-28 page for the query that came back empty (WP39)", async () => {
+    const r = await runRecipe("rd-live", { ...SEARCH_QUERY, query: "best budget robot vacuum 2026", recency: "year", kind: "posts" });
+    expect(r.error).toBeUndefined();
+    expect(r.requests).toEqual(["GET /s/rd-live/search?q=best+budget+robot+vacuum+2026&sort=relevance&t=year&restrict_sr=on"]);
+    const items = r.items!;
+    expect(items).toHaveLength(15);
+    for (const i of items) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    expect(items[0]).toEqual({
+      id: "reddit:1v1qxda",
+      platform: "reddit",
+      kind: "post",
+      url: "https://www.reddit.com/r/BuyItForLife/comments/1v1qxda/best_budget_robot_vacuum_in_2026_that_people",
+      author: "redditor_01",
+      title: "Best budget robot vacuum in 2026 that people actually recommend?",
+      text: "A budget robot vacuum doesn't have to clean perfectly to be worth buying. If it can keep up with daily dust, pet hair, and crumbs while saving you from dragging out the vacuum every few days, it'll ...",
+      truncated: false,
+      created_at: "2026-07-20T16:49:07.000Z",
+      score: 56,
+      replies: 50,
+      community: "BuyItForLife",
+    });
+    // Relevance, unlike sort=top, lists posts about the query: all but one title names a vacuum or robot.
+    expect(items.filter((i) => /vacuum|robot/i.test(i.title ?? "")).length).toBe(14);
+    expect(items[5]).toMatchObject({ id: "reddit:1u4u434", score: 0, replies: 20 });
+    expect(items[6]).toMatchObject({ replies: 1, community: "BestOfPrimeDay" });
+    expect(r.caveats).toEqual([]);
+  });
+
+  it("loads an empty search page again, as live, and reads the posts the reload shows", async () => {
+    const r = await runRecipe("rd-flaky", { ...SEARCH_QUERY, query: "best budget robot vacuum 2026", recency: "year", kind: "posts" });
+    expect(r.error).toBeUndefined();
+    const url = "GET /s/rd-flaky/search?q=best+budget+robot+vacuum+2026&sort=relevance&t=year&restrict_sr=on";
+    expect(r.requests).toEqual([url, url, url]);
+    expect(r.items).toHaveLength(15);
+    expect(r.items![0]!.id).toBe("reddit:1v1qxda");
+    expect(r.caveats).toEqual([]);
+  });
+
+  it("returns an empty list when old.reddit still finds nothing after every reload", async () => {
     const r = await runRecipe("rd-empty", SEARCH_QUERY);
     expect(r.items).toEqual([]);
-    expect(r.caveats).toEqual(['Reddit showed no posts for "claude code".']);
+    expect(r.requests).toHaveLength(4);
+    expect(r.caveats).toEqual(['Reddit showed no posts for "claude code" (the search page was loaded 4 times).']);
+  });
+
+  it("does not load an empty page again when too little time is left", async () => {
+    const r = await runRecipe("rd-empty", SEARCH_QUERY, forbiddenLlm(), { deadline: Date.now() + 4000, emptyRetryDelaysMs: [2000] });
+    expect(r.items).toEqual([]);
+    expect(r.requests).toHaveLength(1);
+    expect(r.caveats).toEqual(['Reddit showed no posts for "claude code" (the search page was loaded 1 time).']);
   });
 
   it("a stalled page is a timeout, a bot wall is blocked, a 500 is a retryable provider error", async () => {

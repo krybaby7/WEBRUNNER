@@ -36,9 +36,9 @@ import {
  * terms (PLAN.md 14.0); personal low-volume use.
  *
  * URLs:
- *   search  https://old.reddit.com/search?q=<q>&sort=top|new&t=all|day|week|month|year&restrict_sr=on
+ *   search  https://old.reddit.com/search?q=<q>&sort=relevance&t=all|day|week|month|year&restrict_sr=on
  *           with `subreddits`: https://old.reddit.com/r/a+b/search?...&restrict_sr=on
- *           sort engagement -> top, recent -> new; recency -> t.
+ *           always sort=relevance (the tool's merge orders by score or date); recency -> t.
  *   thread  any reddit.com/r/<sub>/comments/<id>[/slug] (or redd.it/<id>) URL with
  *           the host rewritten to old.reddit.com, plus ?limit=<n>&depth=1&sort=top.
  *   comments in search mode: the top-level comments of the top matching posts
@@ -52,6 +52,18 @@ import {
  *   networks out and then blocks them; from a home IP old.reddit serves search
  *   anonymously. The recipe reports the block page as `blocked` and a /login
  *   redirect that renders a login form as `blocked` with `needsLogin: true`.
+ *
+ * Seen live on 2026-10-28 from the owner's home IP, logged in (WP39):
+ *   - sort=top, new and comments match far more loosely than relevance: for
+ *     "best budget robot vacuum 2026" sort=top listed 25 of the year's
+ *     highest-scored posts, none about vacuums, and even a one-word "espresso"
+ *     listed cake recipes. www.reddit.com/search gave the same lists, so this
+ *     is Reddit's search, not old.reddit. sort=relevance lists matching posts;
+ *     ordering by score or date is left to the tool's merge (PLAN.md 14.5).
+ *   - the search page sometimes says "there doesn't seem to be anything here"
+ *     for a query that has results, and lists them when loaded again a second
+ *     or two later. The page is the same markup as a real no-match page, so an
+ *     empty search is loaded again (`emptyRetryDelaysMs`) before it is believed.
  *
  * Page structure (old.reddit's long-stable markup):
  *   results   div.search-result-link (data-fullname="t3_<id>"): a.search-title,
@@ -80,6 +92,13 @@ const SITE_NAME = "Reddit (old.reddit.com)";
 export const MAX_COMMENT_POSTS = 5;
 /** Time reserved before each extra post page is opened for comments. */
 const COMMENT_PAGE_RESERVE_MS = 8000;
+/**
+ * Pauses before loading an empty search page again. Short, because the Reddit
+ * platform as a whole has 15 s when it falls back to the browser (PLAN.md 14.5).
+ */
+export const DEFAULT_EMPTY_RETRY_DELAYS_MS: readonly number[] = [1000, 2000, 2000];
+/** Time kept in hand after an empty page before loading it again. */
+const EMPTY_RETRY_RESERVE_MS = 3000;
 
 const REDDIT_HOSTS = new Set(["reddit.com", "www.reddit.com", "old.reddit.com", "new.reddit.com", "np.reddit.com", "m.reddit.com", "sh.reddit.com"]);
 const SHORT_HOSTS = new Set(["redd.it", "www.redd.it"]);
@@ -98,12 +117,11 @@ const NO_RESULTS_RE = /there doesn't seem to be anything here|no results found/i
 // URLs
 // ---------------------------------------------------------------------------
 
-const SORT_PARAM: Record<SocialSearchQuery["sort"], string> = { engagement: "top", recent: "new" };
-
+/** Reddit's other sorts match loosely enough to list unrelated posts (see above); `q.sort` is applied by the merge. */
 export function buildOldRedditSearchUrl(q: SocialSearchQuery, baseUrl?: string): string {
   const subs = q.subreddits?.map((s) => s.trim().replace(/^\/?r\//i, "")).filter((s) => s !== "") ?? [];
   const path = subs.length > 0 ? `/r/${subs.join("+")}/search` : "/search";
-  const params = new URLSearchParams({ q: q.query ?? "", sort: SORT_PARAM[q.sort], t: q.recency ?? "all", restrict_sr: "on" });
+  const params = new URLSearchParams({ q: q.query ?? "", sort: "relevance", t: q.recency ?? "all", restrict_sr: "on" });
   return rebase(`${OLD_REDDIT_ORIGIN}${path}?${params.toString()}`, OLD_REDDIT_ORIGIN, baseUrl);
 }
 
@@ -353,8 +371,14 @@ export function commentToCandidate(raw: RawComment, parentUrl: string, community
 // Recipe
 // ---------------------------------------------------------------------------
 
-export function createRedditSearchRecipe(options: SocialRecipeOptions = {}): SocialRecipe {
+export interface RedditSearchRecipeOptions extends SocialRecipeOptions {
+  /** Pauses before each reload of an empty search page, in ms; one reload per entry. Default DEFAULT_EMPTY_RETRY_DELAYS_MS. */
+  emptyRetryDelaysMs?: readonly number[];
+}
+
+export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}): SocialRecipe {
   const o = resolveOptions(options);
+  const emptyRetryDelaysMs = options.emptyRetryDelaysMs ?? DEFAULT_EMPTY_RETRY_DELAYS_MS;
 
   const buildUrl = (q: SocialSearchQuery): string | null => {
     if (q.mode === "thread") {
@@ -385,11 +409,19 @@ export function createRedditSearchRecipe(options: SocialRecipeOptions = {}): Soc
 
   async function search(page: Page, q: SocialSearchQuery, ctx: RecipeContext, guard: TimeGuard, caveat: (m: string) => void): Promise<SocialItem[]> {
     if (q.query === undefined) throw new RecipeError("invalid_input", "Reddit search needs a query");
-    await navigateTo(page, buildOldRedditSearchUrl(q, o.baseUrl), ctx, { site: SITE_NAME, guard });
-    const state = await waitFor(page, ctx, guard, caveat, (p) => p.results > 0);
-    if (state === "empty") {
-      caveat(`Reddit showed no posts for "${q.query}".`);
-      return [];
+    const url = buildOldRedditSearchUrl(q, o.baseUrl);
+    let loads = 0;
+    for (;;) {
+      await navigateTo(page, url, ctx, { site: SITE_NAME, guard });
+      loads++;
+      if ((await waitFor(page, ctx, guard, caveat, (p) => p.results > 0)) === "results") break;
+      const delay = emptyRetryDelaysMs[loads - 1];
+      if (delay === undefined || guard.remaining() < delay + EMPTY_RETRY_RESERVE_MS) {
+        caveat(`Reddit showed no posts for "${q.query}" (the search page was loaded ${loads} time${loads === 1 ? "" : "s"}).`);
+        return [];
+      }
+      ctx.log.debug("reddit: the search page was empty; loading it again", { loads, delay_ms: delay });
+      await sleep(delay);
     }
     const raws = await page.evaluate<RawResult[]>(RESULTS_JS);
     const posts = validateItems(
