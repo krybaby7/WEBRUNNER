@@ -8,12 +8,14 @@ import { runWithWallClock, TOOL_WALL_CLOCK_MS } from "./guard.js";
 
 const DESCRIPTION =
   `Convert an amount from one currency into up to ${MAX_TARGET_CURRENCIES} others at the latest or a historical reference rate (YYYY-MM-DD, ${EARLIEST_RATE_DATE} or later). ` +
-  "Source: Frankfurter (no API key), which serves the European Central Bank's reference rates for about 30 major currencies, published once per working day around 16:00 CET; " +
-  "weekends and holidays return the previous working day's rates, named in `date`. Not a trading quote; crypto is not covered. An unsupported code returns error code invalid_input listing the supported codes. " +
-  "Latest rates are cached 1 hour, historical rates 30 days. One request of 10 seconds; the whole call is capped at 20 seconds; past that it returns error code timeout (retryable).";
+  "Sources (no API key): Frankfurter, which serves the European Central Bank's reference rates for about 30 major currencies, published once per working day around 16:00 CET " +
+  "(weekends and holidays return the previous working day's rates, named in `date`); and, for any other current ISO currency such as EGP, or when Frankfurter fails, " +
+  "fawazahmed0's currency-api, a daily mid-market aggregate with history from 2024-03-02. `source` names the one source of every rate in the answer and `caveats` says why. " +
+  "Not a trading quote, an official central-bank rate or a bank's buy or sell price; crypto is not covered (use market_quote). An unsupported code returns error code invalid_input. " +
+  "Latest rates are cached 1 hour, historical rates 30 days. Requests of 10 seconds each; the whole call is capped at 20 seconds; past that it returns error code timeout (retryable).";
 
 export interface ExchangeRateToolOptions {
-  /** Replaces the Frankfurter service. For tests. */
+  /** Replaces the exchange-rate service. For tests. */
   service?: (deps: Deps) => FxService;
   /** Overrides the 20 s wall-clock cap. For tests. */
   wallClockMs?: number;

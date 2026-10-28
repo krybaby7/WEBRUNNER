@@ -55,6 +55,9 @@ describe("exchange_rate tool", () => {
     expect(tool?.description).toMatch(/no API key/);
     expect(tool?.description).toMatch(/20 seconds/);
     expect(tool?.description).toMatch(/1999-01-04/);
+    expect(tool?.description).toMatch(/currency-api/);
+    expect(tool?.description).toMatch(/EGP/);
+    expect(tool?.description).toMatch(/2024-03-02/);
     expect(tool?.annotations).toMatchObject({ readOnlyHint: true, idempotentHint: true, openWorldHint: true });
   });
 

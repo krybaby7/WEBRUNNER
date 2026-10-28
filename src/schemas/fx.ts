@@ -26,7 +26,7 @@ export const ExchangeRateOutputSchema = z.object({
   date: DateStringSchema,
   amount: z.number().positive(),
   rates: z.array(z.object({ currency: CurrencyCodeSchema, rate: z.number().positive(), converted: z.number() })).min(1),
-  source: z.literal("frankfurter"),
+  source: z.enum(["frankfurter", "currency-api"]),
   fetched_at: z.string(),
   caveats: z.array(z.string()),
 });
