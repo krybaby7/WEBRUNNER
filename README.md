@@ -14,7 +14,7 @@ The server calls the Claude API itself for research and extraction, so the clien
 | `search_hotels` | Nightly rates, stay totals, ratings when shown, star class and amenities from Google Hotels, read through the browser. | Chromium. a model backend only as a fallback when the page layout is not recognised |
 | `market_quote` | Current prices and OHLCV history for stocks, ETFs, indices and crypto from Yahoo Finance, CoinGecko, Finnhub and Google Finance. | None. `FINNHUB_API_KEY` is optional; Google Finance needs Chromium |
 | `weather` | Current conditions and a 1 to 16 day forecast, optionally hourly, from Open-Meteo. | None |
-| `exchange_rate` | Converts an amount at the latest or a historical ECB reference rate, from Frankfurter. | None |
+| `exchange_rate` | Converts an amount at the latest or a historical ECB reference rate, from Frankfurter, and other currencies such as EGP from currency-api. | None |
 | `social_search` | What people are saying across Reddit, Hacker News, Bluesky, YouTube, X and Facebook, as posts and comments, or the comments of one thread; optional summary. | None for Reddit, Hacker News and Bluesky. `REDDIT_CLIENT_ID`+`REDDIT_CLIENT_SECRET` and `YOUTUBE_API_KEY` optional; X and Facebook need Chromium and a connected account; summaries need a model backend |
 | `search_reviews` | Reviews of a place, business, product or app from the App Store, Trustpilot, Google Maps, Google Play and Amazon, with the subject each site matched; optional summary. | None for the App Store and Trustpilot; the other three need Chromium (Amazon often a connected account too); summaries need a model backend |
 | `accounts` | Connect your own accounts (Reddit, X, Facebook, Instagram, Google, Amazon, LinkedIn) to the server's browser by logging in yourself in a window it opens; list what is connected; disconnect. | Chromium with a display, or your own Chrome over CDP |
@@ -32,7 +32,7 @@ Version 0.2.0. All fourteen tools are implemented and unit-tested offline; integ
 
 The quality of `deep_research` is judged with the eval set (see Evals).
 
-**Personal use only.** Reading Google Flights, Google Hotels, Google Finance, Google Maps and Google Play automatically violates Google's terms of service; the same goes for X, Facebook, Amazon and Reddit's website (as opposed to Reddit's API). When a site is read through your own account, that account can be rate-limited or suspended. The owner has decided that is acceptable for personal use, at low volume, from their own machine. Do not host this server, publish it as a service, or point other people's traffic at it. Other sites you point `fetch_page` or `browse_task` at have their own terms; you are responsible for respecting them. webrunner does not try to defeat CAPTCHAs or anti-bot systems and never pretends to be a different browser: when a site blocks it, the tool reports `blocked`; when it wants a login, `needs_login`. Hacker News, Bluesky, the Reddit API, the YouTube Data API, CoinGecko, Frankfurter, Open-Meteo, Finnhub and the App Store feed are read through their public APIs under their own terms (quotas apply; see the tool sections).
+**Personal use only.** Reading Google Flights, Google Hotels, Google Finance, Google Maps and Google Play automatically violates Google's terms of service; the same goes for X, Facebook, Amazon and Reddit's website (as opposed to Reddit's API). When a site is read through your own account, that account can be rate-limited or suspended. The owner has decided that is acceptable for personal use, at low volume, from their own machine. Do not host this server, publish it as a service, or point other people's traffic at it. Other sites you point `fetch_page` or `browse_task` at have their own terms; you are responsible for respecting them. webrunner does not try to defeat CAPTCHAs or anti-bot systems and never pretends to be a different browser: when a site blocks it, the tool reports `blocked`; when it wants a login, `needs_login`. Hacker News, Bluesky, the Reddit API, the YouTube Data API, CoinGecko, Frankfurter, currency-api, Open-Meteo, Finnhub and the App Store feed are read through their public APIs under their own terms (quotas apply; see the tool sections).
 
 ## Requirements
 
@@ -41,7 +41,7 @@ The quality of `deep_research` is judged with the eval set (see Evals).
 - **A model backend**, your Claude subscription through the `claude` CLI or an Anthropic API key (`ANTHROPIC_API_KEY`), for `deep_research`, `browse_task`, the Google Flights extractor, the `summarize` option of `social_search` and `search_reviews`, and the fallback extraction the hotel, finance and review recipes use when a page layout is not recognised. The server starts without one, and everything else works; the tools that need it return the error code `config`. See Model backend.
 - **At least one search key** for `web_search` and `deep_research`. Start with **Brave plus Exa**; add Tavily or Perplexity Search later if you see failures in `providers_failed`.
 - Optional: `JINA_API_KEY` (Jina Reader works without one but is rate-limited), `FIRECRAWL_API_KEY` (better PDFs and complex pages) and `DUFFEL_API_KEY` (licensed flight offers). A reasonable start is Jina only for fetching and no Duffel until the Google Flights recipe has been in use for a few weeks.
-- Optional, for the v0.2 tools: `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (a Reddit "script" app; the API path is far more reliable than the public JSON endpoints, which refuse many IPs), `YOUTUBE_API_KEY` (a Google Cloud key with the YouTube Data API v3 enabled; without it the platform is off) and `FINNHUB_API_KEY` (US stock quotes as a second equity source). Hacker News, Bluesky, CoinGecko, Frankfurter, Open-Meteo, Yahoo Finance, the App Store feed and Trustpilot need no key.
+- Optional, for the v0.2 tools: `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` (a Reddit "script" app; the API path is far more reliable than the public JSON endpoints, which refuse many IPs), `YOUTUBE_API_KEY` (a Google Cloud key with the YouTube Data API v3 enabled; without it the platform is off) and `FINNHUB_API_KEY` (US stock quotes as a second equity source). Hacker News, Bluesky, CoinGecko, Frankfurter, currency-api, Open-Meteo, Yahoo Finance, the App Store feed and Trustpilot need no key.
 
 ## Install
 
@@ -587,7 +587,16 @@ Open-Meteo only, no key, no account. A place name goes through Open-Meteo's geoc
 }
 ```
 
-Frankfurter serves the European Central Bank's reference rates for about 30 major currencies, keyless. **Rates are published once per working day** around 16:00 CET, so `date` in the result is the reference date the rates are for: on a weekend or holiday that is the previous working day, and before the daily fixing it is yesterday's. Pass `date` (YYYY-MM-DD, 1999-01-04 or later) for a historical rate. An unsupported code returns `invalid_input` listing the supported ones; crypto is not covered (use `market_quote`). Latest rates are cached for an hour, historical ones for 30 days; the call is capped at 20 seconds.
+Frankfurter serves the European Central Bank's reference rates for about 30 major currencies, keyless. **Rates are published once per working day** around 16:00 CET, so `date` in the result is the reference date the rates are for: on a weekend or holiday that is the previous working day, and before the daily fixing it is yesterday's. Pass `date` (YYYY-MM-DD, 1999-01-04 or later) for a historical rate.
+
+**Other currencies, such as the Egyptian pound (EGP), come from [currency-api](https://github.com/fawazahmed0/exchange-api).** It is also keyless: a free daily aggregate of public mid-market rates, served through jsDelivr, with Cloudflare Pages as its mirror. currency-api answers the whole request when any code in it is outside the ECB list, so one answer always has one source. It also answers when Frankfurter is down. `source` says which one answered, and `caveats` says why currency-api did.
+
+currency-api has these limits:
+- Its history starts on 2024-03-02, so an earlier `date` works only for ECB currencies.
+- It covers only current ISO 4217 codes, so crypto still goes to `market_quote`.
+- Its rates are not the Central Bank of Egypt's official rate or a bank's buy or sell price, which can differ by a few percent.
+
+A code neither source covers returns `invalid_input`. Latest rates are cached for an hour, historical ones for 30 days; the call is capped at 20 seconds.
 
 ### social_search
 
@@ -725,7 +734,7 @@ Rough, owner-facing figures using the default model routing and 2026-10 prices (
 | `social_search`, `search_reviews` with `summarize: true` | $0.02 to $0.10 for the summary (one Sonnet-class call over up to 100 items), on top of the above; capped by `max_cost_usd` (default 0.50) |
 | `accounts` | $0 |
 
-Provider fees outside the Claude API: YouTube search spends 100 of a key's 10,000 daily quota units per search; the Reddit API, Finnhub, CoinGecko, Frankfurter, Open-Meteo, Hacker News, Bluesky and the App Store feed are free at this volume.
+Provider fees outside the Claude API: YouTube search spends 100 of a key's 10,000 daily quota units per search; the Reddit API, Finnhub, CoinGecko, Frankfurter, currency-api, Open-Meteo, Hacker News, Bluesky and the App Store feed are free at this volume.
 
 `deep_research` reports its actual spend in `stats.cost_usd`. That figure is **LLM spend only**: search and fetch provider fees (Brave, Exa, Firecrawl and so on) are billed by those providers and are not metered here. `max_cost_usd` is a hard stop on the same LLM spend: the server checks the running total before every model call, so the overshoot is at most one call. When the cap is reached the tool returns what it has, `stats.stopped_reason` is `budget`, and `gaps` explains the cutoff. The server keeps an estimate of the writer's cost in reserve so a report can still be produced. The default cap comes from `RESEARCH_MAX_COST_USD` (3.00); `max_cost_usd` on a call overrides it. `browse_task` has its own `max_cost_usd` (default 1.00).
 

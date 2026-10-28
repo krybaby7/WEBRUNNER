@@ -1313,6 +1313,14 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
 
 ### 14.10 Decision log, phase 5
 
+- **2026-10-28, WP38 (the backup built)**. `exchange_rate` follows 14.4's backup paragraph. Fixtures were recorded live through jsDelivr that day: the currency list, the latest USD file and the 2026-01-01 USD file. Checked live through `dist/index.js` the same day, from the owner's machine:
+  - USD to EGP: 56.12 (currency-api, 2026-10-28);
+  - USD to EGP on 2026-01-01: 47.70;
+  - EUR to EGP and USD: both from currency-api, with the reason caveat;
+  - USD to EUR and GBP: still Frankfurter (2026-10-27);
+  - BTC: `invalid_input` naming `market_quote`.
+
+  For the same day, currency-api's USD to EUR (0.8991) and the ECB's (0.8969) differ by 0.25%.
 - **2026-10-28, WP37 (a backup exchange-rate source)**. The owner asked for Egyptian pound rates, which Frankfurter lacks: the ECB publishes about 30 currencies. `market_quote` was no substitute: Yahoo's `EGP=X` answered 429 from the home IP, and its other sources do not quote currencies. `web_search` would cost a search credit and give numbers lifted from articles. Two keyless sources were probed live:
   - open.er-api.com: 166 currencies, latest only, EGP 56.09 per USD;
   - fawazahmed0's currency-api: 340 codes, daily history from 2024-03-02, and a documented mirror; EGP 56.27 per USD for 2026-10-27, 47.70 for 2026-01-01.
