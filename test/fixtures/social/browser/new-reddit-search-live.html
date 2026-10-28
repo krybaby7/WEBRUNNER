@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>claude code vs cursor - Reddit Search!</title>
+<!--
+  Stand-in for www.reddit.com's search (type=posts, sort=relevance) as it
+  rendered live on 2026-10-28 from a home IP with a logged-in profile (WP43),
+  element names, test ids and nesting as seen there, scripts and styling left
+  out. Each result is a [data-testid="sdui-post-unit"] with the community's
+  hover card, a faceplate-timeago, the title link (id
+  "search-post-title-t3_<id>"), a second link to the same post holding a
+  snippet, and a counter row whose faceplate-number carries the exact count
+  ("1.2K" shown, 1234 in `number`). The page shows four results, and two more
+  arrive after a scroll. Titles and snippets are invented.
+-->
+</head>
+<body>
+<shreddit-app>
+<main id="main-content">
+  <div id="results"></div>
+</main>
+</shreddit-app>
+<script>
+  const POSTS = [
+    { id: "1sgvqx8", sub: "vibecoding", ts: "2026-04-09T17:10:47.965Z", ago: "7mo ago", title: "Confused about Claude and Cursor", snippet: "Cursor is an editor that can use Claude's models; Claude Code is an agent that runs in your terminal.", votes: ["4", "4"], comments: ["5", "5"] },
+    { id: "1u8lsqz", sub: "CharruaDevs", ts: "2026-06-17T20:34:24.634Z", ago: "4mo ago", title: "Claude Code vs Cursor", snippet: "I'm weighing Claude Code Pro against Cursor Pro; both cost 20 USD a month.", votes: ["12", "12"], comments: ["9", "9"] },
+    { id: "1qwe7rt", sub: "vibecoding", ts: "2026-02-02T09:00:00.000Z", ago: "9mo ago", title: "Which is better? Cursor or Claude code?", snippet: "After a month with both, I keep Claude Code for refactors and Cursor for quick edits.", votes: ["1234", "1.2K"], comments: ["310", "310"] },
+    { id: "1rty5uv", sub: "claude", ts: "2026-08-21T12:30:00.000Z", ago: "2mo ago", title: "Cursor is an IDE, Claude Code is an agent", snippet: "", votes: ["87", "87"], comments: ["41", "41"] },
+  ];
+  const MORE = [
+    { id: "1abc1de", sub: "VibeCodeDevs", ts: "2026-05-05T05:05:05.000Z", ago: "6mo ago", title: "Claude Code vs. Cursor?", snippet: "Asking before I renew.", votes: ["3", "3"], comments: ["2", "2"] },
+    { id: "1fgh2ij", sub: "vibecoding", ts: "2026-09-09T09:09:09.000Z", ago: "1mo ago", title: "Claude code vs cursor", snippet: "Here is my comparison after building the same app twice.", votes: ["58", "58"], comments: ["33", "33"] },
+  ];
+  function unit(p) {
+    const href = `/r/${p.sub}/comments/${p.id}/${p.title.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}/`;
+    const div = document.createElement("div");
+    div.setAttribute("data-testid", "sdui-post-unit");
+    div.innerHTML =
+      `<div><div><span><faceplate-hovercard data-id="community-hover-card" label="r/${p.sub}">` +
+      `<search-telemetry-tracker><a href="/r/${p.sub}/"><span>r/${p.sub}</span></a></search-telemetry-tracker></faceplate-hovercard>` +
+      `<span>·</span><faceplate-timeago format="narrow" ts="${p.ts.replace("Z", "000+0000")}"><time datetime="${p.ts}">${p.ago}</time></faceplate-timeago></span></div></div>` +
+      `<a data-testid="post-title-text" id="search-post-title-t3_${p.id}" href="${href}">${p.title}</a>` +
+      `<search-telemetry-tracker><a href="${href}">${p.snippet}</a></search-telemetry-tracker>` +
+      `<div data-testid="search-counter-row"><span><faceplate-number number="${p.votes[0]}" pretty="">${p.votes[1]}</faceplate-number> votes</span><span>·</span>` +
+      `<span><faceplate-number number="${p.comments[0]}" pretty="">${p.comments[1]}</faceplate-number> comments</span></div>`;
+    return div;
+  }
+  const results = document.getElementById("results");
+  POSTS.forEach((p) => results.appendChild(unit(p)));
+  results.style.minHeight = "3000px";
+  let added = false;
+  window.addEventListener("scroll", () => {
+    if (added || window.scrollY < 100) return;
+    added = true;
+    setTimeout(() => MORE.forEach((p) => results.appendChild(unit(p))), 150);
+  });
+</script>
+</body>
+</html>

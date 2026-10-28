@@ -137,7 +137,6 @@ function fullUrl(permalink: string | null | undefined, fallbackPath: string): st
 
 export class RedditProvider implements SocialPlatformProvider {
   readonly name = "reddit" as const;
-  readonly access = "api" as const;
   private readonly clientId: string | undefined;
   private readonly clientSecret: string | undefined;
   private readonly userAgent: string;
@@ -157,6 +156,16 @@ export class RedditProvider implements SocialPlatformProvider {
     this.now = opts.now ?? Date.now;
     this.publicBaseUrl = stripTrailingSlash(opts.publicBaseUrl ?? DEFAULT_PUBLIC_BASE_URL);
     this.apiBaseUrl = stripTrailingSlash(opts.apiBaseUrl ?? DEFAULT_API_BASE_URL);
+  }
+
+  /**
+   * "browser" when Reddit is read without API credentials and the browser can
+   * stand in: the public endpoints answer 403 from most home IPs, and the
+   * browser path (old.reddit, a reload, then www.reddit.com's search) needs the
+   * browser's time budget, not the API's (WP43). "api" otherwise.
+   */
+  get access(): "api" | "browser" {
+    return !this.usesApi && this.fallback !== undefined && this.fallback.isConfigured() ? "browser" : "api";
   }
 
   /** The public endpoints need no key, so Reddit is always offered. */

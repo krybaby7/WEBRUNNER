@@ -81,6 +81,31 @@ import {
  *
  * Extraction is deterministic (the markup is stable and plain); there is no LLM
  * call in this recipe, so it works without ANTHROPIC_API_KEY.
+ *
+ * www.reddit.com's search first, old.reddit as the fallback, from what was
+ * seen live on 2026-10-28 (WP43) for four everyday questions:
+ *   - old.reddit's search said "there doesn't seem to be anything here" for
+ *     every query, through four loads each (including one that had listed 15
+ *     posts half an hour before), while www.reddit.com's search, from the same
+ *     logged-in profile, listed 10 posts for each;
+ *   - once old.reddit answered again, its relevance ranking kept to the query
+ *     for 17 of 40 posts ("Sharm El Sheikh best snorkeling spots" listed
+ *     Monster Hunter; "cost of living in Cairo as an expat" none about Cairo),
+ *     www.reddit.com's for about 39 of 40.
+ * So search mode reads www.reddit.com's search, and old.reddit's (with one
+ * reload of an empty page) when www.reddit.com finds nothing, fails, or is
+ * asked for several subreddits, with a caveat saying which and why:
+ *   search    https://www.reddit.com/search/?q=<q>&type=posts&sort=relevance&t=<t>
+ *             (one subreddit: /r/<sub>/search/?...&restrict_sr=1; several
+ *             subreddits are not supported there: /r/a+b/search/ finds nothing)
+ *   results   [data-testid="sdui-post-unit"]: a[data-testid="post-title-text"]
+ *             (id "search-post-title-t3_<id>", href the permalink), a second link
+ *             to the same href holding a snippet, faceplate-hovercard[label="r/sub"],
+ *             faceplate-timeago > time[datetime], and [data-testid="search-counter-row"]
+ *             spans "N votes" and "N comments" with faceplate-number[number].
+ *             Server-rendered: 7 results within about a second; scrolling adds more.
+ *   none      "Hm...we couldn't find any results for <q>".
+ * The posts' comments, in search mode, are still read on old.reddit.
  */
 
 export const REDDIT_SITE = "reddit_search";
@@ -92,13 +117,17 @@ const SITE_NAME = "Reddit (old.reddit.com)";
 export const MAX_COMMENT_POSTS = 5;
 /** Time reserved before each extra post page is opened for comments. */
 const COMMENT_PAGE_RESERVE_MS = 8000;
-/**
- * Pauses before loading an empty search page again. Short, because the Reddit
- * platform as a whole has 15 s when it falls back to the browser (PLAN.md 14.5).
- */
-export const DEFAULT_EMPTY_RETRY_DELAYS_MS: readonly number[] = [1000, 2000, 2000];
+/** Pauses before loading an empty old.reddit search page again (WP39; one reload since WP43, now that it is the fallback). */
+export const DEFAULT_EMPTY_RETRY_DELAYS_MS: readonly number[] = [1000];
 /** Time kept in hand after an empty page before loading it again. */
 const EMPTY_RETRY_RESERVE_MS = 3000;
+const NEW_REDDIT_SITE_NAME = "Reddit (www.reddit.com)";
+/** Least time left for www.reddit.com's search to be worth a try. */
+const NEW_REDDIT_RESERVE_MS = 6000;
+/** Least time left, after www.reddit.com failed, for old.reddit to be worth a try. */
+const OLD_REDDIT_RESERVE_MS = 5000;
+/** Most scrolls of www.reddit.com's results to load more of them. */
+const NEW_REDDIT_MAX_SCROLLS = 2;
 
 const REDDIT_HOSTS = new Set(["reddit.com", "www.reddit.com", "old.reddit.com", "new.reddit.com", "np.reddit.com", "m.reddit.com", "sh.reddit.com"]);
 const SHORT_HOSTS = new Set(["redd.it", "www.redd.it"]);
@@ -113,6 +142,14 @@ const WALL_RULES: WallRules = {
 
 const NO_RESULTS_RE = /there doesn't seem to be anything here|no results found/i;
 
+const NEW_WALL_RULES: WallRules = {
+  ...WALL_RULES,
+  site: NEW_REDDIT_SITE_NAME,
+  blockedText: /blocked by network security|whoa there, pardner|prove your humanity|verify (?:that )?you(?:'re| are) (?:a )?human/i,
+};
+
+const NEW_NO_RESULTS_RE = /we couldn.t find any results/i;
+
 // ---------------------------------------------------------------------------
 // URLs
 // ---------------------------------------------------------------------------
@@ -123,6 +160,19 @@ export function buildOldRedditSearchUrl(q: SocialSearchQuery, baseUrl?: string):
   const path = subs.length > 0 ? `/r/${subs.join("+")}/search` : "/search";
   const params = new URLSearchParams({ q: q.query ?? "", sort: "relevance", t: q.recency ?? "all", restrict_sr: "on" });
   return rebase(`${OLD_REDDIT_ORIGIN}${path}?${params.toString()}`, OLD_REDDIT_ORIGIN, baseUrl);
+}
+
+/**
+ * www.reddit.com's own search for posts, or undefined when it cannot express the
+ * query: it has no search across several subreddits.
+ */
+export function buildNewRedditSearchUrl(q: SocialSearchQuery, baseUrl?: string): string | undefined {
+  const subs = q.subreddits?.map((s) => s.trim().replace(/^\/?r\//i, "")).filter((s) => s !== "") ?? [];
+  if (subs.length > 1) return undefined;
+  const path = subs.length === 1 ? `/r/${subs[0] as string}/search/` : "/search/";
+  const params = new URLSearchParams({ q: q.query ?? "", type: "posts", sort: "relevance", t: q.recency ?? "all" });
+  if (subs.length === 1) params.set("restrict_sr", "1");
+  return rebase(`${REDDIT_CANONICAL_ORIGIN}${path}?${params.toString()}`, REDDIT_CANONICAL_ORIGIN, baseUrl);
 }
 
 export interface RedditThreadRef {
@@ -212,6 +262,54 @@ const RESULTS_JS = `(() => {
     author: txt(r.querySelector(".search-author a")),
     body: r.querySelector(".search-result-body") ? (r.querySelector(".search-result-body").innerText || "") : "",
   }));
+})()`;
+
+const NEW_PROBE_JS = probeScript(`
+  return {
+    results: document.querySelectorAll('[data-testid="sdui-post-unit"] a[data-testid="post-title-text"]').length,
+    comments: 0,
+    post: false,
+    over18: false,
+  };
+`);
+
+interface RawNewResult {
+  fullname: string;
+  title: string;
+  href: string;
+  votes: string;
+  comments: string;
+  subreddit: string;
+  datetime: string;
+  snippet: string;
+}
+
+/** One record per www.reddit.com search result; counts from faceplate-number's exact `number`. */
+const NEW_RESULTS_JS = `(() => {
+  const txt = (el) => (el ? (el.textContent || "").replace(/\\s+/g, " ").trim() : "");
+  const counter = (unit, re) => {
+    const span = Array.from(unit.querySelectorAll('[data-testid="search-counter-row"] span')).find((s) => re.test(txt(s)));
+    if (!span) return "";
+    const n = span.querySelector("faceplate-number");
+    return (n && n.getAttribute("number")) || txt(span);
+  };
+  return Array.from(document.querySelectorAll('[data-testid="sdui-post-unit"]')).map((u) => {
+    const title = u.querySelector('a[data-testid="post-title-text"]');
+    const href = title ? (title.getAttribute("href") || "") : "";
+    const snippet = Array.from(u.querySelectorAll("a[href]")).find((a) => a !== title && a.getAttribute("href") === href);
+    const community = u.querySelector('faceplate-hovercard[data-id="community-hover-card"]');
+    const time = u.querySelector("faceplate-timeago time[datetime], time[datetime]");
+    return {
+      fullname: title ? (title.id || "").replace(/^search-post-title-/, "") : "",
+      title: txt(title),
+      href,
+      votes: counter(u, /\\bvotes?$/i),
+      comments: counter(u, /\\bcomments?$/i),
+      subreddit: community ? (community.getAttribute("label") || "") : "",
+      datetime: time ? (time.getAttribute("datetime") || "") : "",
+      snippet: snippet ? (snippet.innerText || snippet.textContent || "") : "",
+    };
+  });
 })()`;
 
 interface RawPost {
@@ -316,6 +414,27 @@ export function resultToCandidate(raw: RawResult): Record<string, unknown> | und
   });
 }
 
+/** A www.reddit.com search result as a post. Its snippet is the start of the post's text (or of a matching comment). */
+export function newResultToCandidate(raw: RawNewResult): Record<string, unknown> | undefined {
+  const id = nativeId(raw.fullname, raw.href);
+  const url = canonicalFromPath(raw.href);
+  if (id === undefined || url === undefined) return undefined;
+  const { text, truncated } = clipText(raw.snippet);
+  return compact({
+    id: `reddit:${id}`,
+    platform: "reddit",
+    kind: "post",
+    url,
+    title: raw.title.trim() || undefined,
+    text,
+    truncated,
+    created_at: toIso(raw.datetime),
+    score: parseCount(raw.votes),
+    replies: parseCount(raw.comments),
+    community: subredditName(raw.subreddit),
+  });
+}
+
 /** Score from `.score.unvoted`: the exact count in `title`, else the printed "12 points"; undefined when hidden. */
 export function scoreOf(title: string, text: string): number | undefined {
   const exact = parseCount(title);
@@ -372,20 +491,24 @@ export function commentToCandidate(raw: RawComment, parentUrl: string, community
 // ---------------------------------------------------------------------------
 
 export interface RedditSearchRecipeOptions extends SocialRecipeOptions {
-  /** Pauses before each reload of an empty search page, in ms; one reload per entry. Default DEFAULT_EMPTY_RETRY_DELAYS_MS. */
+  /** Pauses before each reload of an empty old.reddit search page, in ms; one reload per entry. Default DEFAULT_EMPTY_RETRY_DELAYS_MS. */
   emptyRetryDelaysMs?: readonly number[];
+  /** Search www.reddit.com first and old.reddit as the fallback (WP43). Default true; tests of old.reddit alone turn it off. */
+  newRedditFirst?: boolean;
 }
 
 export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}): SocialRecipe {
   const o = resolveOptions(options);
   const emptyRetryDelaysMs = options.emptyRetryDelaysMs ?? DEFAULT_EMPTY_RETRY_DELAYS_MS;
+  const newRedditFirst = options.newRedditFirst ?? true;
 
   const buildUrl = (q: SocialSearchQuery): string | null => {
     if (q.mode === "thread") {
       const ref = q.url === undefined ? undefined : parseRedditThreadUrl(q.url);
       return ref === undefined ? null : buildOldRedditThreadUrl(ref, q.per_platform, o.baseUrl);
     }
-    return q.query === undefined ? null : buildOldRedditSearchUrl(q, o.baseUrl);
+    if (q.query === undefined) return null;
+    return (newRedditFirst ? buildNewRedditSearchUrl(q, o.baseUrl) : undefined) ?? buildOldRedditSearchUrl(q, o.baseUrl);
   };
 
   async function run(page: Page, params: SocialSearchQuery, ctx: RecipeContext): Promise<SocialItem[]> {
@@ -409,26 +532,23 @@ export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}
 
   async function search(page: Page, q: SocialSearchQuery, ctx: RecipeContext, guard: TimeGuard, caveat: (m: string) => void): Promise<SocialItem[]> {
     if (q.query === undefined) throw new RecipeError("invalid_input", "Reddit search needs a query");
-    const url = buildOldRedditSearchUrl(q, o.baseUrl);
-    let loads = 0;
-    for (;;) {
-      await navigateTo(page, url, ctx, { site: SITE_NAME, guard });
-      loads++;
-      if ((await waitFor(page, ctx, guard, caveat, (p) => p.results > 0)) === "results") break;
-      const delay = emptyRetryDelaysMs[loads - 1];
-      if (delay === undefined || guard.remaining() < delay + EMPTY_RETRY_RESERVE_MS) {
-        caveat(`Reddit showed no posts for "${q.query}" (the search page was loaded ${loads} time${loads === 1 ? "" : "s"}).`);
-        return [];
+    let posts: SocialItem[] | undefined;
+    /** Why old.reddit is read after www.reddit.com was tried, for the caveat. */
+    let why: string | undefined;
+    const newUrl = newRedditFirst ? buildNewRedditSearchUrl(q, o.baseUrl) : undefined;
+    if (newUrl !== undefined && guard.remaining() >= NEW_REDDIT_RESERVE_MS) {
+      try {
+        const found = await searchNewReddit(page, newUrl, q, ctx, guard, caveat);
+        if (found.length > 0) posts = found;
+        else why = "www.reddit.com's search found nothing";
+      } catch (err) {
+        if (guard.remaining() < OLD_REDDIT_RESERVE_MS) throw err;
+        why = `www.reddit.com's search could not be read (${firstLine(err)})`;
+        ctx.log.warn("reddit: www.reddit.com's search failed; trying old.reddit", { error: firstLine(err) });
       }
-      ctx.log.debug("reddit: the search page was empty; loading it again", { loads, delay_ms: delay });
-      await sleep(delay);
     }
-    const raws = await page.evaluate<RawResult[]>(RESULTS_JS);
-    const posts = validateItems(
-      raws.map(resultToCandidate).filter((c): c is Record<string, unknown> => c !== undefined),
-      ctx,
-      SITE_NAME,
-    );
+    posts ??= await searchOldReddit(page, q, ctx, guard, caveat, why);
+    if (posts.length === 0) return [];
     if (q.kind === "posts") return posts.slice(0, q.per_platform);
 
     const postBudget = q.kind === "both" ? Math.ceil(q.per_platform / 2) : 0;
@@ -454,6 +574,81 @@ export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}
       }
     }
     return [...posts.slice(0, postBudget), ...comments.slice(0, commentBudget)];
+  }
+
+  /**
+   * old.reddit's search, loading an empty page again before believing it. The
+   * fallback when www.reddit.com's search found nothing or failed (`why`), and
+   * the only search for several subreddits at once.
+   */
+  async function searchOldReddit(
+    page: Page,
+    q: SocialSearchQuery,
+    ctx: RecipeContext,
+    guard: TimeGuard,
+    caveat: (m: string) => void,
+    why: string | undefined,
+  ): Promise<SocialItem[]> {
+    const url = buildOldRedditSearchUrl(q, o.baseUrl);
+    let loads = 0;
+    for (;;) {
+      await navigateTo(page, url, ctx, { site: SITE_NAME, guard });
+      loads++;
+      if ((await waitFor(page, ctx, guard, caveat, (p) => p.results > 0)) === "results") {
+        const raws = await page.evaluate<RawResult[]>(RESULTS_JS);
+        const posts = validateItems(
+          raws.map(resultToCandidate).filter((c): c is Record<string, unknown> => c !== undefined),
+          ctx,
+          SITE_NAME,
+        );
+        if (why !== undefined) caveat(`These Reddit posts come from old.reddit.com's search: ${why}.`);
+        return posts;
+      }
+      const delay = emptyRetryDelaysMs[loads - 1];
+      if (delay === undefined || guard.remaining() < delay + EMPTY_RETRY_RESERVE_MS) {
+        const tried = `old.reddit.com's search was loaded ${loads} time${loads === 1 ? "" : "s"}`;
+        caveat(`Reddit showed no posts for "${q.query}" (${why !== undefined ? `${why}; ` : ""}${tried}).`);
+        return [];
+      }
+      ctx.log.debug("reddit: the search page was empty; loading it again", { loads, delay_ms: delay });
+      await sleep(delay);
+    }
+  }
+
+  /**
+   * www.reddit.com's own search, read first (WP43): its relevance ranking keeps
+   * to the query where old.reddit's often does not. Empty when it found nothing;
+   * walls, timeouts and HTTP errors throw. Posts only; in search mode their
+   * comments are still read on old.reddit.
+   */
+  async function searchNewReddit(
+    page: Page,
+    url: string,
+    q: SocialSearchQuery,
+    ctx: RecipeContext,
+    guard: TimeGuard,
+    caveat: (m: string) => void,
+  ): Promise<SocialItem[]> {
+    await navigateTo(page, url, ctx, { site: NEW_REDDIT_SITE_NAME, guard });
+    const state = await waitFor(page, ctx, guard, caveat, (p) => p.results > 0, { probe: NEW_PROBE_JS, noResults: NEW_NO_RESULTS_RE, walls: NEW_WALL_RULES });
+    if (state === "empty") return [];
+    let count = await page.evaluate<number>(`document.querySelectorAll('[data-testid="sdui-post-unit"]').length`);
+    for (let i = 0; i < NEW_REDDIT_MAX_SCROLLS && count < q.per_platform && guard.remaining() > EMPTY_RETRY_RESERVE_MS; i++) {
+      const before = count;
+      await page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
+      const until = Date.now() + Math.min(2500, guard.remaining() - EMPTY_RETRY_RESERVE_MS);
+      do {
+        await sleep(o.pollMs);
+        count = await page.evaluate<number>(`document.querySelectorAll('[data-testid="sdui-post-unit"]').length`);
+      } while (count <= before && Date.now() < until);
+      if (count <= before) break;
+    }
+    const raws = await page.evaluate<RawNewResult[]>(NEW_RESULTS_JS);
+    return validateItems(
+      raws.map(newResultToCandidate).filter((c): c is Record<string, unknown> => c !== undefined),
+      ctx,
+      NEW_REDDIT_SITE_NAME,
+    );
   }
 
   async function thread(page: Page, q: SocialSearchQuery, ctx: RecipeContext, guard: TimeGuard, caveat: (m: string) => void): Promise<SocialItem[]> {
@@ -502,13 +697,17 @@ export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}
     return [...post, ...comments.slice(0, limit)];
   }
 
-  /** Wait for `ready`, passing the over-18 gate once; walls throw; "empty" when old.reddit says there is nothing. */
+  /**
+   * Wait for `ready`, passing the over-18 gate once; walls throw; "empty" when
+   * the page says there is nothing. `page` defaults to old.reddit's probe, text and walls.
+   */
   async function waitFor(
     page: Page,
     ctx: RecipeContext,
     guard: TimeGuard,
     caveat: (m: string) => void,
     ready: (p: RedditProbe) => boolean,
+    site: { probe: string; noResults: RegExp; walls: WallRules } = { probe: REDDIT_PROBE_JS, noResults: NO_RESULTS_RE, walls: WALL_RULES },
   ): Promise<"results" | "empty"> {
     const start = Date.now();
     const budget = Math.max(0, Math.min(o.maxResultsWaitMs, guard.remaining() * 0.6));
@@ -516,10 +715,10 @@ export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}
     let last: RedditProbe | undefined;
     for (;;) {
       guard.check("while waiting for the page");
-      const probe = await runProbe<RedditProbe>(page, REDDIT_PROBE_JS);
+      const probe = await runProbe<RedditProbe>(page, site.probe);
       if (probe !== undefined) {
         last = probe;
-        const wall = classifyWall(probe, WALL_RULES);
+        const wall = classifyWall(probe, site.walls);
         if (wall !== undefined) throw wall;
         if (ready(probe)) return "results";
         if (probe.over18) {
@@ -531,10 +730,10 @@ export function createRedditSearchRecipe(options: RedditSearchRecipeOptions = {}
           }
           throw new RecipeError("blocked", `Reddit showed an over-18 interstitial at ${probe.url} that could not be passed`, { retryable: false });
         }
-        if (NO_RESULTS_RE.test(probe.text)) return "empty";
+        if (site.noResults.test(probe.text)) return "empty";
       }
       if (Date.now() - start >= budget) {
-        throw new RecipeError("timeout", `old.reddit did not show the page within ${Math.round(budget / 1000)}s (page: ${last?.title ?? "unknown"})`);
+        throw new RecipeError("timeout", `${site.walls.site} did not show the page within ${Math.round(budget / 1000)}s (page: ${last?.title ?? "unknown"})`);
       }
       await sleep(o.pollMs);
     }
