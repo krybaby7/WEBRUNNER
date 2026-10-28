@@ -56,7 +56,11 @@ export interface ReviewsFixtureServer {
  *                                        whose application bundle answers HTTP 403; "Nowhere" the empty
  *                                        result; "Unstructured" the place page whose cards carry no
  *                                        data-review-id (LLM path); "Overview" the live 2026-10-27 layout
- *                                        whose overview shows preview cards that the Reviews tab replaces
+ *                                        whose overview shows preview cards that the Reviews tab replaces;
+ *                                        "Midan" the live 2026-10-28 list of two matches, the closer one
+ *                                        second ("Midan Table": its link leads to the page without hour buttons)
+ *                 /maps/place/Koshary+El+Midan/  the list with that place opened over it, hours included
+ *                 /maps/place/Koshary+El+Midan+Table/  the same without the per-day hour buttons
  *                 /maps/place/...        the place page (consent dialog first)
  *                 /maps/_/js/...         the application bundle: HTTP 403, as Maps answers cloud IPs
  *   Google Play   /play/search?q=        the Notion search page; "Nothing" the empty result
@@ -93,7 +97,13 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
       else if (/Unstructured/.test(text)) html(readFixture("google-maps-place.html").replace('el.setAttribute("data-review-id", r.id);', ""));
       else if (/Direct/.test(text)) html(readFixture("google-maps-place.html"));
       else if (/Overview/.test(text)) html(readFixture("google-maps-place-live.html"));
+      else if (/Midan Table/.test(text)) html(readFixture("google-maps-list-live.html").replaceAll("/maps/place/Koshary+El+Midan/", "/maps/place/Koshary+El+Midan+Table/"));
+      else if (/Midan/.test(text)) html(readFixture("google-maps-list-live.html"));
       else html(readFixture("google-maps-results.html"));
+    } else if (path.startsWith("/maps/place/Koshary+El+Midan+Table/")) {
+      html(readFixture("google-maps-list-place-live.html").replace(/<div id="hours-buttons">[\s\S]*?<!-- \/hours-buttons -->/, ""));
+    } else if (path.startsWith("/maps/place/Koshary+El+Midan/")) {
+      html(readFixture("google-maps-list-place-live.html"));
     } else if (path.startsWith("/maps/place/")) {
       html(readFixture("google-maps-place.html"));
     } else if (path === "/play/search") {

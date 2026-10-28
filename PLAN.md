@@ -1334,6 +1334,13 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
 
 ### 14.10 Decision log, phase 5
 
+- **2026-10-28, WP41 (built)**. The Google Maps recipe follows 14.6 as changed by WP40. `ReviewSubjectSchema` gains `hours`. A place is now the last `[role="main"]` with a heading and no results feed, and the subject (`hours` included) is read from it. A place opened from a list builds its panel in stages, name and rating before tabs, so the recipe now waits up to 3 s (`tabWaitMs`) for the Reviews tab: without that wait the Sayed Hanafy run below found 0 reviews. Checked live through `dist/index.js` the same day, from the owner's machine, with `location: "Downtown Cairo"`:
+  - **"Koshary El Tahrir":** Google listed 6 places. Koshary El Tahrir, 4.1 from 6,074, 5 reviews, open 9 AM to 12 AM (Saturday to 2 AM).
+  - **"Koshary Abou Tarek":** opened directly. 4.3 from 44,494, 5 reviews; hours from "See more hours", 7 AM to 1 AM daily.
+  - **"Koshary Sayed Hanafy":** the Downtown branch under its Arabic name, 4.1 from 1,755, open 24 hours, 5 reviews.
+
+  Not addressed: `per_source: 10` still returns 5 reviews per place, as the code before WP41 did that day, because scrolling the pane loaded no more cards.
+
 - **2026-10-28, WP40 (Google Maps lists of matches, and opening hours)**. On "best-rated koshary in Downtown Cairo", webrunner returned a subject named "Results" with no reviews for Koshary El Tahrir, and the rating changed between runs (4.1, then 3.9) with the same 6,074 reviews. Captured live the same day:
   - **The list was taken for a place.** A search with several matches shows a list whose `h1` reads "Results" and whose cards carry star ratings. The recipe's place check (a heading plus a star rating) took that list for a place, so it never opened one. It read "Results" as the name and took the rating and count from whichever cards came first: "Al Tahreer Koshary Restaurant" (3.9, 5,052) and "Koshary El Tahrir" (4.1, 6,074).
   - **The list stays under an opened place.** Opening a result adds a second `[role="main"]` labelled with the place's name and leaves the list (and its "Results" `h1`) in the page, so "the first `h1`" is still wrong after the click.

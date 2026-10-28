@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  bestResultIndex,
   buildGoogleMapsSearchUrl,
   createGoogleMapsReviewsRecipe,
   googleMapsReviewsRecipe,
@@ -19,6 +20,19 @@ import { makeQuery, neverLlm, promptOf, runRecipe, scriptedLlm, startReviewsServ
 
 const probe = await probeChromium();
 const DAY = 86_400_000;
+
+describe("Google Maps result matching", () => {
+  it("keeps Google's first result unless a later one carries every word of the name and the first, in the same script, does not (live lists, 2026-10-28)", () => {
+    expect(bestResultIndex("Koshary El Tahrir", ["Al Tahreer Koshary Restaurant", "Koshary El Tahrir"])).toBe(1);
+    // The Downtown branch is first under an Arabic name; Google ranked it by location, so it stays.
+    expect(bestResultIndex("Koshary Sayed Hanafy", ["كشرى سيد حنفي - دار القضاء العالى - وسط البلد", "Sayed Hanafy Koshary - Hassan Maamon", "كشري سيد حنفي مدينة نصر"])).toBe(0);
+    expect(bestResultIndex("Hotel Lutetia", ["Hôtel Lutetia", "Hôtel Bel Ami", "Hotel Montalembert"])).toBe(0);
+    expect(bestResultIndex("Hotel Montalembert", ["Hôtel Lutetia", "Hotel Montalembert"])).toBe(1);
+    expect(bestResultIndex("Koshary", ["Koshary Abou Tarek", "Koshary El Tahrir"])).toBe(0);
+    expect(bestResultIndex("Nothing alike", ["Koshary Abou Tarek", "Koshary El Tahrir"])).toBe(0);
+    expect(bestResultIndex("Anything", [])).toBe(0);
+  });
+});
 
 describe("Google Maps URL helpers", () => {
   it("builds the search URL from subject and location with hl=en", () => {
@@ -141,6 +155,53 @@ describe.skipIf(!probe.available)(`google-maps-reviews recipe in Chromium${probe
     expect(r.caveats).toContain(CONSENT_CAVEAT);
   });
 
+  it("opens the closest match from a list, not the first, and reads the place's own panel with its hours (live layout, 2026-10-28)", async () => {
+    const r = await runRecipe(session, recipe(), makeQuery({ subject: "Koshary El Midan", location: "Downtown", sources: ["google_maps"] }), neverLlm());
+    expect(r.error).toBeUndefined();
+    expect(r.spy.forbidden).toEqual([]);
+    expect(server.requests.some((x) => x.startsWith("GET /maps/place/Koshary+El+Midan/"))).toBe(true);
+    expect(server.requests.some((x) => x.startsWith("GET /maps/place/Al+Meedan"))).toBe(false);
+    expect(r.caveats).toContain('Google Maps listed 2 places for this search; the reviews are for "Koshary El Midan", the one whose name matches.');
+
+    const { subject, reviews } = r.result!;
+    expect(ReviewSubjectSchema.safeParse(subject).success).toBe(true);
+    // The list's "Results" heading and its first card (3.9 from 5,052) are still on the page above the place.
+    expect(subject).toMatchObject({
+      source: "google_maps",
+      name: "Koshary El Midan",
+      rating_avg: 4.1,
+      review_count: 6074,
+      address: "19 Abd El-Khalik Tharwat, Bab Al Louq, Abdeen, Cairo Governorate",
+      categories: ["Egyptian restaurant"],
+    });
+    expect(subject.hours).toEqual([
+      "Monday: 9 AM to 12 AM",
+      "Tuesday: 9 AM to 12 AM",
+      "Wednesday: 9 AM to 12 AM",
+      "Thursday: 9 AM to 12 AM",
+      "Friday: Closed",
+      "Saturday: 9 AM to 2 AM",
+      "Sunday: 9 AM to 12 AM",
+    ]);
+    expect(reviews.map((x) => x.author)).toEqual(["Hana Z.", "Mostafa R.", "Clara W.", "Youssef N."]);
+    expect(reviews[0]).toMatchObject({ rating: 5, url: "https://www.google.com/maps/contrib/300000" });
+  });
+
+  it("reads the hours from the hidden table when the per-day buttons are missing", async () => {
+    const r = await runRecipe(session, recipe(), makeQuery({ subject: "Koshary El Midan", location: "Table", sources: ["google_maps"] }), neverLlm());
+    expect(r.error).toBeUndefined();
+    expect(r.result!.subject.name).toBe("Koshary El Midan");
+    expect(r.result!.subject.hours).toEqual([
+      "Monday: 9 AM–12 AM",
+      "Tuesday: 9 AM–12 AM",
+      "Wednesday: 9 AM–12 AM",
+      "Thursday: 9 AM–12 AM",
+      "Friday: Closed",
+      "Saturday: 9 AM–2 AM",
+      "Sunday: 9 AM–12 AM",
+    ]);
+  });
+
   it("reads the Reviews tab's cards, not the overview's preview cards it replaces (live layout, 2026-10-27)", async () => {
     // per_source 3: the three preview cards alone would have satisfied the old wait.
     const few = await runRecipe(session, recipe(), makeQuery({ subject: "Overview Tower", per_source: 3 }), neverLlm());
@@ -152,6 +213,16 @@ describe.skipIf(!probe.available)(`google-maps-reviews recipe in Chromium${probe
     expect(r.spy.forbidden).toEqual([]);
     const { subject, reviews } = r.result!;
     expect(subject).toMatchObject({ name: "Nile View Tower", rating_avg: 4.3, review_count: 30_700 });
+    // After the reviews: back to Overview, "See more hours", and only the hours that are shown (2026-10-28 layout).
+    expect(subject.hours).toEqual([
+      "Monday: 9 AM to 11 PM",
+      "Tuesday: 9 AM to 11 PM",
+      "Wednesday: 9 AM to 11 PM",
+      "Thursday: 9 AM to 11 PM",
+      "Friday: 1 PM to 11 PM",
+      "Saturday: 9 AM to 11 PM",
+      "Sunday: 9 AM to 11 PM",
+    ]);
     // 10 cards, then 14 after one scroll; the previews never appear.
     expect(reviews).toHaveLength(14);
     expect(reviews.some((x) => x.author?.startsWith("Preview"))).toBe(false);

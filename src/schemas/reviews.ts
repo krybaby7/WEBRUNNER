@@ -106,6 +106,8 @@ export const ReviewSubjectSchema = z.object({
   address: z.string().min(1).optional(),
   categories: z.array(z.string().min(1)).optional(),
   price_level: z.string().min(1).optional(),
+  /** google_maps only: the weekly opening hours as shown, Monday first ("Monday: 9 AM to 12 AM", "Friday: Closed"). */
+  hours: z.array(z.string().min(1)).max(7).optional(),
 });
 export type ReviewSubject = z.infer<typeof ReviewSubjectSchema>;
 
