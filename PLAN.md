@@ -1029,13 +1029,21 @@ Output:
   date: string;                   // the reference date the rates are for (the previous working day on weekends and holidays)
   amount: number;
   rates: Array<{ currency: string; rate: number; converted: number }>;
-  source: "frankfurter";
+  source: "frankfurter" | "currency-api"; // the one source every rate in this answer came from (changed 2026-10-28, WP37)
   fetched_at: string;
-  caveats: string[];              // always: ECB reference rates, published once per working day around 16:00 CET; not a trading quote; crypto is not covered
+  caveats: string[];              // always the source's own caveat (below), plus why currency-api was used when it was
 }
 ```
 
-Behaviour (DECIDED): Frankfurter (`api.frankfurter.dev/v1/latest?base=&symbols=` and `/v1/<date>`), keyless, ECB reference rates for about 30 currencies. An unsupported code is `invalid_input` naming the supported list (from `/v1/currencies`, cached 7 days). Cache 1 h for latest, 30 days for historical. Timeout 10 s, wall clock 20 s.
+Behaviour (DECIDED): Frankfurter (`api.frankfurter.dev/v1/latest?base=&symbols=` and `/v1/<date>`), keyless, ECB reference rates for about 30 currencies, with the list from `/v1/currencies` (cached 7 days). Cache 1 h for latest, 30 days for historical. Timeout 10 s, wall clock 20 s.
+
+Backup source (DECIDED 2026-10-28, WP37): fawazahmed0's currency-api, keyless, served as static files through jsDelivr (`cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@<latest|YYYY-MM-DD>/v1/currencies/<base>.json`, lower-case codes, answering `{"date": ..., "<base>": {"<code>": rate, ...}}`), with Cloudflare Pages as its documented mirror (`<latest|YYYY-MM-DD>.currency-api.pages.dev/v1/...`). It publishes one file per base per day, weekends included, from 2024-03-02. Probed live on 2026-10-28: 340 codes, 161 of them current ISO 4217 codes, among them EGP. The ECB stays first because it is an official reference rate.
+- **When.** One answer has one source. Frankfurter serves a request when it covers every code in it. currency-api serves the whole request when any code is outside the ECB list. It also serves a request when Frankfurter fails (provider error or timeout, including its currency list) and the date is 2024-03-02 or later. The ECB list is the 7-day cached one; when it cannot be fetched, currency-api serves the request.
+- **Codes.** currency-api is used only for current ISO 4217 codes: a list fixed in code (178 codes, SIX list published 2026-09-17) intersected with currency-api's `/v1/currencies.json` (cached 7 days). Its crypto and withdrawn currencies stay out, so crypto still goes to `market_quote`. A code in neither the ECB list nor that intersection is `invalid_input`. The message names the unsupported codes and says which sources were checked; `details.supported` is the sorted union.
+- **Dates.** A request that needs currency-api with a `date` before 2024-03-02 is `invalid_input` naming that date and the codes the ECB lacks. A `date` of today (UTC) asks for `latest`, since today's file may not be published yet. `date` in the answer is the file's own date; a latest file dated before today adds the caveat "The latest currency-api date is <date>." A dated file that is missing (404 from both hosts) is `provider`, not retryable.
+- **Hosts.** jsDelivr first; on any failure (network, non-2xx, a body that is not the expected shape) the Pages mirror once, under the same 10 s per-request timeout. When both fail, the error is jsDelivr's.
+- **Caveats.** Frankfurter answers keep "Rates are ECB reference rates served by Frankfurter, published once per working day around 16:00 CET; they are not a trading quote. Crypto is not covered." currency-api answers carry "Rates come from fawazahmed0's currency-api, a free daily aggregate of public mid-market rates published once a day; they are not an official central-bank rate, a bank's buy or sell price, or a trading quote. Crypto is not covered." They also carry the reason: "The ECB reference rates do not cover <codes>, so these rates come from currency-api." or "Frankfurter failed (<message>), so these rates come from currency-api."
+- **Cache.** One entry per base and date holding every ISO rate in that file (a request for other targets of the same base reuses it): 1 h for latest, 30 days for historical.
 
 ### 14.5 `social_search`
 
@@ -1287,7 +1295,29 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
 - Files: `src/tools/health.ts` (configured hotel sources, market sources, social platforms, review sources, connected account platforms by name), `scripts/install-*.sh` and `test/unit/scripts.test.ts` (the five new variables), `README.md` (one section per new tool with examples, an "Accounts" section with the Google-via-CDP recommendation, the per-platform terms-of-service paragraph, the new keys in the configuration table, costs), `CLAUDE.md` (one line on the opinion tools' rules), `.github/workflows/live.yml` (new gated suites), `PLAN.md` status line and decision log.
 - Accept: `health` lists the new names; a fresh clone passes lint, typecheck and tests; `tools/list` over stdio shows 14 tools; the README examples parse against the input schemas (a test).
 
+**WP38: `exchange_rate` backup source** (after WP37, which changed 14.4)
+- Files: `src/schemas/fx.ts` (`source` gains `"currency-api"`), `src/core/fx/index.ts`, `src/tools/exchange_rate.ts` (description), `test/unit/fx/**`, `test/fixtures/fx/**`, `README.md` (the `exchange_rate` section and the keyless-source lists), `PLAN.md` decision log.
+- Accept: fixture tests, recorded live, for each rule in 14.4's backup paragraph:
+  - an all-ECB request makes no currency-api request;
+  - USD to EGP and USD to EUR plus EGP come from currency-api with the reason caveat;
+  - a Frankfurter 500 or timeout falls back, and a pre-2024-03-02 date then keeps Frankfurter's error;
+  - BTC and XYZ are `invalid_input`;
+  - a non-ECB code before 2024-03-02 is `invalid_input`;
+  - today's date asks for `latest`;
+  - a jsDelivr failure uses the mirror;
+  - a missing dated file is `provider`;
+  - one cached file per base and date;
+  - the TTLs, with an injected clock.
+
+  Checked live through `dist/index.js`: USD to EGP today and on 2026-01-01.
+
 ### 14.10 Decision log, phase 5
+
+- **2026-10-28, WP37 (a backup exchange-rate source)**. The owner asked for Egyptian pound rates, which Frankfurter lacks: the ECB publishes about 30 currencies. `market_quote` was no substitute: Yahoo's `EGP=X` answered 429 from the home IP, and its other sources do not quote currencies. `web_search` would cost a search credit and give numbers lifted from articles. Two keyless sources were probed live:
+  - open.er-api.com: 166 currencies, latest only, EGP 56.09 per USD;
+  - fawazahmed0's currency-api: 340 codes, daily history from 2024-03-02, and a documented mirror; EGP 56.27 per USD for 2026-10-27, 47.70 for 2026-01-01.
+
+  currency-api was chosen for its history and its mirror. Neither source is the Central Bank of Egypt's official rate or a bank's buy or sell price; the caveat says so. `source` gains `"currency-api"` (14.4); WP38 builds it.
 
 - **2026-10-27, WP36 (Google Maps reviews and Facebook search, read live through the owner's accounts)**. The owner logged the browser profile into Reddit, X, Facebook and Google; Amazon is still to come. `accounts connect` could not do it, because Google ("This browser or app may not be secure") and Reddit (every sign-in method) refuse a login in Chromium started with Playwright's `--enable-automation`. The owner instead logged in through the same Chromium binary started directly on the profile, with nothing attached. The recipes still run as plain Playwright and gained no stealth. Through those sessions Reddit (browser path; the public JSON answered 403 from the home IP) and X each returned 5 posts. Google Maps and Facebook did not, for these reasons:
   - **Google Maps** found the place and returned 0 reviews. The selectors were right: the live cards are `div.jftiEf[data-review-id]` around an inner `div[data-review-id]`, with the parts the recipe reads. However, the overview tab shows 3 preview cards, and opening Reviews replaces them; a timeline after the click gave 3 cards at +1 ms, 0 at +233 ms and 10 at +848 ms. `openReviews` accepted any card and returned at once, so the run read the gap. The earlier "fewer than 3 reviews" result was the same race, catching the previews. It now waits for cards that were not on the page before the click, seen on two polls in a row. Separately, the scroll decision counted the outer and inner div of each card, so 10 reviews looked like 20 and the recipe never scrolled for more; it now counts innermost cards only. Fixture: `google-maps-place-live.html`.
