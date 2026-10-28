@@ -44,7 +44,12 @@ export interface SocialServer {
  *   rd-over18     /search -> over-18 interstitial; POST /over18?dest= -> 302 to dest (under rd-ok)
  *   rd-login      /search -> 302 to /login/?reason=lor2 -> login form
  *   rd-netsec     /search -> 302 to /login/?reason=lor2 -> HTTP 403 network-security block (as live)
- *   rd-empty      /search -> the live "there doesn't seem to be anything here" page (2026-10-28)
+ *   rd-empty      /search -> the live "there doesn't seem to be anything here" page (2026-10-28);
+ *                 /search/, /r/<sub>/search/ (www.reddit.com's search) -> its live "couldn't find any results"
+ *   rd-new        /search -> old.reddit's empty page; /search/, /r/<sub>/search/ -> www.reddit.com's live
+ *                 search layout (2026-10-28, WP43); /r/<sub>/comments/<id>/... -> the old.reddit thread
+ *   rd-old-only   /search/ -> www.reddit.com's "couldn't find any results"; /search -> old.reddit's live results
+ *   rd-new-blocked /search/ -> HTTP 403 network-security block; /search -> old.reddit's live results
  *   rd-live       /search -> the live 2026-10-28 results for "best budget robot vacuum 2026", sort=relevance
  *   rd-flaky      /search -> the live empty page twice, then the live results, and so on (as live: an
  *                 empty page for a query that has results, which lists them when loaded again)
@@ -130,14 +135,27 @@ export async function startSocialServer(): Promise<SocialServer> {
         if (path.startsWith("/login")) return html(readFixture("reddit-network-security.html"), 403);
         return redirect(`${base}/login/?reason=lor2&dest=${dest}`);
       case "rd-empty":
+        if (path === "/search/" || /^\/r\/[^/]+\/search\/$/.test(path)) return html(readFixture("new-reddit-search-empty-live.html"));
         return html(readFixture("old-reddit-search-empty-live.html"));
+      case "rd-new":
+        if (path === "/search/" || /^\/r\/[^/]+\/search\/$/.test(path)) return html(readFixture("new-reddit-search-live.html"));
+        if (/\/comments\/[a-z0-9]+/i.test(path)) return html(readFixture("old-reddit-thread.html"));
+        return html(readFixture("old-reddit-search-empty-live.html"));
+      case "rd-old-only":
+        if (path === "/search/") return html(readFixture("new-reddit-search-empty-live.html"));
+        if (path === "/search") return html(readFixture("old-reddit-search-live.html"));
+        return html("Not Found", 404);
+      case "rd-new-blocked":
+        if (path === "/search/") return html(readFixture("reddit-network-security.html"), 403);
+        if (path === "/search") return html(readFixture("old-reddit-search-live.html"));
+        return html("Not Found", 404);
       case "rd-live":
         if (path === "/search") return html(readFixture("old-reddit-search-live.html"));
         return html("Not Found", 404);
       case "rd-flaky":
         if (path !== "/search") return html("Not Found", 404);
         flakySearches++;
-        return html(readFixture(flakySearches % 3 === 0 ? "old-reddit-search-live.html" : "old-reddit-search-empty-live.html"));
+        return html(readFixture(flakySearches % 2 === 0 ? "old-reddit-search-live.html" : "old-reddit-search-empty-live.html"));
       case "botwall":
         return html(readFixture("bot-wall.html"), 503);
       case "stalled":

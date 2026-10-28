@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  buildNewRedditSearchUrl,
   buildOldRedditSearchUrl,
   buildOldRedditThreadUrl,
   createRedditSearchRecipe,
@@ -31,8 +32,21 @@ describe("old.reddit URLs", () => {
     expect(buildOldRedditSearchUrl({ ...SEARCH_QUERY, subreddits: ["ClaudeAI", "r/programming"] })).toBe(
       "https://old.reddit.com/r/ClaudeAI+programming/search?q=claude+code&sort=relevance&t=all&restrict_sr=on",
     );
-    expect(redditSearchRecipe.buildUrl?.(SEARCH_QUERY)).toBe(buildOldRedditSearchUrl(SEARCH_QUERY));
+    // The first page the recipe opens: www.reddit.com's search, or old.reddit's for several subreddits.
+    expect(redditSearchRecipe.buildUrl?.(SEARCH_QUERY)).toBe(buildNewRedditSearchUrl(SEARCH_QUERY));
+    const several = { ...SEARCH_QUERY, subreddits: ["ClaudeAI", "programming"] };
+    expect(redditSearchRecipe.buildUrl?.(several)).toBe(buildOldRedditSearchUrl(several));
     expect(buildOldRedditSearchUrl(SEARCH_QUERY, "http://127.0.0.1:9/s/rd-ok")).toMatch(/^http:\/\/127\.0\.0\.1:9\/s\/rd-ok\/search\?q=/);
+  });
+
+  it("builds www.reddit.com's search URL for posts, for all of Reddit or one subreddit, and none for several (WP43)", () => {
+    expect(buildNewRedditSearchUrl({ ...SEARCH_QUERY, recency: "year" })).toBe("https://www.reddit.com/search/?q=claude+code&type=posts&sort=relevance&t=year");
+    expect(buildNewRedditSearchUrl({ ...SEARCH_QUERY, sort: "recent" })).toBe("https://www.reddit.com/search/?q=claude+code&type=posts&sort=relevance&t=all");
+    expect(buildNewRedditSearchUrl({ ...SEARCH_QUERY, subreddits: ["r/ClaudeAI"] })).toBe(
+      "https://www.reddit.com/r/ClaudeAI/search/?q=claude+code&type=posts&sort=relevance&t=all&restrict_sr=1",
+    );
+    expect(buildNewRedditSearchUrl({ ...SEARCH_QUERY, subreddits: ["ClaudeAI", "programming"] })).toBeUndefined();
+    expect(buildNewRedditSearchUrl(SEARCH_QUERY, "http://127.0.0.1:9/s/rd-new")).toMatch(/^http:\/\/127\.0\.0\.1:9\/s\/rd-new\/search\/\?q=/);
   });
 
   it("parses thread URLs on every reddit host and redd.it, rewriting to old.reddit for loading", () => {
@@ -87,13 +101,15 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     scenario: string,
     query: SocialSearchQuery,
     llm: LlmClient = forbiddenLlm(),
-    over: Partial<RecipeContext> & { maxResultsWaitMs?: number; emptyRetryDelaysMs?: number[] } = {},
+    over: Partial<RecipeContext> & { maxResultsWaitMs?: number; emptyRetryDelaysMs?: number[]; newRedditFirst?: boolean } = {},
   ) {
     const recipe = createRedditSearchRecipe({
       baseUrl: server.scenario(scenario),
       pollMs: 50,
       settleMs: 100,
-      emptyRetryDelaysMs: over.emptyRetryDelaysMs ?? [20, 20, 20],
+      emptyRetryDelaysMs: over.emptyRetryDelaysMs ?? [20],
+      // Most scenarios stand in for old.reddit alone; the WP43 tests turn www.reddit.com's search on.
+      newRedditFirst: over.newRedditFirst ?? false,
       ...(over.maxResultsWaitMs !== undefined && { maxResultsWaitMs: over.maxResultsWaitMs }),
     });
     const log = makeLogger();
@@ -102,7 +118,7 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     const spy = spyPage(real);
     const before = server.requests.length;
     try {
-      const { maxResultsWaitMs: _omit, emptyRetryDelaysMs: _omitToo, ...ctxOver } = over;
+      const { maxResultsWaitMs: _omit, emptyRetryDelaysMs: _omitToo, newRedditFirst: _omitThree, ...ctxOver } = over;
       const ctx: RecipeContext = { llm, log, deadline: Date.now() + 20_000, caveats, ...ctxOver };
       const settled: { items?: SocialItem[]; error?: unknown } = await recipe.run(spy.page, query, ctx).then(
         (items) => ({ items }),
@@ -269,24 +285,104 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     const r = await runRecipe("rd-flaky", { ...SEARCH_QUERY, query: "best budget robot vacuum 2026", recency: "year", kind: "posts" });
     expect(r.error).toBeUndefined();
     const url = "GET /s/rd-flaky/search?q=best+budget+robot+vacuum+2026&sort=relevance&t=year&restrict_sr=on";
-    expect(r.requests).toEqual([url, url, url]);
+    expect(r.requests).toEqual([url, url]);
     expect(r.items).toHaveLength(15);
     expect(r.items![0]!.id).toBe("reddit:1v1qxda");
     expect(r.caveats).toEqual([]);
   });
 
-  it("returns an empty list when old.reddit still finds nothing after every reload", async () => {
-    const r = await runRecipe("rd-empty", SEARCH_QUERY);
-    expect(r.items).toEqual([]);
-    expect(r.requests).toHaveLength(4);
-    expect(r.caveats).toEqual(['Reddit showed no posts for "claude code" (the search page was loaded 4 times).']);
+  it("reads www.reddit.com's search first, scrolling for more, and never opens old.reddit when it has posts (live layout, WP43)", async () => {
+    const q = { ...SEARCH_QUERY, query: "claude code vs cursor", recency: "year" as const, kind: "posts" as const, per_platform: 10 };
+    const r = await runRecipe("rd-new", q, forbiddenLlm(), { newRedditFirst: true });
+    expect(r.error).toBeUndefined();
+    expect(r.requests).toEqual(["GET /s/rd-new/search/?q=claude+code+vs+cursor&type=posts&sort=relevance&t=year"]);
+    expect(r.caveats).toEqual([]);
+    const items = r.items!;
+    // Four on the page, two more after one scroll.
+    expect(items).toHaveLength(6);
+    for (const i of items) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    expect(items[0]).toEqual({
+      id: "reddit:1sgvqx8",
+      platform: "reddit",
+      kind: "post",
+      url: "https://www.reddit.com/r/vibecoding/comments/1sgvqx8/confused_about_claude_and_cursor",
+      title: "Confused about Claude and Cursor",
+      text: "Cursor is an editor that can use Claude's models; Claude Code is an agent that runs in your terminal.",
+      truncated: false,
+      created_at: "2026-04-09T17:10:47.965Z",
+      score: 4,
+      replies: 5,
+      community: "vibecoding",
+    });
+    // The exact count from faceplate-number, not the "1.2K" shown.
+    expect(items[2]).toMatchObject({ id: "reddit:1qwe7rt", score: 1234, replies: 310 });
+    expect(items[3]).toMatchObject({ id: "reddit:1rty5uv", community: "claude" });
+    expect(items.map((i) => i.id).slice(4)).toEqual(["reddit:1abc1de", "reddit:1fgh2ij"]);
   });
 
-  it("does not load an empty page again when too little time is left", async () => {
-    const r = await runRecipe("rd-empty", SEARCH_QUERY, forbiddenLlm(), { deadline: Date.now() + 4000, emptyRetryDelaysMs: [2000] });
+  it("searches one subreddit on www.reddit.com, and several on old.reddit, which www.reddit.com cannot do", async () => {
+    const one = await runRecipe("rd-new", { ...SEARCH_QUERY, subreddits: ["vibecoding"], kind: "posts", per_platform: 4 }, forbiddenLlm(), { newRedditFirst: true });
+    expect(one.error).toBeUndefined();
+    expect(one.requests).toEqual(["GET /s/rd-new/r/vibecoding/search/?q=claude+code&type=posts&sort=relevance&t=all&restrict_sr=1"]);
+    expect(one.items).toHaveLength(4);
+
+    const several = await runRecipe("rd-ok", { ...SEARCH_QUERY, subreddits: ["ClaudeAI", "programming"], kind: "posts" }, forbiddenLlm(), { newRedditFirst: true });
+    expect(several.error).toBeUndefined();
+    expect(several.requests).toEqual(["GET /s/rd-ok/r/ClaudeAI+programming/search?q=claude+code&sort=relevance&t=all&restrict_sr=on"]);
+    expect(several.items!.length).toBeGreaterThan(0);
+    expect(several.caveats).toEqual([]);
+  });
+
+  it("kind both reads www.reddit.com's posts and their comments on old.reddit", async () => {
+    const r = await runRecipe("rd-new", { ...SEARCH_QUERY, query: "claude code vs cursor", per_platform: 6 }, forbiddenLlm(), { newRedditFirst: true });
+    expect(r.error).toBeUndefined();
+    expect(r.items!.filter((i) => i.kind === "post")).toHaveLength(3);
+    expect(r.items!.some((i) => i.kind === "comment")).toBe(true);
+    expect(r.requests.some((x) => /^GET \/s\/rd-new\/r\/vibecoding\/comments\/1qwe7rt\/.*\?limit=/.test(x))).toBe(true);
+  });
+
+  it("falls back to old.reddit when www.reddit.com finds nothing, and says why", async () => {
+    const r = await runRecipe("rd-old-only", { ...SEARCH_QUERY, query: "best budget robot vacuum 2026", recency: "year", kind: "posts" }, forbiddenLlm(), {
+      newRedditFirst: true,
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.requests).toEqual([
+      "GET /s/rd-old-only/search/?q=best+budget+robot+vacuum+2026&type=posts&sort=relevance&t=year",
+      "GET /s/rd-old-only/search?q=best+budget+robot+vacuum+2026&sort=relevance&t=year&restrict_sr=on",
+    ]);
+    expect(r.items).toHaveLength(15);
+    expect(r.items![0]!.id).toBe("reddit:1v1qxda");
+    expect(r.caveats).toEqual(["These Reddit posts come from old.reddit.com's search: www.reddit.com's search found nothing."]);
+  });
+
+  it("falls back to old.reddit when www.reddit.com blocks the browser", async () => {
+    const r = await runRecipe("rd-new-blocked", { ...SEARCH_QUERY, query: "best budget robot vacuum 2026", recency: "year", kind: "posts" }, forbiddenLlm(), {
+      newRedditFirst: true,
+    });
+    expect(r.error).toBeUndefined();
+    expect(r.items).toHaveLength(15);
+    expect(r.caveats).toHaveLength(1);
+    expect(r.caveats[0]).toBe(
+      "These Reddit posts come from old.reddit.com's search: www.reddit.com's search could not be read (Reddit (www.reddit.com) answered HTTP 403; it is blocking this browser or network).",
+    );
+  });
+
+  it("returns an empty list when www.reddit.com finds nothing and old.reddit stays empty after a reload", async () => {
+    const r = await runRecipe("rd-empty", SEARCH_QUERY, forbiddenLlm(), { newRedditFirst: true });
     expect(r.items).toEqual([]);
-    expect(r.requests).toHaveLength(1);
-    expect(r.caveats).toEqual(['Reddit showed no posts for "claude code" (the search page was loaded 1 time).']);
+    expect(r.requests).toEqual([
+      "GET /s/rd-empty/search/?q=claude+code&type=posts&sort=relevance&t=all",
+      "GET /s/rd-empty/search?q=claude+code&sort=relevance&t=all&restrict_sr=on",
+      "GET /s/rd-empty/search?q=claude+code&sort=relevance&t=all&restrict_sr=on",
+    ]);
+    expect(r.caveats).toEqual([`Reddit showed no posts for "claude code" (www.reddit.com's search found nothing; old.reddit.com's search was loaded 2 times).`]);
+  });
+
+  it("goes straight to old.reddit, without a reload, when too little time is left", async () => {
+    const r = await runRecipe("rd-empty", SEARCH_QUERY, forbiddenLlm(), { deadline: Date.now() + 4000, emptyRetryDelaysMs: [2000], newRedditFirst: true });
+    expect(r.items).toEqual([]);
+    expect(r.requests).toEqual(["GET /s/rd-empty/search?q=claude+code&sort=relevance&t=all&restrict_sr=on"]);
+    expect(r.caveats).toEqual([`Reddit showed no posts for "claude code" (old.reddit.com's search was loaded 1 time).`]);
   });
 
   it("a stalled page is a timeout, a bot wall is blocked, a 500 is a retryable provider error", async () => {
