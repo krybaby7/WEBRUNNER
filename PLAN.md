@@ -1180,7 +1180,7 @@ Source access (DECIDED):
 
 | source | default for kind | how |
 |--------|------------------|-----|
-| google_maps | place, business, any | browser: `https://www.google.com/maps/search/<subject> <location>?hl=en`; on a list of matches, the result whose name best matches the subject (Google's first on a tie; a caveat names it when there were several), and the subject's fields are read only from the opened place's own panel (changed 2026-10-28, WP40); reviews tab, scroll at most 3 times; DOM probe over `div[data-review-id]` (rating from the `aria-label` "N stars", text, relative time), LLM fallback; consent and CAPTCHA handling as in flights |
+| google_maps | place, business, any | browser: `https://www.google.com/maps/search/<subject> <location>?hl=en`; on a list of matches, Google's first result (Google also weighs the location), unless its name is in the subject's script and lacks some of the subject's words while a later result has them all, in which case that one; a caveat names the place opened when there were several. The subject's fields are read only from the opened place's own panel. When that panel shows no weekly hours but a "See more hours" button, the hours are read last, after the reviews, from the hours view it opens (changed 2026-10-28, WP40); reviews tab, scroll at most 3 times; DOM probe over `div[data-review-id]` (rating from the `aria-label` "N stars", text, relative time), LLM fallback; consent and CAPTCHA handling as in flights |
 | trustpilot | business, product, any | a raw fetch of `https://www.trustpilot.com/review/<domain>` (subject given as a URL or a bare domain, or a name resolved via `https://www.trustpilot.com/search?query=`; a bare domain with no page falls back to the search); reviews are parsed from the page's embedded JSON (`__NEXT_DATA__` or JSON-LD). A WAF challenge falls back to the shared browser, whose rendered HTML is parsed the same way, then to `FetchService` and LLM extraction over the Markdown |
 | app_store | app, any | keyless: `itunes.apple.com/search?term=&entity=software&country=&limit=5` to find the app, then `itunes.apple.com/<country>/rss/customerreviews/id=<id>/sortBy=mostRecent/page=<n>/json`, pages 1 to 3 at most (50 reviews each) |
 | google_play | app, any | browser: `https://play.google.com/store/search?q=<subject>&c=apps` for the package id, then `/store/apps/details?id=<pkg>&hl=en&showAllReviews=true`; DOM probe, LLM fallback |
@@ -1323,7 +1323,8 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
   - the `PLAN.md` decision log.
 - Accept, on real Chromium against stand-in pages with the live layout:
   - a list whose `h1` reads "Results" and whose cards carry star ratings is not taken for a place;
-  - the result whose name best matches the subject is opened (not the first), with the caveat;
+  - a later result that carries every word of the subject's name is opened over a differently named first one, with the caveat, while a first result named in another script stays (unit-tested on the two live lists);
+  - a place opened directly reads its hours from "See more hours" after the reviews, ignoring hidden hours left in the page;
   - with the list still on the page under the opened place, the name, rating, count, address and hours come from the place's own panel;
   - the hours read Monday first from the "Copy open hours" buttons, with the hidden hours table as a fallback;
   - a closed day reads "Closed";
@@ -1337,6 +1338,8 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
   - **The list was taken for a place.** A search with several matches shows a list whose `h1` reads "Results" and whose cards carry star ratings. The recipe's place check (a heading plus a star rating) took that list for a place, so it never opened one. It read "Results" as the name and took the rating and count from whichever cards came first: "Al Tahreer Koshary Restaurant" (3.9, 5,052) and "Koshary El Tahrir" (4.1, 6,074).
   - **The list stays under an opened place.** Opening a result adds a second `[role="main"]` labelled with the place's name and leaves the list (and its "Results" `h1`) in the page, so "the first `h1`" is still wrong after the click.
   - **Opening hours are on the place page.** They show as one "Copy open hours" button per day ("Wednesday, 9 AM to 12 AM, Copy open hours") and a hidden table. Perplexity's answer to the same question listed hours; webrunner had none.
+  - **A place opened directly shows only a summary.** "Koshary Abou Tarek" shows "Open · Closes 1 AM · See more hours". That button opens an "Hours" view in place of the panel and of its Reviews tab, with the same per-day buttons, and leaves a hidden set of other hours in the page.
+  - **Picking by name alone picks the wrong branch.** "Koshary Sayed Hanafy Downtown" listed the Downtown branch first, under an Arabic name, then a Nasr City branch named in English. Google's order already weighs the location, so the first result is kept unless a later one is clearly the named place.
 
   WP41 builds the change in 14.6 and adds `hours` to the subject.
 
