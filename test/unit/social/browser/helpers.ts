@@ -44,13 +44,17 @@ export interface SocialServer {
  *   rd-over18     /search -> over-18 interstitial; POST /over18?dest= -> 302 to dest (under rd-ok)
  *   rd-login      /search -> 302 to /login/?reason=lor2 -> login form
  *   rd-netsec     /search -> 302 to /login/?reason=lor2 -> HTTP 403 network-security block (as live)
- *   rd-empty      /search -> "there doesn't seem to be anything here"
+ *   rd-empty      /search -> the live "there doesn't seem to be anything here" page (2026-10-28)
+ *   rd-live       /search -> the live 2026-10-28 results for "best budget robot vacuum 2026", sort=relevance
+ *   rd-flaky      /search -> the live empty page twice, then the live results, and so on (as live: an
+ *                 empty page for a query that has results, which lists them when loaded again)
  *   botwall       anything -> Cloudflare-style challenge
  *   stalled       anything -> a page that never shows results
  *   status-500    anything -> HTTP 500
  */
 export async function startSocialServer(): Promise<SocialServer> {
   const requests: string[] = [];
+  let flakySearches = 0;
   const server: Server = createServer((req, res) => {
     const u = new URL(req.url ?? "/", "http://localhost");
     requests.push(`${req.method ?? "GET"} ${u.pathname}${u.search}`);
@@ -126,7 +130,14 @@ export async function startSocialServer(): Promise<SocialServer> {
         if (path.startsWith("/login")) return html(readFixture("reddit-network-security.html"), 403);
         return redirect(`${base}/login/?reason=lor2&dest=${dest}`);
       case "rd-empty":
-        return html("<!doctype html><title>reddit.com: search results</title><div class='content' role='main'><p>there doesn't seem to be anything here</p></div>");
+        return html(readFixture("old-reddit-search-empty-live.html"));
+      case "rd-live":
+        if (path === "/search") return html(readFixture("old-reddit-search-live.html"));
+        return html("Not Found", 404);
+      case "rd-flaky":
+        if (path !== "/search") return html("Not Found", 404);
+        flakySearches++;
+        return html(readFixture(flakySearches % 3 === 0 ? "old-reddit-search-live.html" : "old-reddit-search-empty-live.html"));
       case "botwall":
         return html(readFixture("bot-wall.html"), 503);
       case "stalled":

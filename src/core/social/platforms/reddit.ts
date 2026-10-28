@@ -32,8 +32,11 @@ import { SocialProviderError, type SocialHooks, type SocialPlatformProvider } fr
  *    `provider` error that suggests REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET
  *    or connecting a Reddit account.
  *
- * Search: `/search?q=&sort=top|new&t=&limit=&type=link&raw_json=1`, or
- * `/r/a+b/search?restrict_sr=1&...` for `subreddits`. Comments are the
+ * Search: `/search?q=&sort=relevance&t=&limit=&type=link&raw_json=1`, or
+ * `/r/a+b/search?restrict_sr=1&...` for `subreddits`. Always `relevance`:
+ * Reddit's `top` and `new` sorts list unrelated posts for most queries (seen
+ * live on old.reddit, the same search, 2026-10-28, WP39); the tool's merge
+ * orders the items by score or date. Comments are the
  * top-level comments (`/comments/<id>?limit=&depth=1&sort=top&raw_json=1`)
  * of the top matching posts, at most 5 by score, spread evenly over the
  * comment budget. Fixtures are built from the documented shapes: the
@@ -312,7 +315,7 @@ export class RedditProvider implements SocialPlatformProvider {
   private async searchPosts(q: SocialSearchQuery, limit: number, signal: AbortSignal): Promise<Post[]> {
     const params = new URLSearchParams({
       q: q.query ?? "",
-      sort: q.sort === "recent" ? "new" : "top",
+      sort: "relevance",
       t: q.recency !== undefined ? TIME_FILTER[q.recency] : "all",
       limit: String(Math.min(MAX_LIMIT, Math.max(1, limit))),
       type: "link",
