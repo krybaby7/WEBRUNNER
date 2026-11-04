@@ -22,7 +22,7 @@ const DESCRIPTION =
   "action list: for each platform whether its session cookies are present, which tools use it and when the login expires. " +
   "action connect: opens the platform's login page in the webrunner browser window (or as a tab in your own Chrome when BROWSER_CDP_URL is set) and waits up to wait_seconds " +
   `(0 to ${MAX_CONNECT_WAIT_S}, default ${DEFAULT_CONNECT_WAIT_S}) for you to log in there yourself; it never types credentials. ` +
-  "Returns connected, pending (the page stays open for 10 minutes; log in and call connect again) or already_connected. In headless mode connect returns error code config with the two ways out. " +
+  "Returns connected, pending (the page stays open for 10 minutes as a handoff: log in and call connect again, or resume with its handoff_id) or already_connected. In headless mode connect returns error code config with the two ways out. " +
   "action disconnect: clears that platform's cookies from the webrunner profile (refused with code config when attached to your own Chrome). " +
   "Cookie values are never returned or logged. The whole call is capped at 330 seconds; past that it returns error code timeout (retryable).";
 
@@ -65,7 +65,12 @@ export function registerAccountsTool(server: McpServer, deps: Deps, options: Acc
     if (options.service !== undefined) {
       service = options.service(deps);
     } else if (deps.browser !== undefined) {
-      service = createAccountsService({ browser: deps.browser, config: deps.config, log: deps.log });
+      service = createAccountsService({
+        browser: deps.browser,
+        config: deps.config,
+        log: deps.log,
+        ...(deps.handoffs !== undefined && { handoffs: deps.handoffs }),
+      });
     }
     return service;
   };

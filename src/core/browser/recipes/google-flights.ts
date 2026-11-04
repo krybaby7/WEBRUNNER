@@ -13,6 +13,7 @@ import {
 import { detectBotWall } from "../../fetch/browser.js";
 import { LlmError } from "../../llm/types.js";
 import { takeSnapshot } from "../snapshot.js";
+import { wallOfBotCheck } from "./pause.js";
 import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
 
 /**
@@ -693,6 +694,7 @@ export function createGoogleFlightsRecipe(
         if (wall !== undefined) {
           throw new RecipeError("blocked", `Google Flights served a bot check (${wall}) at ${probe.url}; no results were returned`, {
             retryable: false,
+            ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
           });
         }
         if (NO_RESULTS_RE.test(probe.text) && !probe.hasHeading) return "empty";
@@ -708,6 +710,7 @@ export function createGoogleFlightsRecipe(
         if (settled.kind === "blocked") {
           throw new RecipeError("blocked", `Google Flights stopped at ${settled.reason} (${probe.url}); no results were returned`, {
             retryable: false,
+            wall: probe.consent ? "consent" : "unknown_wall",
           });
         }
         if (settled.kind === "unrecognised") {

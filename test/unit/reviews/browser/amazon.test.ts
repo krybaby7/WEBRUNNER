@@ -142,6 +142,7 @@ describe.skipIf(!probe.available)(`amazon-reviews recipe in Chromium${probe.avai
     const err = r.error as RecipeError;
     expect(err.code).toBe("blocked");
     expect(err.needsLogin).toBe(true);
+    expect(err.wall).toBe("login_required");
     expect(err.message).toBe(AMAZON_NEEDS_LOGIN_MESSAGE);
     expect(err.message).toMatch(/accounts connect amazon/);
     expect(llm.calls).toHaveLength(0);
@@ -186,6 +187,7 @@ describe.skipIf(!probe.available)(`amazon-reviews recipe in Chromium${probe.avai
     const r = await runRecipe(session, recipe(), makeQuery({ subject: amazonUrl("B0CAPTCHA0"), subject_url: amazonUrl("B0CAPTCHA0") }), neverLlm());
     expect((r.error as RecipeError).code).toBe("blocked");
     expect((r.error as RecipeError).needsLogin).toBe(false);
+    expect((r.error as RecipeError).wall).toBe("captcha");
     expect((r.error as RecipeError).message).toMatch(/CAPTCHA/);
     expect(r.spy.forbidden).toEqual([]);
 

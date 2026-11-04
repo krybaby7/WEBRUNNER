@@ -8,7 +8,9 @@ import {
   type SocialPlatform,
   type SocialSearchQuery,
 } from "../../../schemas/social.js";
+import type { HandoffReason } from "../../../schemas/handoff.js";
 import { detectBotWall } from "../../fetch/browser.js";
+import { wallOfBotCheck } from "./pause.js";
 import { LlmError } from "../../llm/types.js";
 import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
 
@@ -178,7 +180,7 @@ export async function navigateTo(page: Page, url: string, ctx: RecipeContext, o:
           // A challenge page (Cloudflare serves "Just a moment..." with a 503) is a block, whatever its status says.
           const probe = await runProbe<BasicProbe>(page, probeScript());
           const wall = probe === undefined ? undefined : detectBotWall(probe);
-          if (wall !== undefined) throw blockedBy(o.site, `a bot check (${wall})`, probe?.url ?? url);
+          if (wall !== undefined) throw blockedBy(o.site, `a bot check (${wall})`, probe?.url ?? url, wallOfBotCheck(wall));
           throw err;
         }
       }
@@ -277,11 +279,16 @@ export function loginRequired(site: string, platform: BrowserSocialPlatform, det
   return new RecipeError("blocked", `${site} requires a logged-in session (${detail}); run accounts connect ${platform}`, {
     retryable: false,
     needsLogin: true,
+    wall: "login_required",
   });
 }
 
-export function blockedBy(site: string, detail: string, url: string): RecipeError {
-  return new RecipeError("blocked", `${site} served ${detail} at ${url}; no results were returned`, { retryable: false });
+/** A wall. `wall` names what the owner can do about it in the window (PLAN.md 16.4); absent for an IP-level refusal. */
+export function blockedBy(site: string, detail: string, url: string, wall?: HandoffReason): RecipeError {
+  return new RecipeError("blocked", `${site} served ${detail} at ${url}; no results were returned`, {
+    retryable: false,
+    ...(wall !== undefined && { wall }),
+  });
 }
 
 /**
@@ -290,11 +297,11 @@ export function blockedBy(site: string, detail: string, url: string): RecipeErro
  */
 export function classifyWall(probe: BasicProbe, rules: WallRules): RecipeError | undefined {
   const shortPage = probe.textLength < SHORT_PAGE_CHARS;
-  if (rules.blockedUrl?.test(probe.url) === true) return blockedBy(rules.site, "a security checkpoint", probe.url);
-  if (probe.captchaWidgets > 0) return blockedBy(rules.site, "a CAPTCHA", probe.url);
+  if (rules.blockedUrl?.test(probe.url) === true) return blockedBy(rules.site, "a security checkpoint", probe.url, "checkpoint");
+  if (probe.captchaWidgets > 0) return blockedBy(rules.site, "a CAPTCHA", probe.url, "captcha");
   if (shortPage && rules.blockedText?.test(probe.text) === true) return blockedBy(rules.site, "a network block page", probe.url);
   const wall = detectBotWall(probe);
-  if (wall !== undefined) return blockedBy(rules.site, `a bot check (${wall})`, probe.url);
+  if (wall !== undefined) return blockedBy(rules.site, `a bot check (${wall})`, probe.url, wallOfBotCheck(wall));
   if (rules.loginUrl.test(probe.url)) return loginRequired(rules.site, rules.platform, `redirected to ${probe.url}`);
   if (probe.passwordFields > 0 && probe.textLength < LOGIN_WALL_MAX_CHARS) {
     return loginRequired(rules.site, rules.platform, "the page is a login form");

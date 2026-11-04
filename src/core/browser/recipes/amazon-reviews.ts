@@ -26,6 +26,7 @@ import {
   type TimeGuard,
 } from "../../reviews/sources/shared-browser.js";
 import type { ReviewSearchResult } from "../../reviews/types.js";
+import { wallOfBotCheck } from "./pause.js";
 import { RecipeError, type RecipeContext } from "./types.js";
 
 /**
@@ -334,13 +335,18 @@ export function createAmazonReviewsRecipe(options: AmazonReviewsRecipeOptions = 
   /** `blocked` for the sign-in redirect (with needsLogin) and for the CAPTCHA page. */
   function checkWalls(probe: AmazonProbe): void {
     if (probe.signin) {
-      throw new RecipeError("blocked", AMAZON_NEEDS_LOGIN_MESSAGE, { retryable: false, needsLogin: true });
+      throw new RecipeError("blocked", AMAZON_NEEDS_LOGIN_MESSAGE, { retryable: false, needsLogin: true, wall: "login_required" });
     }
     if (probe.captchaForm || (probe.textLength < 3000 && CAPTCHA_TEXT_RE.test(probe.text))) {
-      throw new RecipeError("blocked", `Amazon served a CAPTCHA page at ${probe.url}; it is blocking this browser or network`, { retryable: false });
+      throw new RecipeError("blocked", `Amazon served a CAPTCHA page at ${probe.url}; it is blocking this browser or network`, { retryable: false, wall: "captcha" });
     }
     const wall = blockedReason(probe);
-    if (wall !== undefined) throw new RecipeError("blocked", `Amazon served a bot check (${wall}) at ${probe.url}`, { retryable: false });
+    if (wall !== undefined) {
+      throw new RecipeError("blocked", `Amazon served a bot check (${wall}) at ${probe.url}`, {
+        retryable: false,
+        ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
+      });
+    }
   }
 
   /**

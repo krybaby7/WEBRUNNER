@@ -26,6 +26,7 @@ import {
   type ReviewsRecipe,
 } from "../../reviews/sources/shared-browser.js";
 import type { ReviewSearchResult } from "../../reviews/types.js";
+import { wallOfBotCheck } from "./pause.js";
 import { RecipeError, type RecipeContext } from "./types.js";
 
 /**
@@ -572,7 +573,10 @@ export function createGoogleMapsReviewsRecipe(options: GoogleMapsReviewsRecipeOp
         lastProbe = probe;
         const wall = blockedReason(probe);
         if (wall !== undefined) {
-          throw new RecipeError("blocked", `Google Maps served a bot check (${wall}) at ${probe.url}; no reviews were returned`, { retryable: false });
+          throw new RecipeError("blocked", `Google Maps served a bot check (${wall}) at ${probe.url}; no reviews were returned`, {
+            retryable: false,
+            ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
+          });
         }
         const isPlace = probe.heading !== "" && (probe.hasReviewsTab || probe.hasMoreReviews || probe.reviewCards > 0 || probe.hasRating);
         if (isPlace) return;

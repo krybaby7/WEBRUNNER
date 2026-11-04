@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import { log as defaultLog, type Logger } from "../../../log.js";
 import type { SocialItem, SocialPlatform, SocialSearchQuery } from "../../../schemas/social.js";
+import { runRecipeWithPause } from "../../browser/recipes/pause.js";
 import { RecipeError } from "../../browser/recipes/types.js";
 import type { SocialRecipe } from "../../browser/recipes/social-common.js";
 import type { BrowserSession } from "../../browser/types.js";
@@ -98,9 +99,11 @@ export abstract class BrowserSocialProvider implements SocialPlatformProvider {
     }
     if (signal.aborted) throw this.error(`${this.siteName} call aborted before it started`, "timeout", true);
 
+    // A page the owner cleared a wall on continues here instead of a fresh one (PLAN.md 16.4).
+    const parked = hooks.handoff?.parked;
     let page: Page;
     try {
-      page = await browser.acquire();
+      page = parked !== undefined && parked.site === this.name ? parked.page : await browser.acquire();
     } catch (err) {
       throw this.error(`could not open a browser page: ${message(err)}`, "provider", true, err);
     }
@@ -116,14 +119,21 @@ export abstract class BrowserSocialProvider implements SocialPlatformProvider {
       if (hooks.caveats !== undefined) for (const c of caveats) if (!hooks.caveats.includes(c)) hooks.caveats.push(c);
     };
     try {
-      const items = await this.recipe.run(acquired, params, {
-        llm: this.llm ?? unavailableLlm(this.siteName),
-        log: this.log,
-        deadline: Date.now() + this.timeoutMs,
-        signal,
-        caveats,
-        ...(hooks.meter !== undefined && { meter: hooks.meter }),
-      });
+      const items = await runRecipeWithPause(
+        this.recipe,
+        acquired,
+        params,
+        {
+          llm: this.llm ?? unavailableLlm(this.siteName),
+          log: this.log,
+          deadline: Date.now() + this.timeoutMs,
+          signal,
+          caveats,
+          ...(hooks.meter !== undefined && { meter: hooks.meter }),
+        },
+        hooks.handoff,
+        this.name,
+      );
       surface();
       return finish(items);
     } catch (err) {
@@ -131,7 +141,8 @@ export abstract class BrowserSocialProvider implements SocialPlatformProvider {
       throw this.mapError(err, signal);
     } finally {
       signal.removeEventListener("abort", onAbort);
-      await browser.release(acquired);
+      // A parked page stays open for the owner; the handoff store closes it later.
+      if (hooks.handoff?.isParked(acquired) !== true) await browser.release(acquired);
     }
   }
 

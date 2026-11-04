@@ -27,6 +27,7 @@ import {
   type TimeGuard,
 } from "../../reviews/sources/shared-browser.js";
 import type { ReviewSearchResult } from "../../reviews/types.js";
+import { wallOfBotCheck } from "./pause.js";
 import { RecipeError, type RecipeContext } from "./types.js";
 
 /**
@@ -372,7 +373,12 @@ export function createGooglePlayReviewsRecipe(options: GooglePlayReviewsRecipeOp
       if (probe !== undefined) {
         last = probe;
         const wall = blockedReason(probe);
-        if (wall !== undefined) throw new RecipeError("blocked", `Google Play served a bot check (${wall}) at ${probe.url}`, { retryable: false });
+        if (wall !== undefined) {
+          throw new RecipeError("blocked", `Google Play served a bot check (${wall}) at ${probe.url}`, {
+            retryable: false,
+            ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
+          });
+        }
         if (probe.firstHref !== null) {
           const pkg = packageIdFromHref(probe.firstHref);
           if (pkg !== undefined) return pkg;
@@ -409,7 +415,12 @@ export function createGooglePlayReviewsRecipe(options: GooglePlayReviewsRecipeOp
       if (probe !== undefined) {
         last = probe;
         const wall = blockedReason(probe);
-        if (wall !== undefined) throw new RecipeError("blocked", `Google Play served a bot check (${wall}) at ${probe.url}`, { retryable: false });
+        if (wall !== undefined) {
+          throw new RecipeError("blocked", `Google Play served a bot check (${wall}) at ${probe.url}`, {
+            retryable: false,
+            ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
+          });
+        }
         if (NOT_FOUND_RE.test(probe.text) && probe.textLength < 2000) throw new SubjectNotFoundError(`Google Play has no app with the package id ${pkg}`);
         if (probe.heading !== "" || probe.cards > 0) return;
       }

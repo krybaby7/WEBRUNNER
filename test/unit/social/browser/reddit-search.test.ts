@@ -251,6 +251,7 @@ describe.skipIf(!probe.available)(`reddit-search recipe in Chromium${probe.avail
     const err = r.error as RecipeError;
     expect(err.code).toBe("blocked");
     expect(err.needsLogin).toBe(false);
+    expect(err.wall).toBeUndefined();
   });
 
   it("reads the live 2026-10-28 page for the query that came back empty (WP39)", async () => {

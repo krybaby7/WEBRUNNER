@@ -259,7 +259,32 @@ describe("accounts service with a fake browser", () => {
     for (const p of ["facebook", "x"] as const) {
       expect((await service.connect(p, 0)).caveats.join(" ")).toMatch(/checkpoint/);
     }
+    // Three login pages are parked, which is the handoff store's limit (PLAN.md 16.3): a fourth is refused.
+    await expect(service.connect("reddit", 0)).rejects.toMatchObject({ code: "provider" });
+    await expect(service.connect("reddit", 0)).rejects.toThrow(/3 handoffs are already parked: google .*facebook .*x /);
+    await service.disconnect("google");
     expect((await service.connect("reddit", 0)).caveats.join(" ")).not.toMatch(/checkpoint|may not be secure/);
+  });
+
+  it("a pending connect names its handoff, and resume on the store finishes the login once the cookies are there (PLAN.md 16.5)", async () => {
+    const browser = cookieFakeBrowser();
+    const { service, clock } = make(browser);
+    const out = await service.connect("reddit", 0);
+    expect(out.status).toBe("pending");
+    expect(out.handoff_id).toMatch(/^h_[0-9a-f]{8}$/);
+    expect(out.instructions).toContain(out.handoff_id as string);
+    expect(clock.sleeps).toEqual([]);
+
+    // Not logged in yet: still pending, same page.
+    const again = await service.connect("reddit", 0);
+    expect(again).toMatchObject({ status: "pending", handoff_id: out.handoff_id });
+    expect(browser.opened).toHaveLength(1);
+
+    browser.store.push(cookie("reddit_session", FIXTURE_DOMAIN));
+    const done = await service.connect("reddit", 0);
+    expect(done).toMatchObject({ status: "connected", waited_s: 0 });
+    expect(done.handoff_id).toBeUndefined();
+    expect(browser.opened[0]?.state.closed).toBe(true);
   });
 
   it("disconnect clears every domain of the platform and reports the count, or not_connected", async () => {

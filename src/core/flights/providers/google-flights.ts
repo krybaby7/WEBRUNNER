@@ -1,4 +1,5 @@
 import { googleFlightsRecipe } from "../../browser/recipes/google-flights.js";
+import { runRecipeWithPause } from "../../browser/recipes/pause.js";
 import { RecipeError, type Recipe } from "../../browser/recipes/types.js";
 import type { BrowserSession, HandoffHooks } from "../../browser/types.js";
 import type { CostMeter } from "../../llm/cost.js";
@@ -72,9 +73,11 @@ export class GoogleFlightsProvider implements FlightProvider {
     }
     if (signal.aborted) throw this.error("Google Flights search aborted before it started", "timeout", true);
 
+    // A page the owner cleared a wall on continues here instead of a fresh one (PLAN.md 16.4).
+    const parked = hooks.handoff?.parked;
     let page;
     try {
-      page = await browser.acquire();
+      page = parked !== undefined && parked.site === this.name ? parked.page : await browser.acquire();
     } catch (err) {
       throw this.error(`could not open a browser page: ${message(err)}`, "provider", true, err);
     }
@@ -87,14 +90,21 @@ export class GoogleFlightsProvider implements FlightProvider {
 
     const caveats: string[] = [];
     try {
-      const offers = await this.recipe.run(acquired, query, {
-        llm,
-        log: this.logger,
-        deadline: Date.now() + this.timeoutMs,
-        signal,
-        caveats,
-        ...(this.meter !== undefined && { meter: this.meter }),
-      });
+      const offers = await runRecipeWithPause(
+        this.recipe,
+        acquired,
+        query,
+        {
+          llm,
+          log: this.logger,
+          deadline: Date.now() + this.timeoutMs,
+          signal,
+          caveats,
+          ...(this.meter !== undefined && { meter: this.meter }),
+        },
+        hooks.handoff,
+        this.name,
+      );
       if (offers.length === 0 && caveats.length === 0) caveats.push(NO_REASON_CAVEAT);
       if (hooks.caveats !== undefined) for (const c of caveats) if (!hooks.caveats.includes(c)) hooks.caveats.push(c);
       return [...offers].sort((a, b) => a.price.amount - b.price.amount).slice(0, MAX_OFFERS);
@@ -108,7 +118,8 @@ export class GoogleFlightsProvider implements FlightProvider {
       throw this.error(`Google Flights search failed: ${message(err)}`, "provider", false, err);
     } finally {
       signal.removeEventListener("abort", onAbort);
-      await browser.release(acquired);
+      // A parked page stays open for the owner; the handoff store closes it later.
+      if (hooks.handoff?.isParked(acquired) !== true) await browser.release(acquired);
     }
   }
 

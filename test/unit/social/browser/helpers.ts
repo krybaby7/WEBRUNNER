@@ -21,6 +21,8 @@ export interface SocialServer {
   scenario(name: string): string;
   /** Every request seen, as "METHOD /path?query". */
   requests: string[];
+  /** Platforms whose gated scenario (`x-gate`) still shows its wall; delete one to "log in". */
+  walled: Set<string>;
   close(): Promise<void>;
 }
 
@@ -33,6 +35,7 @@ export interface SocialServer {
  *   x-login       /search -> 302 to /i/flow/login -> login page
  *   x-onboarding  /search -> 307 to /i/jf/onboarding/web?...&mode=login (as live curl saw)
  *   x-403         /search -> HTTP 403, empty body (as live headless Chromium saw)
+ *   x-gate        /search -> 302 to the login page while `walled` has "x", the results once it is deleted
  *   x-empty       /search -> "No results for ..."
  *   fb-ok         /search/posts/ -> results; /<page>/posts/<id> -> post page
  *   fb-live       /search/posts/ -> the live 2026-10-27 layout (virtualised feed, obfuscated dates, an
@@ -59,6 +62,7 @@ export interface SocialServer {
  */
 export async function startSocialServer(): Promise<SocialServer> {
   const requests: string[] = [];
+  const walled = new Set<string>(["x"]);
   let flakySearches = 0;
   const server: Server = createServer((req, res) => {
     const u = new URL(req.url ?? "/", "http://localhost");
@@ -87,6 +91,12 @@ export async function startSocialServer(): Promise<SocialServer> {
         return html(readFixture("x-search-sparse.html"));
       case "x-login":
         if (path === "/search") return redirect(`${base}/i/flow/login?redirect_after_login=${dest}`);
+        return html(readFixture("x-login-wall.html"));
+      case "x-gate":
+        if (path === "/search") {
+          if (walled.has("x")) return redirect(`${base}/i/flow/login?redirect_after_login=${dest}`);
+          return html(readFixture("x-search-results.html"));
+        }
         return html(readFixture("x-login-wall.html"));
       case "x-onboarding":
         if (path === "/search") return redirect(`${base}/i/jf/onboarding/web?redirect_after_login=${dest}&mode=login`, 307);
@@ -172,6 +182,7 @@ export async function startSocialServer(): Promise<SocialServer> {
   return {
     url,
     requests,
+    walled,
     scenario: (name) => `${url}/s/${name}`,
     close: () =>
       new Promise<void>((resolve) => {

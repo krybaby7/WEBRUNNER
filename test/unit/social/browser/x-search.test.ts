@@ -225,6 +225,7 @@ describe.skipIf(!probe.available)(`x-search recipe in Chromium${probe.available 
     const err = r.error as RecipeError;
     expect(err.code).toBe("blocked");
     expect(err.needsLogin).toBe(true);
+    expect(err.wall).toBe("login_required");
     expect(err.message).toMatch(/accounts connect x/);
     expect(r.finalUrl).toContain("/i/flow/login");
   });
@@ -240,6 +241,7 @@ describe.skipIf(!probe.available)(`x-search recipe in Chromium${probe.available 
     const err = r.error as RecipeError;
     expect(err.code).toBe("blocked");
     expect(err.needsLogin).toBe(false);
+    expect(err.wall).toBeUndefined();
     expect(err.message).toMatch(/403/);
     expect(err.message).toMatch(/accounts connect x/);
   });
