@@ -144,6 +144,18 @@ describe("install-codex.sh", () => {
     }
   });
 
+  it("--cdp writes BROWSER_CDP_URL into the block's env table and prints the Chrome command (PLAN.md 16.6)", () => {
+    const r = runScript(scripts.codex, ["--cdp", "--skip-build"], keys);
+    expect(r.status, r.all).toBe(0);
+    const text = readFileSync(codexConfig(), "utf8");
+    expect(text).toContain('env = { BROWSER_CDP_URL = "http://127.0.0.1:9222" }');
+    expect(count(text, "[mcp_servers.webrunner]")).toBe(1);
+    expect(r.stdout).toContain("--remote-debugging-port=9222");
+    const plain = runScript(scripts.codex, ["--skip-build"], keys);
+    expect(plain.status, plain.all).toBe(0);
+    expect(readFileSync(codexConfig(), "utf8")).not.toContain("BROWSER_CDP_URL");
+  });
+
   it("forwards the five v0.2 variables by name, in the script's order, and never writes their values", () => {
     const r = runScript(scripts.codex, ["--skip-build"], V02_VARS);
     expect(r.status, r.all).toBe(0);
@@ -223,6 +235,29 @@ describe("install-codex.sh", () => {
 
 describe("install-claude-code.sh", () => {
   const keys = { BRAVE_API_KEY: SECRET_BRAVE, WEBRUNNER_CURRENCY: "EUR" };
+
+  it("--cdp --dry-run passes BROWSER_CDP_URL and prints the Chrome command for this OS (PLAN.md 16.6)", () => {
+    installFakeClaude();
+    const r = runScript(scripts.claude, ["--cdp", "--dry-run"], keys);
+    expect(r.status, r.all).toBe(0);
+    expect(r.stdout).toContain("--env BROWSER_CDP_URL=http://127.0.0.1:9222");
+    expect(r.stdout).toContain("--remote-debugging-port=9222");
+    expect(r.stdout).toContain("--user-data-dir=");
+    expect(r.stdout).toContain("webrunner will attach to your own Chrome at http://127.0.0.1:9222");
+    if (process.platform === "win32") expect(r.stdout).toContain("chrome.exe");
+    else if (process.platform === "darwin") expect(r.stdout).toContain("Google Chrome.app");
+    else expect(r.stdout).toContain("google-chrome");
+    expect(existsSync(claudeLog)).toBe(false);
+
+    // An explicit BROWSER_CDP_URL wins over the default.
+    const own = runScript(scripts.claude, ["--cdp", "--dry-run"], { ...keys, BROWSER_CDP_URL: "http://127.0.0.1:9333" });
+    expect(own.stdout).toContain("--env BROWSER_CDP_URL=http://127.0.0.1:9333");
+    expect(own.stdout).not.toContain("9222 (BROWSER_CDP_URL)");
+    // Without --cdp nothing of it appears.
+    const plain = runScript(scripts.claude, ["--dry-run"], keys);
+    expect(plain.stdout).not.toContain("BROWSER_CDP_URL");
+    expect(plain.stdout).not.toContain("remote-debugging-port");
+  });
 
   it("--dry-run prints the claude command, redacts keys and does not execute claude", () => {
     installFakeClaude();

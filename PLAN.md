@@ -462,7 +462,7 @@ interface BrowserSession {
 ```
 
 DECIDED behavior:
-- Default: `chromium.launchPersistentContext(config.browser.profile_dir, {...})` with a profile directory owned by this tool. First run creates it; the owner can log into sites once and cookies persist.
+- Default: `chromium.launchPersistentContext(config.browser.profile_dir, {...})` with a profile directory owned by this tool. First run creates it; the owner can log into sites once and cookies persist. Since section 16.6 (WP47) `browser_channel` passes Playwright's `channel` (`chrome`, `msedge`) so the installed browser launches instead of Playwright's Chromium; attaching to the owner's own Chrome over CDP is the recommended setup.
 - Optional: `BROWSER_CDP_URL` set means attach to the owner's running Chrome via `chromium.connectOverCDP`. Documented in README with the `--remote-debugging-port` flag.
 - Headful by default when a display exists, headless otherwise. `BROWSER_HEADLESS` overrides.
 - One context, pages pooled, max 3 concurrent pages.
@@ -1804,6 +1804,8 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the section 7 protocol 
 - Accept: `--cdp --dry-run` prints `BROWSER_CDP_URL=http://127.0.0.1:9222` among the passed variables and the Chrome command for the current OS; `browser_channel: "chrome"` reaches `launchPersistentContext` as `channel` (asserted with an injected launcher), `chromium` passes none; `health` reports the channel.
 
 ### 16.8 Decision log, phase 7
+
+- **2026-11-04, WP47 (desktop install attached to the owner's Chrome)**: both installers take `--cdp`. The Claude Code one passes `BROWSER_CDP_URL=http://127.0.0.1:9222` as an `--env` (an exported `BROWSER_CDP_URL` wins); the Codex one writes it into the block's `env` table, since Codex's `env_vars` forwards names only and the URL is not a secret. Both print the Chrome command for the OS they run on (Git Bash on Windows, macOS, Linux), always with a dedicated `--user-data-dir`, because recent Chrome ignores the debugging port on its default profile. `browser_channel` is Playwright's `channel` passed through unchanged; `BrowserSessionOptions.launch` lets a test see the options without launching that browser. `health.config.browser.channel` reports it (`chromium` when unset). The README's Browser setup now leads with CDP and the persistent profile is the fallback.
 
 - **2026-11-04, WP46 (recipes and `accounts connect` on the handoff)**:
   - **The pause loop lives in one place.** `runRecipeWithPause` (`src/core/browser/recipes/pause.ts`) wraps `recipe.run` for the four browser providers (social, reviews, flights, hotels): it binds `ctx.pause` to the host's hooks, offers a walled `blocked` error to the owner once, and on "cleared" runs the recipe again from its first navigation on the same page. Recipes themselves only mark their walls with `RecipeError.wall`; none of their control flow changed, which is what 16.0's "re-run from navigation" promised. `wallOfBotCheck` maps the recipes' bot-check names (`sorry/index`, `recaptcha`, `unusual traffic`, the `detectBotWall` names) onto reasons; names a human cannot act on map to nothing.

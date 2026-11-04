@@ -1,4 +1,4 @@
-import type { Locator, Page } from "playwright";
+import type { BrowserContext, Locator, Page } from "playwright";
 import type { Handoff, HandoffReason } from "../../schemas/handoff.js";
 
 export type { Handoff, HandoffReason };
@@ -65,6 +65,8 @@ export interface BrowserSessionStats {
 export interface BrowserSessionOptions {
   /** Explicit Chromium binary. Tests use it; production uses Playwright's own install. */
   executablePath?: string;
+  /** Replaces `chromium.launchPersistentContext`. Tests use it to see the launch options. */
+  launch?: (profileDir: string, options: Record<string, unknown>) => Promise<BrowserContext>;
 }
 
 /** One entry per emitted line of `Snapshot.axTree`. */

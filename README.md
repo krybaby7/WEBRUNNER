@@ -58,7 +58,7 @@ export ANTHROPIC_API_KEY=<your-key>
 ### Claude Code
 
 ```bash
-scripts/install-claude-code.sh            # add --dry-run to see the command without running it
+scripts/install-claude-code.sh --cdp      # attach to your own Chrome (recommended; see Browser setup); add --dry-run to see the command without running it
 claude mcp list                           # webrunner should show as connected
 ```
 
@@ -67,7 +67,7 @@ This runs `claude mcp add --scope user ...`, so the server is available in every
 ### Codex
 
 ```bash
-scripts/install-codex.sh                  # add --dry-run to print the block without writing it
+scripts/install-codex.sh --cdp            # attach to your own Chrome (recommended; see Browser setup); add --dry-run to print the block without writing it
 codex mcp list
 ```
 
@@ -138,6 +138,8 @@ webrunner reads environment variables first, then `~/.config/webrunner/config.js
 | `BROWSER_CDP_URL` | `browser_cdp_url` | none | Attach to your running Chrome instead of launching Chromium (see Browser setup). An `http(s)` or `ws(s)` URL such as `http://127.0.0.1:9222`. |
 | `BROWSER_HEADLESS` | `browser_headless` | auto | `true` or `false` forces headless or headful. Unset means headful when a display exists. |
 | `WEBRUNNER_BROWSER_PROFILE_DIR` | `browser_profile_dir` | `~/.config/webrunner/browser-profile` | The persistent Chromium profile. |
+| `BROWSER_CHANNEL` | `browser_channel` | `chromium` | The browser persistent mode launches: `chromium` (Playwright's), `chrome` or `msedge` (the Google Chrome or Microsoft Edge installed on the machine). |
+| `WEBRUNNER_HANDOFF_TTL_MS` | `handoff_ttl_ms` | `600000` | How long a page parked for you to clear a wall on stays open, in milliseconds (minimum 60000); see "When a site stops the agent". |
 | `WEBRUNNER_SAVE_SCREENSHOTS` | `save_screenshots` | `false` | `browse_task` saves screenshots under `<cache dir>/runs/<run id>/` and lists them in `screenshots`. |
 | `WEBRUNNER_CURRENCY` | `currency` | `USD` | Default ISO 4217 currency for `search_flights`, `search_hotels` and crypto quotes in `market_quote`. |
 | `RESEARCH_MAX_COST_USD` | `research_max_cost_usd` | `3` | Default hard cost cap per `deep_research` call, in US dollars. |
@@ -209,7 +211,26 @@ With the subscription, nothing is billed: the plan quota is what is used, and it
 
 `browse_task`, the Google Flights source of `search_flights`, `search_hotels`, Google Finance in `market_quote`, the browser platforms of `social_search` and `search_reviews`, `accounts` and `fetch_page` in browser mode all drive one shared browser, started lazily on first use and closed when the server exits. At most 3 pages are open at once (a login window opened by `accounts` is outside that count).
 
-**Default: a tool-owned persistent profile.** webrunner launches Chromium with a profile directory it owns, `~/.config/webrunner/browser-profile` (change it with `WEBRUNNER_BROWSER_PROFILE_DIR`). The first run creates it; cookies and logins persist between runs. Pages get a 1366x768 viewport and your system locale and timezone. There are no stealth plugins and no automation-flag overrides beyond Playwright's defaults; if a site still blocks, the tool reports `blocked`.
+**Recommended: attach webrunner to your own Chrome (CDP).** Your Chrome already has your logins, a browser profile sites trust, and a window you can see, which is what the human handoff needs (see "When a site stops the agent"). Start Chrome with remote debugging on a dedicated profile, log into your sites there once, and point webrunner at it:
+
+```bash
+# Windows (Git Bash)
+"/c/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="$LOCALAPPDATA/webrunner/chrome-debug" &
+# macOS
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"
+# Linux
+google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"
+```
+
+Then register the server with `scripts/install-claude-code.sh --cdp` (or `scripts/install-codex.sh --cdp`), which passes `BROWSER_CDP_URL=http://127.0.0.1:9222` and prints that command for your OS; or set `BROWSER_CDP_URL` yourself. Recent Chrome versions ignore `--remote-debugging-port` on the default profile directory, hence the dedicated `--user-data-dir`: that profile is separate from your everyday Chrome windows, so log into the sites you want the tools to read in it. Port 9222 gives any local program full control of that browser; never expose it beyond `127.0.0.1`.
+
+What changes in CDP mode:
+
+- The browser is yours: your window size and settings apply (webrunner sets no viewport), and the tool-owned profile is not used.
+- `close()` only disconnects. When the server exits, your Chrome keeps running. Pages webrunner opened itself are closed after each use; your other tabs are left alone.
+- webrunner uses Chrome's default browser context. If the connection fails you get an error naming the URL.
+
+**Otherwise: a tool-owned persistent profile.** Without `BROWSER_CDP_URL`, webrunner launches a browser with a profile directory it owns, `~/.config/webrunner/browser-profile` (change it with `WEBRUNNER_BROWSER_PROFILE_DIR`). The first run creates it; cookies and logins persist between runs. Pages get a 1366x768 viewport and your system locale and timezone. By default that browser is Playwright's Chromium; `BROWSER_CHANNEL=chrome` (or `msedge`) launches the Google Chrome or Microsoft Edge installed on the machine instead, a real browser you already have, with no flag or fingerprint changed. There are no stealth plugins and no automation-flag overrides beyond Playwright's defaults; if a site still blocks, the tool reports `blocked`.
 
 **Logging into a site once.** No tool ever logs in for you. For the platforms the opinion tools read through (Reddit, X, Facebook, Google, Amazon, and Instagram and LinkedIn for later), the `accounts` tool opens the login page in the server's own browser window and waits while you sign in; see Accounts below. For any other site, sign in yourself, in that same profile, by running the browser headful from the checkout and closing it when done:
 
@@ -226,25 +247,6 @@ node --input-type=module -e "import { chromium } from 'playwright'; import { spa
 ```
 
 That window is an ordinary browser, so Reddit, X, Facebook and Google all accepted the login. Close it when you are done; `accounts list` then shows the platforms as connected, and the tools read through those sessions. Only the login happens this way; the tools themselves still run as plain Playwright.
-
-**Attaching to your own Chrome instead (CDP).** Start Chrome with remote debugging, then point webrunner at it:
-
-```bash
-# macOS
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"
-# Linux
-google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"
-
-export BROWSER_CDP_URL=http://127.0.0.1:9222
-```
-
-Recent Chrome versions ignore `--remote-debugging-port` when it is used with the default profile directory, so use a dedicated `--user-data-dir` as above and log into your sites in that Chrome once. Debugging port 9222 gives any local program full control of that browser; do not expose it beyond `127.0.0.1`.
-
-What changes in CDP mode:
-
-- The browser is yours: your window size and settings apply (webrunner sets no viewport), and the tool-owned profile is not used.
-- `close()` only disconnects. When the server exits, your Chrome keeps running. Pages webrunner opened itself are closed after each use; your other tabs are left alone.
-- webrunner uses Chrome's default browser context. If the connection fails you get an error naming the URL.
 
 **Headless detection.** `BROWSER_HEADLESS` wins when set. Otherwise: macOS and Windows count as having a display and run headful; on Linux webrunner runs headful only when `DISPLAY` or `WAYLAND_DISPLAY` is set, and headless otherwise (servers, containers, CI). Headful is the default on a desktop so you can watch the agent while debugging.
 

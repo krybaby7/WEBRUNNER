@@ -2,12 +2,15 @@
 # Register the webrunner MCP server with Codex by writing an
 # [mcp_servers.webrunner] block to ~/.codex/config.toml.
 #
-#   scripts/install-codex.sh [--dry-run] [--skip-build]
+#   scripts/install-codex.sh [--dry-run] [--skip-build] [--cdp]
 #
 # What it does:
 #   1. checks for node 22+ and npm, and builds this checkout (npm ci && npm run build)
 #   2. backs up ~/.codex/config.toml (when it exists and will change)
-#   3. replaces any existing [mcp_servers.webrunner] block, or adds one
+#   3. replaces any existing [mcp_servers.webrunner] block, or adds one; with --cdp
+#      the block sets BROWSER_CDP_URL=http://127.0.0.1:9222 so webrunner attaches to
+#      your own Chrome (the recommended setup), and the command that starts Chrome
+#      with remote debugging is printed
 #
 # Safe to run again: the block is replaced, never duplicated, and an unchanged
 # file is left alone.
@@ -66,6 +69,8 @@ STARTUP_TIMEOUT_SEC=30
 
 DRY_RUN=0
 SKIP_BUILD=0
+CDP=0
+CDP_URL="http://127.0.0.1:9222"
 
 usage() {
   sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -74,14 +79,41 @@ usage() {
 Options:
   --dry-run     print the block that would be written; build nothing, change nothing
   --skip-build  do not run npm ci / npm run build (dist/index.js must already exist)
+  --cdp         attach webrunner to your own Chrome: the block sets BROWSER_CDP_URL=http://127.0.0.1:9222
+                (unless BROWSER_CDP_URL is set in this shell, whose value is used) and the command
+                that starts Chrome with remote debugging on this OS is printed
   -h, --help    show this help
 EOF
 }
+
+# The command that starts the owner's Chrome with remote debugging on a dedicated
+# profile, for this OS. Recent Chrome versions ignore --remote-debugging-port on
+# the default profile directory, hence --user-data-dir.
+chrome_command() {
+  case "$(uname -s 2>/dev/null)" in
+    Darwin) printf '%s\n' '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"' ;;
+    MINGW* | MSYS* | CYGWIN*) printf '%s\n' '"/c/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="$LOCALAPPDATA/webrunner/chrome-debug" &' ;;
+    *) printf '%s\n' 'google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug" &' ;;
+  esac
+}
+
+print_chrome_hint() {
+  cat <<EOF
+
+webrunner will attach to your own Chrome at $CDP_URL (BROWSER_CDP_URL).
+Start Chrome with remote debugging on a dedicated profile, and log into your sites there once:
+  $(chrome_command)
+Chrome keeps running when the server exits; webrunner only opens and closes its own tabs.
+Port 9222 gives any local program full control of that browser: never expose it beyond 127.0.0.1.
+EOF
+}
+
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
+    --cdp) CDP=1 ;;
     -h | --help) usage; exit 0 ;;
     *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -93,6 +125,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 
 [ -n "${HOME:-}" ] || die "HOME is not set."
+if [ "$CDP" -eq 1 ] && [ -n "${BROWSER_CDP_URL:-}" ]; then CDP_URL="$BROWSER_CDP_URL"; fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTRY="$ROOT/dist/index.js"
@@ -172,6 +205,10 @@ make_block() {
     printf '# Names only: Codex forwards these from its own environment. No values are stored here.\n'
     printf 'env_vars = [%s]\n' "$list"
   fi
+  if [ "$CDP" -eq 1 ]; then
+    printf '# Attach to your own Chrome, started with --remote-debugging-port=9222 (README, Browser setup).\n'
+    printf 'env = { BROWSER_CDP_URL = %s }\n' "$(toml_string "$CDP_URL")"
+  fi
   printf 'startup_timeout_sec = %s\n' "$STARTUP_TIMEOUT_SEC"
   printf 'tool_timeout_sec = %s\n' "$TOOL_TIMEOUT_SEC"
   printf '%s\n' "$BLOCK_END"
@@ -226,6 +263,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     say "[dry-run] no webrunner environment variables are set in this shell, so the block has no env_vars line."
   fi
   say "[dry-run] nothing was changed."
+  if [ "$CDP" -eq 1 ]; then print_chrome_hint; fi
   exit 0
 fi
 
@@ -275,3 +313,4 @@ exchange_rate, social_search, search_reviews, accounts, resume and health.
 tool_timeout_sec is $TOOL_TIMEOUT_SEC because Codex's default (60 s) is shorter than a deep_research call.
 To remove it: scripts/uninstall.sh
 EOF
+if [ "$CDP" -eq 1 ]; then print_chrome_hint; fi
