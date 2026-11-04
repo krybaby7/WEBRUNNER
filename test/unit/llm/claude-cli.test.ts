@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createClaudeCliClient, MAX_SCHEMA_CHARS, stdinMessage, type ClaudeCliOptions } from "../../../src/core/llm/claude-cli.js";
+import { createClaudeCliClient, toolSchema, MAX_SCHEMA_CHARS, stdinMessage, type ClaudeCliOptions } from "../../../src/core/llm/claude-cli.js";
 import { CostMeter } from "../../../src/core/llm/cost.js";
 import { Slots } from "../../../src/core/llm/process.js";
 import { LlmError, type LlmRequest } from "../../../src/core/llm/types.js";
@@ -178,6 +178,42 @@ describe("claude-cli backend: how claude is started (PLAN.md 15.3)", () => {
     expect(res.parsed).toEqual({ score: 8, reason: "close match" });
     const argv = starts()[0]?.argv ?? [];
     expect(JSON.parse(argv[argv.indexOf("--json-schema") + 1] as string)).toEqual(zodOutputFormat(schema).schema);
+  });
+
+  it("wraps a union or array schema as an object with a value property, since a tool's input_schema must be an object, and unwraps the output", async () => {
+    const action = z.discriminatedUnion("action", [
+      z.object({ action: z.literal("click"), ref: z.string() }),
+      z.object({ action: z.literal("done"), summary: z.string() }),
+    ]);
+    const res = await client(ok({ structured_output: { value: { action: "done", summary: "found it" } }, stop_reason: "tool_use" })).complete(
+      req({ role: "planner", schema: action }),
+    );
+    expect(res.parsed).toEqual({ action: "done", summary: "found it" });
+    const argv = starts()[0]?.argv ?? [];
+    const sent = JSON.parse(argv[argv.indexOf("--json-schema") + 1] as string) as { type: string; required: string[]; properties: { value: unknown } };
+    expect(sent.type).toBe("object");
+    expect(sent.required).toEqual(["value"]);
+    expect(sent.properties.value).toEqual(zodOutputFormat(action).schema);
+
+    const list = z.array(z.object({ x: z.number() }));
+    const arr = await client(ok({ structured_output: { value: [{ x: 1 }, { x: 2 }] }, stop_reason: "tool_use" })).complete(req({ schema: list }));
+    expect(arr.parsed).toEqual([{ x: 1 }, { x: 2 }]);
+
+    // An object schema is passed as it is.
+    const obj = z.object({ score: z.number() });
+    await client(ok({ structured_output: { score: 1 }, stop_reason: "tool_use" })).complete(req({ schema: obj }));
+    const plain = JSON.parse((starts()[2]?.argv ?? [])[(starts()[2]?.argv ?? []).indexOf("--json-schema") + 1] as string) as { type: string };
+    expect(plain.type).toBe("object");
+    expect(plain).not.toHaveProperty("properties.value");
+  });
+
+  it("toolSchema keeps $defs at the root of the wrapper so $ref still resolves", () => {
+    const wrapped = toolSchema({ $defs: { Item: { type: "string" } }, type: "array", items: { $ref: "#/$defs/Item" } });
+    expect(wrapped).toEqual({
+      wrapped: true,
+      schema: { $defs: { Item: { type: "string" } }, type: "object", properties: { value: { type: "array", items: { $ref: "#/$defs/Item" } } }, required: ["value"], additionalProperties: false },
+    });
+    expect(toolSchema({ type: "object", properties: {} })).toEqual({ wrapped: false, schema: { type: "object", properties: {} } });
   });
 
   it("reports structured output that does not match as provider / schema", async () => {
