@@ -1,6 +1,6 @@
 import { googleFlightsRecipe } from "../../browser/recipes/google-flights.js";
 import { RecipeError, type Recipe } from "../../browser/recipes/types.js";
-import type { BrowserSession } from "../../browser/types.js";
+import type { BrowserSession, HandoffHooks } from "../../browser/types.js";
 import type { CostMeter } from "../../llm/cost.js";
 import { LlmError, type LlmClient } from "../../llm/types.js";
 import { log as defaultLog, type Logger } from "../../../log.js";
@@ -34,6 +34,8 @@ export interface GoogleFlightsProviderOptions {
  */
 export interface SearchHooks {
   caveats?: string[];
+  /** Human handoff (PLAN.md 16.4): park the page at a wall the owner can clear. Absent when the host cannot pause. */
+  handoff?: HandoffHooks;
 }
 
 /** Google Flights through a real browser and the recipe in `core/browser/recipes/google-flights.ts`. */

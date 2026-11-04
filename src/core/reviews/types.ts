@@ -1,5 +1,6 @@
 import type { NormalizedReviewsQuery, Review, ReviewKind, ReviewSource, ReviewSubject } from "../../schemas/reviews.js";
 import type { CostMeter } from "../llm/cost.js";
+import type { HandoffHooks } from "../browser/types.js";
 
 export type { NormalizedReviewsQuery, Review, ReviewKind, ReviewSource, ReviewSubject };
 
@@ -7,6 +8,8 @@ export type { NormalizedReviewsQuery, Review, ReviewKind, ReviewSource, ReviewSu
 export interface ReviewHooks {
   caveats?: string[];
   meter?: CostMeter;
+  /** Human handoff (PLAN.md 16.4): park the page at a wall the owner can clear. Absent when the host cannot pause. */
+  handoff?: HandoffHooks;
 }
 
 export interface ReviewSearchResult {

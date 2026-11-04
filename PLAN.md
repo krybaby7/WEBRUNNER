@@ -1,7 +1,7 @@
 # WEBRUNNER: Implementation Plan
 
 > Repository: github.com/krybaby7/WEBRUNNER (GitHub slugs are case-insensitive). The npm package and all code use lowercase `webrunner`.
-> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) merged into `main` 2026-10-21; phase 6 (section 15, model calls through the owner's Claude and Codex subscriptions) planned 2026-10-26.
+> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) merged into `main` 2026-10-21; phase 6 (section 15, model calls through the owner's Claude and Codex subscriptions) planned 2026-10-26; phase 7 (section 16, human handoff at CAPTCHAs, checkpoints, consent and login walls) planned 2026-11-04.
 > Audience: an orchestrator model (Claude Fable 5.1) that delegates work packages to implementer models (Claude Sonnet 5.5), and the human owner who reviews PRs.
 
 ## 0. How to use this document
@@ -340,7 +340,7 @@ Output:
 
 Behavior:
 - Never performs: form submissions on payment pages, clicking buttons whose text matches a configurable deny list (`Buy`, `Pay`, `Confirm purchase`, `Place order`, etc.), file downloads outside the run dir.
-- Uses the owner's persistent profile (4.3). Stops with `blocked` on CAPTCHA detection rather than attempting to solve it.
+- Uses the owner's persistent profile (4.3). Stops with `blocked` on CAPTCHA detection rather than attempting to solve it. Since section 16, when a human can see the window it returns `paused` (16.1) at a CAPTCHA, checkpoint, consent or login wall instead, and `resume` continues the step loop.
 - Implemented semantics (WP10): `steps_taken` counts page actions that actually ran (click, type, select, navigate, scroll, wait); refused or failed actions and the `screenshot`, `extract`, `done` and `blocked` decisions do not count, while `max_steps` bounds model decisions. `extract` without an `extract_schema` runs one extractor call that answers the goal in prose and becomes `summary`. `blocked_reason` is omitted for budget exhaustion and for model-reported blocks that fit no enum value; the explanation goes in `summary`. The deny rules match whole path tokens (`checkout`, `payment`, `pay`, `billing`, `order/confirm`), not substrings. Off-domain navigation is blocked by request interception so link clicks, script redirects and server redirects are all caught. A ten-minute wall-clock cap returns `partial` with `timeout`. Label refs act on the label's control, so element facts (password, card fields) are read from the control, not the label.
 
 ### 3.5 `search_flights`
@@ -497,7 +497,7 @@ interface Recipe<TParams, TResult> {
   buildUrl?(params: TParams): string | null;    // direct-URL shortcut when available
   run(page: Page, params: TParams, ctx: RecipeContext): Promise<TResult>;
 }
-interface RecipeContext { llm: LlmClient; log: Logger; deadline: number; }
+interface RecipeContext { llm: LlmClient; log: Logger; deadline: number; }   // plus meter, signal, caveats (14.8) and pause (16.4)
 ```
 
 DECIDED: extraction inside recipes is **schema-driven via the LLM**, not CSS-selector-driven. The recipe navigates and waits; then it hands the page's visible text or accessibility tree to the LLM with the result schema and asks for structured output. Selector-based extraction is allowed only as a fast path that is validated against the schema, with LLM extraction as fallback. This is what makes recipes survive page redesigns.
@@ -577,6 +577,8 @@ Loaded from env vars first, then `~/.config/webrunner/config.json`, validated wi
 | WEBRUNNER_CODEX_MODEL | no      | model for the Codex fallback; default `gpt-6.1-sol` (Codex's own default, always passed) |
 | WEBRUNNER_LLM_CONCURRENCY | no  | most CLI model processes at once; default 4 |
 | WEBRUNNER_CLAUDE_MAX_UTILIZATION | no | 0 to 1; above this share of any Claude plan window, calls go to the fallback; default 1 (only when the limit is hit) |
+| WEBRUNNER_HANDOFF_TTL_MS | no | how long a page parked for the owner stays open; whole ms, min 60000, default 600000 (section 16) |
+| BROWSER_CHANNEL | no | browser the persistent mode launches: `chromium` (default, Playwright's), `chrome` or `msedge` (installed browsers; section 16.6) |
 
 \* Optional at startup by decision (Section 1). Config-file keys are the lowercase variable names with the `WEBRUNNER_` prefix dropped (`brave_api_key`, `cache_dir`, `currency`, `model_planner`, `browser_profile_dir`, `save_screenshots`, ...); unknown keys are rejected; the environment overrides the file; empty env vars count as unset. All keys above already exist in `src/config.ts`; work packages read them from `deps.config` and do not edit `config.ts` unless their brief says so.
 
@@ -1607,3 +1609,197 @@ All flags were checked against Codex CLI 0.164.0; the behaviours below were chec
     - Over stdio with `llm_backend: claude-cli`, `health` reports `{ backend: "claude-cli", fallback: "none" }`, and `search_reviews` (App Store, `summarize: true`) returned 15 reviews and a cited summary written by Sonnet through `claude -p`, in 12 to 15 s.
     - One earlier run of that call returned a tool error in 360 ms and did not recur in the next three runs; it was not investigated further.
 - **2026-10-26, WP33**: the owner chose their subscriptions over an API key: Claude (`claude -p`) for every role, Codex as the fallback when Claude's plan limit is hit. The figures in 15.1 and the facts in 15.3 and 15.4 were measured on the owner's Windows machine that day: tiny prompts on Haiku through Claude, a trivial prompt through Codex, a PNG read through stream-json input, four parallel calls. `LlmClient` stays as it is. Costs stay API-equivalent so the existing budgets keep bounding work.
+
+---
+
+## 16. Phase 7: human handoff (v0.3)
+
+> Added 2026-11-04. Every live run before this phase came from a cloud container: a datacenter IP and a fresh headless browser, which most sites refuse. On the owner's desktop the browser is a window the owner can see, and most walls a site puts up (a CAPTCHA, a checkpoint, a consent dialog, a login page, a one-time code) are things the owner can clear by hand in a few seconds. This phase lets a browser tool **pause** at such a wall with the page left open, tell the owner what to do, and **resume** from where it stopped. It changes nothing about what the tools do on their own: they still never type, log in, post or solve anything. The human does the human part, in the window.
+>
+> Sections 16.1 to 16.6 are contracts with the authority of section 3; 16.7 is the work breakdown (WP44 to WP47); 16.8 the decision log. Everything here is DECIDED unless marked OPEN.
+
+### 16.0 Scope and principles
+
+- **A pause is a success, never an error.** A browser tool that meets a wall a human can clear returns a normal result of the shape in 16.1 with `paused: true`. The calling assistant tells the owner what to do (the handoff's `what_to_do`), then calls `resume` (16.2). Nothing is retried on its own.
+- **Only when someone can see the window.** Pausing is possible in persistent mode when the browser is headful (`resolveHeadless` is false) and in CDP mode (the owner's own Chrome). In headless persistent mode every wall stays `blocked` as today, and the message adds: "run headful or attach your Chrome to be able to clear this yourself".
+- **Only walls a human can clear.** A CAPTCHA, a platform checkpoint, a consent dialog the recipe could not dismiss, a login wall when the recipe needs a session, a one-time-code prompt. An IP-level refusal (HTTP 403 with an empty body, "blocked by network security", a refused script bundle) never pauses, because there is nothing to do in the window; it stays `blocked`, and the message names the cause and the fix ("this IP is refused; run from a home connection").
+- **Passive reading stands.** The recipes and the browse agent still never `fill`, `type` or `press`, never log in, post, like, follow, buy or solve a CAPTCHA (PLAN 14.0, CLAUDE.md). While a run is parked the server touches the page only to read it (the wall probe) or to close it.
+- **Re-run from navigation, not mid-recipe state.** A recipe that pauses is not suspended; its call unwinds and the page is kept. When the wall is gone, the hosting tool runs the same work again with that page handed to the recipe for that site, so the recipe navigates again on a page whose session (cookies, consent, cleared challenge) is now good. Recipes therefore carry no resumable state, and a recipe that is correct on a fresh page is correct after a pause. `browse_task` is the one exception: it keeps its step loop's state (16.5), because re-running it would spend its budget twice.
+- **One handoff per tool call, at most three parked at once.** A second wall in the same call (two platforms both at a login page) does not park a second page: that platform reports `blocked` with `needs_login` as today, and a caveat says to clear the first handoff and call again. The store refuses a fourth park with a `provider` error naming the three parked sites.
+
+### 16.1 The `paused` result
+
+Shared by every browser tool that adopts the handoff (`browse_task`, `search_flights`, `search_hotels`, `social_search`, `search_reviews`; `accounts` through its own `connect` output, 16.5; `resume` itself):
+
+```ts
+{
+  paused: true;
+  handoff: {
+    id: string;                 // opaque, e.g. "h_7f3a9c1e"
+    tool: string;               // the tool that paused: "social_search", "browse_task", ...
+    site: string;               // recipe site id or host: "x", "google_maps", "www.example.com"
+    url: string;                // the page's URL when it paused
+    reason: "captcha" | "checkpoint" | "login_required" | "consent" | "mfa" | "unknown_wall";
+    what_to_do: string;         // one or two plain sentences for the owner, naming the window
+    expires_at: string;         // ISO 8601 UTC; the page is closed after this
+    step: string;               // where the run stopped: a recipe stage ("search results") or "step 4 of 15"
+  }
+}
+```
+
+`src/schemas/handoff.ts` owns `HANDOFF_REASONS`, `HandoffReasonSchema`, `HandoffSchema`, `PausedOutputSchema` and `withPausedOutput(outputSchema)`, which builds what a tool advertises. **MCP SDK 1.32 accepts only a `z.object` as `outputSchema`** (14.10, 2026-10-21), so a tool cannot advertise `z.union([Normal, Paused])`. `withPausedOutput` returns one object with every field of the normal output optional plus optional `paused` and `handoff`, whose `superRefine` accepts exactly what the real union accepts; the handler validates each result against the real union before returning, as `accounts` does. The schema files keep their normal output schemas unchanged; `paused` is a tool-level wrapper.
+
+Every tool that can pause says so in its description, in one sentence: "A `paused` result is not an error: tell the user what to do in the browser window (the handoff's `what_to_do`), then call `resume` with the handoff id."
+
+### 16.2 `resume`
+
+Purpose: continue a run that paused at a wall, once the owner has cleared it; or give the parked page up.
+
+Input:
+```ts
+{
+  handoff_id: string;
+  wait_seconds?: number;      // 0 to 300, default 60: how long to wait for the wall to clear
+  cancel?: boolean;           // default false: close the parked page instead and return { cancelled: true }
+}
+```
+
+Output: that tool's normal output when the run finished; the `paused` shape (16.1) with the same `id` and an updated `what_to_do` when the wall is still there after `wait_seconds`; `{ cancelled: true, handoff_id }` after `cancel`. An expired or unknown id is `invalid_input` naming the id. The advertised schema is a loose object (the SDK cannot express "any tool's output"); the handler validates the continued run's output against its own tool's schema.
+
+Behaviour:
+- Re-probes the parked page every 2 s for up to `wait_seconds`. The probe is the handoff's own `cleared` check: the generic wall classifier (16.4) for recipe and agent handoffs, the platform's session cookies for a login handoff (`accounts connect`), both without typing. A page the owner closed by hand counts as cancelled.
+- When the wall is gone it runs the parked continuation on that page and returns the tool's normal output. If that run meets the wall again (the owner solved one CAPTCHA and got another) the same handoff is re-parked, with a fresh `expires_at` and `what_to_do`, and `resume` returns `paused` again.
+- `wait_seconds: 0` probes once. The tool is capped at 330 s wall clock (`TOOL_WALL_CLOCK_MS.resume`).
+- `cancel: true` closes the page, forgets the handoff and returns `{ cancelled: true, handoff_id }`; cancelling an unknown id is `invalid_input`.
+- A parked run keeps its original arguments, including `max_cost_usd`; the continuation runs under a fresh deadline and the tool's own wall clock. Whatever the first call spent on the model is spent; the resumed run is a new run for the budget.
+
+### 16.3 `HandoffStore`
+
+Lives in the browser engine (`src/core/browser/handoff.ts`), one per server, created in `buildDeps` as `Deps.handoffs` next to `Deps.browser`.
+
+```ts
+interface HandoffStore {
+  /** True when a human can see the browser window: headful persistent mode, or CDP mode. */
+  canPause(): boolean;
+  /** Park a page. Throws HandoffError("provider") when three are already parked. */
+  park(req: ParkRequest): HandoffRecord;
+  get(id: string): HandoffRecord | undefined;
+  /** For `health`: parked count and sites, nothing else. */
+  list(): Array<{ id: string; tool: string; site: string; reason: HandoffReason; expires_at: string }>;
+  resume(id: string, waitSeconds: number): Promise<ResumeOutcome>;
+  cancel(id: string): Promise<boolean>;
+  /** Close every parked page. Called from closeDeps before the browser session closes. */
+  close(): Promise<void>;
+}
+interface ParkRequest {
+  page: Page; tool: string; site: string; url: string; reason: HandoffReason; whatToDo: string; step: string;
+  /** Is the wall gone? Default: the generic wall classifier on the page. */
+  cleared?: (page: Page) => Promise<boolean>;
+  /** Run the work again with the page handed to its site. Resolves to the tool's normal output object. */
+  continue: (hooks: HandoffHooks) => Promise<Record<string, unknown>>;
+}
+type ResumeOutcome =
+  | { kind: "finished"; output: Record<string, unknown> }
+  | { kind: "paused"; handoff: Handoff }     // still walled, or re-parked by the continuation
+  | { kind: "unknown" } | { kind: "expired" } | { kind: "cancelled" };
+```
+
+- At most 3 records. Each holds the `Page` (moved out of the pool with `BrowserSession.detach`, so it holds no pool slot, like a login page), the continuation, the tool name, site, step, reason, `what_to_do`, `created_at` and `expires_at`.
+- Expiry: `WEBRUNNER_HANDOFF_TTL_MS` / `handoff_ttl_ms`, default 600 000 (10 minutes), minimum 60 000. A timer closes the page and forgets the record at expiry; the timer is unref'd so a parked page never keeps the server alive. Cancel closes the page too. `close()` closes them all; `BrowserSession.close()` still closes any page it opened, so a store that was never told is not a leak.
+- Ids are short random strings (`h_` plus 8 hex characters) that are never reused within a process.
+- `health` gains `handoffs: { parked: number; sites: string[] }` (names only, no URLs: a parked URL can carry a query that names the owner).
+
+**4.3 `BrowserSession`** gains one method:
+```ts
+/** Move a leased page out of the pool: its slot is freed at once and the page stays open, unpooled (closed by release() or close()). */
+detach(page: Page): void;
+```
+
+### 16.4 Which walls pause, and how they are told apart
+
+| what the page shows | reason | pauses? | `what_to_do` says |
+|---|---|---|---|
+| a CAPTCHA widget (reCAPTCHA, hCaptcha, Turnstile, Arkose) or CAPTCHA text on a short page | `captcha` | yes | solve the CAPTCHA in the window |
+| a platform checkpoint: Facebook `/checkpoint/`, X account access or verification, Amazon's `validateCaptcha` bot check, Google's "unusual traffic" / `sorry/index` page | `checkpoint` | yes | complete the check in the window |
+| a cookie consent page or dialog the recipe could not dismiss | `consent` | yes | accept or reject the cookie dialog in the window |
+| a login page or redirect, when the recipe needs a session (today's `needsLogin`) | `login_required` | yes | sign in to the platform in the window; webrunner never types |
+| a short page with a one-time-code field (`autocomplete="one-time-code"`, or a code input on a page that mentions a verification code) | `mfa` | yes | enter the code in the window |
+| a wall the recipe knows but the table does not | `unknown_wall` | yes | the recipe's own sentence; cleared when the page moves on |
+| HTTP 403 with an empty body, "blocked by network security", a refused script bundle, a Cloudflare page that does not clear itself | (none) | **no**: `blocked` | "this IP is refused; run from a home connection" |
+
+The generic classifier (`src/core/browser/walls.ts`, built from the agent's `detectBlock` and the social recipes' `classifyWall`) is what `resume` polls with: a handoff is cleared when it finds no wall on the page, and for `unknown_wall` when the page's URL or title changed. Recipes keep their own site-specific detection and report the kind through `RecipeError.wall`.
+
+**4.5 `RecipeContext` and `RecipeError`** gain:
+```ts
+interface RecipeContext {
+  // ... as before
+  /**
+   * Hand the page to the owner. Present only when the hosting tool supports handoff and a human can see the window.
+   * Parks the page with `reason` and `whatToDo`, then waits up to the host's budget for the wall to clear: "cleared" means
+   * re-probe and continue; "timeout" means throw the wall as a RecipeError("blocked", ..., { wall: reason }). In the
+   * original tool call the budget is 0, so the recipe always sees "timeout" and the tool returns `paused` instead of
+   * `blocked`; in a resumed call the budget is what resume was given. `step` names where the recipe stopped.
+   */
+  pause?(reason: HandoffReason, whatToDo: string, step: string): Promise<"cleared" | "timeout">;
+}
+interface RecipeErrorOptions {
+  // ... as before
+  /** What kind of wall a `blocked` error is, when a human could clear it. Absent for IP-level refusals. */
+  wall?: HandoffReason;
+}
+```
+A recipe at a wall does: `const outcome = (await ctx.pause?.(reason, whatToDo, step)) ?? "timeout"; if (outcome === "cleared") { navigate again and re-probe } else throw new RecipeError("blocked", message, { wall: reason, needsLogin })`. Because every recipe already re-navigates from the top of `run`, "re-probe and continue" is the existing loop.
+
+**Provider hooks** (`SocialHooks`, `ReviewHooks`, `HotelSearchHooks`, the Google Flights `SearchHooks`) gain `handoff?: HandoffHooks` (`src/core/browser/types.ts`):
+```ts
+interface HandoffHooks {
+  /** The parked page to continue on, for this site only; the provider uses it instead of acquiring one. */
+  parked?: { site: string; page: Page };
+  /** Park `page` (or re-park it) and wait up to the host's budget. See RecipeContext.pause. */
+  pause(page: Page, site: string, reason: HandoffReason, whatToDo: string, step: string): Promise<"cleared" | "timeout">;
+  /** True when `page` is held by the store: the provider must not release it. */
+  isParked(page: Page): boolean;
+}
+```
+The provider binds `ctx.pause` to `hooks.handoff.pause` with its page and site, uses `hooks.handoff.parked.page` when the site matches, and skips `release` for a parked page. `src/tools/handoff.ts` holds the tool-side helper that builds the hooks, runs the work, and turns a parked call into the `paused` result.
+
+### 16.5 Tool adoption
+
+- **`browse_task`** adopts it fully. On `captcha`, `checkpoint`, `consent` or `login_required` (its `detectBlock` gains consent and MFA) it parks the page with `step: "step N of M"` and returns `paused`; `bot_wall` stays `blocked` (3.4). The continuation re-enters the step loop with the same history, `steps_taken`, step index, cost meter and domain policy, so the step budget is intact; the run's 10-minute clock restarts. `blocked_reason` is unchanged.
+- **Recipes** (WP46): the social recipes (X, Facebook, Reddit), the review recipes (Google Maps, Google Play, Amazon), Google Flights and Google Hotels (consent and unusual-traffic pages). Google Finance, Trustpilot and `fetch_page` in browser mode are not in this phase (OPEN: adopt once the first four have run live).
+- **`accounts connect`** is rebuilt as a login handoff: it opens the login URL on an unpooled page, parks it with `reason: "login_required"`, `cleared` = the platform's session cookies are present, and the continuation = close the page and report `connected`. It polls as today for `wait_seconds` and keeps its input and output: `connected`, `already_connected`, or `pending` with the page open; `pending` adds `handoff_id` (optional, new) so `resume` works too, and the page's lifetime is the handoff TTL instead of the service's own 10-minute timer. `accounts list` still picks up a login that finished in a parked page. `health.accounts` is unchanged.
+- **Descriptions**: the sentence in 16.1 on every adopting tool.
+- **README**: a section "When a site stops the agent" explaining the three outcomes a wall can have (paused: clear it in the window and let the assistant resume; blocked by IP: run from a home connection; blocked by policy: a wall the tool will not cross, such as a purchase or a password field) and what the owner does for each; the "Accounts" section and each adopting tool's section mention `paused`.
+
+### 16.6 Config, caps, health
+
+- **4.8** gains `WEBRUNNER_HANDOFF_TTL_MS` / `handoff_ttl_ms` (whole ms, min 60 000, default 600 000) and, for WP47, `BROWSER_CHANNEL` / `browser_channel` (`chromium` default, `chrome`, `msedge`): the browser persistent mode launches, as Playwright's `channel`. `chrome` is the Google Chrome already installed on the machine, a real browser the owner has; it is not spoofing and no flag or fingerprint is changed.
+- **`src/tools/guard.ts`**: `resume` 330 s.
+- **`health`**: `handoffs: { parked, sites }` (16.3); under `config.browser`, `channel`.
+- **Installer** (WP47): `scripts/install-claude-code.sh --cdp` passes `BROWSER_CDP_URL=http://127.0.0.1:9222` and prints the one-line command that starts Chrome with `--remote-debugging-port=9222` and a dedicated `--user-data-dir` for this OS; the README's Browser setup section leads with attaching to the owner's Chrome.
+
+### 16.7 Work breakdown, phase 7
+
+Branch names `wp<N>-<slug>`, one PR each against `main`, the section 7 protocol applies.
+
+**WP44: plan and contracts** (orchestrator)
+- Deliver: this section; the rows in 4.8; `src/schemas/handoff.ts`; `HandoffReason`, `HandoffHooks` and `HandoffStore` in `src/core/browser/types.ts`; `pause` and `wall` in `src/core/browser/recipes/types.ts`; `handoff?` on the four provider hook types; `handoff_ttl_ms` and `browser_channel` in `src/config.ts`; the `resume` cap; tests for the config keys, the cap and the schema wrapper. No behaviour.
+
+**WP45: the engine, `resume` and `browse_task`**
+- Depends on: WP44.
+- Files: `src/core/browser/{handoff,walls,session}.ts` (`detach`), `src/core/browser/agent.ts`, `src/tools/{handoff,resume,browse_task,health,index}.ts`, `src/deps.ts`, `README.md` ("When a site stops the agent"; `browse_task`, `resume` and `health` sections), tests under `test/unit/browser/` and `test/unit/tools/`, every test fake of `BrowserSession`.
+- Accept, on real Chromium against fixture pages: a CAPTCHA fixture parks a `browse_task` run and returns `paused` with `reason: "captcha"`; the test "clears" the wall by swapping the served page, `resume` finishes the run with its step count intact and returns the normal output; a wall still there after `wait_seconds: 0` returns `paused` again with the same id; expiry closes the page (injected clock); three parked runs refuse a fourth with a `provider` error naming the sites; headless persistent mode never pauses and its `blocked` message says how to; `cancel` closes the page and a later `resume` is `invalid_input`; `close()` cleans every page up; `resume` on an unknown id is `invalid_input`; no path calls `fill`, `type` or `press` (page spy); `health` reports the parked count and sites.
+
+**WP46: recipes and `accounts connect`**
+- Depends on: WP45.
+- Files: the eight recipes, `src/core/social/platforms/shared-browser.ts`, `src/core/reviews/sources/shared-browser.ts`, `src/core/{flights,hotels}/providers/google-*.ts`, `src/core/{social,reviews}/index.ts` (the one-handoff-per-call caveat), `src/core/accounts/index.ts`, `src/tools/{search_flights,search_hotels,social_search,search_reviews,accounts}.ts`, their tests and fixtures, `README.md` (Accounts and the tool sections), the 14.10 and 16.8 decision logs.
+- Accept, on real Chromium: each recipe's login, CAPTCHA and checkpoint fixtures produce `RecipeError.wall` of the right kind and, through the tool with a headful store, a `paused` result whose `site` and `reason` match; the social and review fixtures that redirect to a login page and are then "logged in" by the test (the server stops redirecting) finish through `resume` with the normal output; the 403-empty-body, network-security and refused-bundle fixtures stay `blocked` with the IP sentence and never park; `accounts connect` with `wait_seconds: 0` returns `pending` with a `handoff_id`, `resume` after the fixture sets the cookie returns `connected`, and `accounts list` reports it; the existing accounts tests still pass; no recipe or path types (spy).
+
+**WP47: desktop install attached to the owner's Chrome**
+- Depends on: WP44 (the `browser_channel` row).
+- Files: `scripts/install-claude-code.sh` (`--cdp`), `scripts/install-codex.sh` (the same flag), `test/unit/scripts.test.ts`, `src/core/browser/session.ts` (`channel`), `src/tools/health.ts`, `README.md` (Browser setup leads with CDP; Configuration table), the decision log.
+- Accept: `--cdp --dry-run` prints `BROWSER_CDP_URL=http://127.0.0.1:9222` among the passed variables and the Chrome command for the current OS; `browser_channel: "chrome"` reaches `launchPersistentContext` as `channel` (asserted with an injected launcher), `chromium` passes none; `health` reports the channel.
+
+### 16.8 Decision log, phase 7
+
+- **2026-11-04, WP44**: numbering: the brief for this phase said "start at wp31" and "section 15", both of which were taken by the time it ran (WP31 to WP43 and section 15 are on `main`), so this is section 16 and WP44 to WP47. The two fail-fast fixes the brief asked for (no silent empty Google Flights list; Google Maps `blocked` at once on a refused script) were done by WP32 on 2026-10-26 and are not repeated. The pause is a re-run, not a suspended call: suspending a recipe's promise across tool calls would have had to freeze every deadline, per-platform timeout and wall clock around it, while re-running from navigation with the kept page needs none of that and matches how every recipe already starts. The suspended-call shape survives only in `pause`'s return type (`"cleared" | "timeout"`), so a resumed call can also wait inside the recipe when a host gives it a budget. `browse_task` keeps its loop state because its budget is per decision and would otherwise be spent twice.

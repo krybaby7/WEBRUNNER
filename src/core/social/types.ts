@@ -1,5 +1,6 @@
 import type { SocialItem, SocialPlatform, SocialSearchQuery } from "../../schemas/social.js";
 import type { CostMeter } from "../llm/cost.js";
+import type { HandoffHooks } from "../browser/types.js";
 
 export type { SocialItem, SocialPlatform, SocialSearchQuery };
 
@@ -7,6 +8,8 @@ export type { SocialItem, SocialPlatform, SocialSearchQuery };
 export interface SocialHooks {
   caveats?: string[];
   meter?: CostMeter;
+  /** Human handoff (PLAN.md 16.4): park the page at a wall the owner can clear. Absent when the host cannot pause. */
+  handoff?: HandoffHooks;
 }
 
 /**
