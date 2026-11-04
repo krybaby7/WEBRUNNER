@@ -37,7 +37,7 @@ const IP_REFUSAL_RE = /HTTP 403|network block|network security|refused|bot check
 
 /** Where the recipe stopped, for the handoff's `step`: the site and the first clause of its own message. */
 function stepOf(site: string, err: RecipeError): string {
-  const clause = err.message.split(/[;.(]/)[0]?.trim() ?? err.message;
+  const clause = err.message.split(/[;(]/)[0]?.trim() ?? err.message;
   return `${site}: ${clause.slice(0, 80)}`;
 }
 

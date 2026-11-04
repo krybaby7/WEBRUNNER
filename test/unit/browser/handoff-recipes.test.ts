@@ -92,7 +92,7 @@ describe("runRecipeWithPause", () => {
     });
     expect(await runRecipeWithPause(r, page, "q", ctx, hooksFor(["cleared"], calls))).toBe("ok");
     expect(runs).toBe(2);
-    expect(calls).toEqual([[page, "fake", "captcha", "", "fake: X served a CAPTCHA at https://x"]]);
+    expect(calls).toEqual([[page, "fake", "captcha", "", "fake: X served a CAPTCHA at https://x.com/search"]]);
   });
 
   it("throws the wall as it is on 'timeout' (the tool then reports paused), and a wall met twice", async () => {
