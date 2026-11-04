@@ -161,6 +161,13 @@ class PlaywrightBrowserSession implements BrowserSession {
     return page;
   }
 
+  detach(page: Page): void {
+    if (!this.leased.delete(page)) return;
+    this.unpooled.add(page);
+    page.once("close", () => this.unpooled.delete(page));
+    this.passSlot();
+  }
+
   // -- pool ---------------------------------------------------------------
 
   private async takeSlot(): Promise<void> {

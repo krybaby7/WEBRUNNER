@@ -232,7 +232,8 @@ describe("tool wall-clock caps", () => {
     expect(desc("weather")).toMatch(/20 seconds/);
     expect(desc("exchange_rate")).toMatch(/20 seconds/);
     expect(desc("accounts")).toMatch(/330 seconds/);
-    for (const name of ["web_search", "fetch_page", "search_flights", "search_hotels", "search_reviews", "browse_task", "social_search", "deep_research", "accounts", "market_quote", "weather", "exchange_rate"]) {
+    expect(desc("resume")).toMatch(/330 seconds/);
+    for (const name of ["web_search", "fetch_page", "search_flights", "search_hotels", "search_reviews", "browse_task", "social_search", "deep_research", "accounts", "resume", "market_quote", "weather", "exchange_rate"]) {
       expect(desc(name)).toMatch(/timeout/);
     }
   });

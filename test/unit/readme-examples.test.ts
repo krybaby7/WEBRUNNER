@@ -8,6 +8,7 @@ import { BrowseTaskInputSchema } from "../../src/schemas/browse_task.js";
 import { DeepResearchInputSchema } from "../../src/schemas/deep_research.js";
 import { FetchPageInputSchema } from "../../src/schemas/fetch_page.js";
 import { SearchFlightsInputSchema } from "../../src/schemas/flights.js";
+import { ResumeInputSchema } from "../../src/schemas/handoff.js";
 import { ExchangeRateInputSchema } from "../../src/schemas/fx.js";
 import { SearchHotelsInputSchema } from "../../src/schemas/hotels.js";
 import { MarketQuoteInputSchema } from "../../src/schemas/markets.js";
@@ -40,6 +41,7 @@ const INPUT_SCHEMAS: Record<string, ZodType> = {
   social_search: SocialSearchInputSchema,
   search_reviews: SearchReviewsInputSchema,
   accounts: AccountsInputSchema,
+  resume: ResumeInputSchema,
 };
 const NO_INPUT = new Set(["ping", "health"]);
 

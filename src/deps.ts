@@ -1,6 +1,7 @@
 import type { Config } from "./config.js";
 import { createBrowserSession } from "./core/browser/session.js";
-import type { BrowserSession } from "./core/browser/types.js";
+import { createHandoffStore } from "./core/browser/handoff.js";
+import type { BrowserSession, HandoffStore } from "./core/browser/types.js";
 import { createCache, type Cache } from "./core/cache/index.js";
 import { createFetchService, type FetchService } from "./core/fetch/index.js";
 import { BrowserFetcher } from "./core/fetch/browser.js";
@@ -37,6 +38,8 @@ export interface Deps {
    * `acquire()`; `closeDeps` closes it on shutdown.
    */
   browser?: BrowserSession;
+  /** Pages parked for the owner to clear a wall on (PLAN.md 16.3). Set by buildDeps with the browser. */
+  handoffs?: HandoffStore;
   /** URL to Markdown with fast fetchers, a browser fallback and a cache (PLAN.md 3.2). Set by buildDeps. */
   fetch?: FetchService;
   /**
@@ -69,6 +72,7 @@ export function buildDeps(config: Config): Deps {
       : undefined;
   const { client: llm, info: llmInfo } = createModelClient(config, dailyCap !== undefined ? { meter: dailyCap } : {});
   const browser = createBrowserSession(config);
+  const handoffs = createHandoffStore({ browser, config, log });
   const fetch = createFetchService({
     fastFetchers: buildFastFetchers(config),
     browserFetcher: new BrowserFetcher(browser),
@@ -76,7 +80,7 @@ export function buildDeps(config: Config): Deps {
     log,
     secrets,
   });
-  return { config, log, cache, search, llm, llmInfo, browser, fetch, ...(dailyCap !== undefined && { dailyCap }) };
+  return { config, log, cache, search, llm, llmInfo, browser, handoffs, fetch, ...(dailyCap !== undefined && { dailyCap }) };
 }
 
 /** The model backend a tool can count on: what buildDeps resolved, or for hand-built deps, whether the API key is set. */
@@ -99,8 +103,15 @@ export async function closeDeps(deps: Deps, browserCloseTimeoutMs: number = BROW
     const gaveUp = new Promise<"timeout">((resolve) => {
       timer = setTimeout(() => resolve("timeout"), browserCloseTimeoutMs);
     });
+    const browser = deps.browser;
+    const closeAll = async (): Promise<"closed"> => {
+      // Parked pages first, so their records are forgotten before the browser they live in goes.
+      await deps.handoffs?.close().catch((err: unknown) => log.warn("error while closing parked handoffs", { error: String(err) }));
+      await browser.close();
+      return "closed";
+    };
     try {
-      const outcome = await Promise.race([deps.browser.close().then(() => "closed" as const), gaveUp]);
+      const outcome = await Promise.race([closeAll(), gaveUp]);
       if (outcome === "timeout") {
         log.warn("the browser did not close in time; exiting anyway", { timeout_ms: browserCloseTimeoutMs });
       }

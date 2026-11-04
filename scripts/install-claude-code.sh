@@ -219,7 +219,7 @@ Verify:
   claude mcp get $SERVER_NAME          # shows the command and the variable names passed through
 Then start a new Claude Code session; the tools are ping, web_search, fetch_page,
 deep_research, browse_task, search_flights, search_hotels, market_quote, weather,
-exchange_rate, social_search, search_reviews, accounts and health. Inside Claude Code, /mcp shows the same.
+exchange_rate, social_search, search_reviews, accounts, resume and health. Inside Claude Code, /mcp shows the same.
 
 To change keys or move the checkout, run this script again. To remove it:
   scripts/uninstall.sh

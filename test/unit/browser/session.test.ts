@@ -343,6 +343,46 @@ describe.skipIf(!probe.available)(`BrowserSession${probe.available ? "" : ` (${p
     }
   });
 
+  it("detach moves a leased page out of the pool: its slot is freed at once, the page stays open and release closes it (PLAN.md 16.3)", async () => {
+    const { session } = await newSession();
+    try {
+      const held = await Promise.all([session.acquire(), session.acquire(), session.acquire()]);
+      const waiter = session.acquire();
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 1 });
+
+      const parked = held[0] as Page;
+      await parked.goto(`${server.url}/article.html`);
+      session.detach(parked);
+      // The waiter got the freed slot; the detached page is still open and usable.
+      const fourth = await waiter;
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 0 });
+      expect(parked.isClosed()).toBe(false);
+      expect(await parked.title()).toContain("Tides");
+
+      // Detaching again, or detaching a page the session never leased, changes nothing.
+      session.detach(parked);
+      const stray = await fourth.context().newPage();
+      session.detach(stray);
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 0 });
+      await stray.close();
+
+      // release() closes a detached page without freeing a slot.
+      await session.release(parked);
+      expect(parked.isClosed()).toBe(true);
+      expect(session.stats()).toMatchObject({ activePages: 3, waiting: 0 });
+
+      // close() closes a detached page that was never released.
+      const another = held[1] as Page;
+      session.detach(another);
+      await session.release(fourth);
+      await session.release(held[2] as Page);
+      await session.close();
+      expect(another.isClosed()).toBe(true);
+    } finally {
+      await session.close();
+    }
+  });
+
   it("openUnpooledPage is outside the pool: not counted, available while the pool is full, closed by release or close", async () => {
     const { session } = await newSession();
     try {
