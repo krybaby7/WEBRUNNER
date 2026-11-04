@@ -193,7 +193,6 @@ class DefaultAccountsService implements AccountsService {
       );
     }
     const caveats = this.connectCaveats(platform);
-    const started = this.now();
 
     if (await this.isConnected(spec)) {
       // A login finished in the page a previous `pending` connect left open completes that flow: `connected`.
@@ -214,6 +213,8 @@ class DefaultAccountsService implements AccountsService {
       };
     }
 
+    // The wait is counted from here: the cookie check above may have had to launch the browser first.
+    const started = this.now();
     // Reuse the login page a previous `pending` left open (the owner may be halfway through), or open a fresh one and park it.
     const id = this.pendingId(platform) ?? (await this.parkLoginPage(platform, spec));
     const outcome = await this.store.resume(id, Math.max(0, waitSeconds));
