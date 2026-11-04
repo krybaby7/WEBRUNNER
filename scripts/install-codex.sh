@@ -270,7 +270,7 @@ Verify:
   codex mcp list             # webrunner should be listed
 Then start a new Codex session; the tools are ping, web_search, fetch_page,
 deep_research, browse_task, search_flights, search_hotels, market_quote, weather,
-exchange_rate, social_search, search_reviews, accounts and health.
+exchange_rate, social_search, search_reviews, accounts, resume and health.
 
 tool_timeout_sec is $TOOL_TIMEOUT_SEC because Codex's default (60 s) is shorter than a deep_research call.
 To remove it: scripts/uninstall.sh

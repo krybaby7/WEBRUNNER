@@ -26,6 +26,7 @@ function fakeBrowser() {
     cookies: async () => [],
     clearCookies: async () => 0,
     openUnpooledPage: async () => page,
+    detach: () => undefined,
   };
   return { page, browser };
 }

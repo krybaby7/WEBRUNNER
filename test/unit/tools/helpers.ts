@@ -48,6 +48,7 @@ export function fakeBrowser(over: Partial<BrowserSessionStats> = {}, isOpen = fa
     cookies: () => Promise.resolve([]),
     clearCookies: () => Promise.resolve(0),
     openUnpooledPage: () => Promise.reject(new Error("fakeBrowser: openUnpooledPage is not available")),
+    detach: () => undefined,
   };
 }
 

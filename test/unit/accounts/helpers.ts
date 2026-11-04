@@ -137,6 +137,7 @@ export function cookieFakeBrowser(opts: { cookies?: BrowserCookie[]; open?: bool
       b.store = b.store.filter((c) => !cookieDomainMatches(c.domain, domain));
       return Promise.resolve(before - b.store.length);
     },
+    detach: () => undefined,
     openUnpooledPage: () => {
       b.calls.push("openUnpooledPage");
       b.open = true;

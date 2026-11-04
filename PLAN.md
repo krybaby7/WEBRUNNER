@@ -1738,7 +1738,8 @@ interface RecipeContext {
    * Parks the page with `reason` and `whatToDo`, then waits up to the host's budget for the wall to clear: "cleared" means
    * re-probe and continue; "timeout" means throw the wall as a RecipeError("blocked", ..., { wall: reason }). In the
    * original tool call the budget is 0, so the recipe always sees "timeout" and the tool returns `paused` instead of
-   * `blocked`; in a resumed call the budget is what resume was given. `step` names where the recipe stopped.
+   * `blocked`. In this phase the budget is 0 in a resumed call too: `resume` waits for the wall to clear before it runs
+   * the continuation, and a wall met again is re-parked. `step` names where the recipe stopped.
    */
   pause?(reason: HandoffReason, whatToDo: string, step: string): Promise<"cleared" | "timeout">;
 }

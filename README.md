@@ -23,7 +23,7 @@ The server calls the Claude API itself for research and extraction, so the clien
 
 ## Status and terms of service
 
-Version 0.2.0. All fourteen tools are implemented and unit-tested offline; integration tests that hit real services exist but are gated (see Development). Everything below was checked from cloud machines (a shared cloud IP, headless Chromium, no logged-in accounts), first by the v0.2 build on 2026-10-18 and then in a first live run after the merge on 2026-10-21. None of it has been run from the owner's own machine yet.
+Version 0.2.0. All fifteen tools are implemented and unit-tested offline; integration tests that hit real services exist but are gated (see Development). Everything below was checked from cloud machines (a shared cloud IP, headless Chromium, no logged-in accounts), first by the v0.2 build on 2026-10-18 and then in a first live run after the merge on 2026-10-21. None of it has been run from the owner's own machine yet.
 
 - **Verified live (2026-10-21):** `weather` (Open-Meteo geocoding and forecast), `exchange_rate` (Frankfurter), `market_quote` through Yahoo Finance (quotes, daily change, history, name lookup), CoinGecko and Google Finance (18 exchange suffixes and 4 indices), `search_hotels` (Rome and Paris, read deterministically, organic cards now with guest ratings), Hacker News and Bluesky (search, threads, handles), the App Store, Google Play (the 3 reviews on the server-rendered details page), and Trustpilot past its AWS WAF challenge with no key. Google Flights loads and its fares were readable in two of three gated runs that read the page labels without a model (26 and 30 offers; a third run, on a GitHub runner, found no fare labels at all); the tool's own extraction step needs `ANTHROPIC_API_KEY` and has not been run since 2026-10-18. Several mappings written from documentation were wrong in ways only a live response showed (Yahoo's previous close and pence, CoinGecko name routing, Bluesky's search host, Google Finance index pages, Open-Meteo's hourly span); those are fixed and the live responses are recorded as fixtures.
 - **Blocked from cloud IPs, so still to check from a home IP:** Reddit (its JSON endpoints and old.reddit.com both answer 403; the API path needs `REDDIT_CLIENT_ID`), X (403 to headless Chromium even on its login page), Facebook (404 to anonymous search: needs a connected account), Google Maps (its script bundle answers 403, so the page never renders), Google Play's full review list (its UI script is refused, so "See all reviews" does nothing), and Amazon's review list (sign-in redirect; the product page's top reviews, which the source falls back to, rendered in 5 of 16 logged-out loads).
@@ -268,6 +268,14 @@ The flow, with `accounts`:
 
 **Terms of service and the risk to your account.** Automated reading of X, Facebook, Google Maps, Google Play, Amazon and Reddit's website (as opposed to its API) is against those platforms' terms. Done through your account it can get that account rate-limited, challenged or suspended; a CAPTCHA or checkpoint is reported as `blocked` and never solved. The owner has accepted this for personal, low-volume use from their own machine, as for Google Flights. Keep the volume low (a handful of searches, not a crawl), prefer the API platforms where they exist (Reddit's API with `REDDIT_CLIENT_ID`, Hacker News, Bluesky, YouTube, the App Store feed, Trustpilot), and use an account you would not mind losing for the browser platforms. Instagram and LinkedIn can be connected but no tool reads them yet.
 
+## When a site stops the agent
+
+A site can put up a wall in front of a browser tool. Depending on what the wall is, one of three things happens, and the result tells you which:
+
+1. **Paused: a wall you can clear.** A CAPTCHA, a security checkpoint (Facebook's, X's, Amazon's bot check, Google's "unusual traffic" page), a cookie consent dialog the tool could not dismiss, a login page when the tool needs your session, or a one-time code. If the browser window is one you can see (the default on a desktop, or your own Chrome over CDP), the tool leaves the page open there and returns a normal result with `paused: true` and a `handoff`: its `what_to_do` says what to do in the window, `id` is what you pass to `resume`, `expires_at` is when the page is closed if nothing happens (10 minutes; `WEBRUNNER_HANDOFF_TTL_MS`). Clear the wall yourself in the window, by hand (webrunner never types, clicks through a challenge or solves anything for you), then let your assistant call `resume` with the id: it waits for the wall to be gone and continues the run, returning the paused tool's normal output. `browse_task` continues at the step it stopped on; a recipe-based tool runs its search again on the page you cleared. At most three pages are parked at once; `health` lists them by site. When nobody can see the window (headless), the same walls are reported as `blocked` with a message saying to run headful or attach your Chrome.
+2. **Blocked by the network: nothing to clear.** An HTTP 403 with an empty body, Reddit's "blocked by network security", a script bundle the site refuses to serve, a Cloudflare page that never clears: the site is refusing the IP address, and no window helps. The tool returns `blocked` and the message says so ("this IP is refused; run from a home connection"). Run webrunner from your own machine on a home connection, lower the volume, or use an API source.
+3. **Blocked by policy: a wall the tool will not cross.** A purchase or payment step, a password or card field, a file download, a site off the start domain, a CAPTCHA the tool is asked to solve itself. These are refused by design and reported in the result (`browse_task` says what it refused and why); nothing you do in the window changes that, and that is the point.
+
 ## Using the tools
 
 You normally just ask your assistant in plain language and it picks the tool. The calls below show the arguments the tools take; each example call is checked against the tool's input schema by a test. Results are trimmed (`...`) and the values are illustrative.
@@ -394,8 +402,8 @@ Quick takes under a minute; deep can take several minutes. Every `[n]` in the re
 `browse_task` reads and extracts; it is for live data that has no dedicated tool (prefer `fetch_page` for static content). Limits:
 
 - It never pays, buys or submits payment forms: buttons and forms matching a purchase deny list (`buy`, `pay`, `checkout`, `place order`, and similar) and payment URLs are refused, and it never types into password or card fields.
-- It never logs in. If the site wants a login it stops with `outcome: "blocked"` and `blocked_reason: "login_required"`; sign in once in the browser profile instead (see Browser setup).
-- It stops on CAPTCHAs and bot walls (`captcha`, `bot_wall`) rather than trying to get past them.
+- It never logs in, and never solves a CAPTCHA or a checkpoint. When the browser window is one you can see (headful, or your own Chrome over CDP), a CAPTCHA, checkpoint, login page or one-time code **pauses** the run instead of ending it: the result is `{ "paused": true, "handoff": { ... } }`, the page stays open in the window, and once you have cleared it the `resume` tool continues the run at the step it stopped on, with the same step budget (see "When a site stops the agent"). When nobody can see the window it stops with `outcome: "blocked"` and `blocked_reason` `captcha` or `login_required`, and the summary says how to run so that you can clear it.
+- It stops on bot walls (`bot_wall`) rather than trying to get past them; an IP-level refusal never pauses, since there is nothing to do in the window.
 - It stays on the start domain unless `allow_navigation_off_domain` is true, never downloads files, and has a ten-minute wall-clock limit.
 - `max_steps` (default 15, max 40) bounds the run, and so does `max_cost_usd` (default 1.00). A run that hits a limit returns `outcome: "partial"` with what it has.
 
@@ -704,13 +712,22 @@ Give `query` to search, or `url` (a Reddit, Hacker News, Bluesky, YouTube, X or 
 
 `list` returns `mode` (`persistent` or `cdp`), the profile directory in persistent mode, and one entry per platform with `connected`, `domains`, `used_by`, `checked_at` and `expires_at` when known. `disconnect` returns `disconnected` with `cookies_cleared`, or `not_connected`. See Accounts above for the flow, the Google recommendation and the risks. The call is capped at 330 seconds (the longest wait plus margin).
 
+### resume
+
+<!-- example: resume -->
+```json
+{ "handoff_id": "h_7f3a9c1e", "wait_seconds": 60 }
+```
+
+`resume` continues a run that a browser tool paused at a wall you cleared by hand: it re-probes the parked page every 2 seconds for up to `wait_seconds` (0 to 300, default 60; 0 probes once), and when the wall is gone it runs the paused tool again on that page and returns **that tool's normal output**. If the wall is still there it returns `paused` again with the same id and an updated `what_to_do`; if the id is unknown or the handoff expired (its page was closed after `WEBRUNNER_HANDOFF_TTL_MS`, 10 minutes by default) it returns `invalid_input`. `{ "handoff_id": "...", "cancel": true }` closes the parked page instead and returns `{ "cancelled": true, "handoff_id": "..." }`. At most three pages are parked at once; a fourth wall is a `provider` error naming them. The call is capped at 330 seconds.
+
 ### ping
 
 `ping` takes no arguments and returns `{ "ok": true, "version": "0.2.0", "time": "..." }`. It is the quickest way to confirm the client can reach the server.
 
 ### health
 
-`health` takes no arguments. It returns the server version and uptime; under `config`, which search providers, fast fetchers, flight sources, hotel sources, market sources, social platforms (with `api` or `browser` access) and review sources are configured, whether `ANTHROPIC_API_KEY`, the Reddit API pair, `YOUTUBE_API_KEY` and `FINNHUB_API_KEY` are set (booleans, never values), the model per role, the model backend and fallback (`llm`), and the browser mode (persistent profile or CDP attach, with `cdp_url` reduced to scheme and host); under `browser`, whether a browser is currently open and its page pool; under `accounts.connected`, the platforms whose session cookies are present **when the browser is already open**, and `null` when it is not (health never starts Chromium to look); cache directory statistics; and the list of registered tools. It makes no network calls. When any tool returns a `config` error, call `health` first to see which key or service is missing.
+`health` takes no arguments. It returns the server version and uptime; under `config`, which search providers, fast fetchers, flight sources, hotel sources, market sources, social platforms (with `api` or `browser` access) and review sources are configured, whether `ANTHROPIC_API_KEY`, the Reddit API pair, `YOUTUBE_API_KEY` and `FINNHUB_API_KEY` are set (booleans, never values), the model per role, the model backend and fallback (`llm`), and the browser mode (persistent profile or CDP attach, with `cdp_url` reduced to scheme and host); under `browser`, whether a browser is currently open and its page pool; under `accounts.connected`, the platforms whose session cookies are present **when the browser is already open**, and `null` when it is not (health never starts Chromium to look); under `handoffs`, how many pages are parked for you to clear a wall on and their sites (never their URLs); cache directory statistics; and the list of registered tools. It makes no network calls. When any tool returns a `config` error, call `health` first to see which key or service is missing.
 
 ### Errors
 
@@ -768,11 +785,11 @@ Flags:
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | WEBRUNNER_LOG_LEVEL=debug node dist/index.js
 ```
 
-You should see one JSON line on stdout that includes the fourteen tools, and JSON log lines on stderr. Also check that you built (`npm run build`; `dist/index.js` must exist), that the path in the client config is absolute and correct, and that `node` is version 22 or newer. Run `claude mcp list` or `codex mcp list` to see the client's view.
+You should see one JSON line on stdout that includes the fifteen tools, and JSON log lines on stderr. Also check that you built (`npm run build`; `dist/index.js` must exist), that the path in the client config is absolute and correct, and that `node` is version 22 or newer. Run `claude mcp list` or `codex mcp list` to see the client's view.
 
 **`config` errors.** `Invalid configuration:` on stderr, exit code 1: a variable or a `config.json` key has a bad value or an unknown name; the message names it (for example `environment variable RESEARCH_MAX_COST_USD: must be a number`). A tool returning code `config` means a key it needs is unset, for example `ANTHROPIC_API_KEY` for `deep_research`, or no search key for `web_search`. Keys in the client's config reach the server only if they were passed (Claude Code `--env`, Codex `env_vars` and the shell Codex was started from); the `config.json` file is the fallback that always works.
 
-**`blocked` errors.** The site served a bot wall, CAPTCHA, login wall or rate limit. webrunner does not try to get around these. Log in once in the browser profile (see Browser setup), try `fetch_page` with `mode: "browser"`, wait and retry for rate limits, or use another source.
+**`blocked` errors.** The site served a bot wall, CAPTCHA, login wall or rate limit. webrunner does not try to get around these. On a desktop (a visible window, or your own Chrome over CDP) a CAPTCHA, checkpoint or login wall pauses the tool instead of blocking it, so you can clear it yourself and `resume`; see "When a site stops the agent". Log in once in the browser profile (see Browser setup), try `fetch_page` with `mode: "browser"`, wait and retry for rate limits, or use another source.
 
 **Chromium does not start.** Run `npx playwright install chromium` from the checkout. On Linux without a display, webrunner runs headless on its own.
 

@@ -24,6 +24,11 @@ export interface BrowserSession {
   clearCookies(filter: { domain: string }): Promise<number>;
   /** A page that is not counted against the pool, for long-lived interactive use (login windows). Closed by `close()`. */
   openUnpooledPage(): Promise<Page>;
+  /**
+   * Move a leased page out of the pool (PLAN.md 16.3): its slot is freed at once and the page stays
+   * open, unpooled (closed by `release()` or `close()`). A page that is not leased is left alone.
+   */
+  detach(page: Page): void;
 }
 
 /**
