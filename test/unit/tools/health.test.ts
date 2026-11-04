@@ -96,7 +96,7 @@ interface Health {
     models: Record<string, string>;
     llm: { backend: string; fallback: string };
     cache_dir: string;
-    browser: { mode: string; profile_dir?: string; cdp_url?: string; headless_default: boolean };
+    browser: { mode: string; profile_dir?: string; cdp_url?: string; headless_default: boolean; channel?: string };
   };
   browser: Record<string, unknown> | null;
   accounts: { connected: string[] | null };
@@ -168,7 +168,7 @@ describe("health tool", () => {
       models: { planner: "p-model", scorer: "s-model", extractor: "e-model", writer: "w-model" },
       llm: { backend: "api", fallback: "none" },
       cache_dir: cacheDir,
-      browser: { mode: "persistent", profile_dir: profileDir, headless_default: true },
+      browser: { mode: "persistent", profile_dir: profileDir, headless_default: true, channel: "chromium" },
     });
     // The names the plan promises (14.2, 14.5, 14.6) are among what the builders report.
     expect(health.config.market_sources).toEqual(expect.arrayContaining(["yahoo", "finnhub", "coingecko", "google_finance"]));

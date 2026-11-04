@@ -106,6 +106,35 @@ describe.skipIf(!probe.available)(`BrowserSession${probe.available ? "" : ` (${p
     }
   });
 
+  it("passes browser_channel to launchPersistentContext as channel, and nothing for Playwright's Chromium (PLAN.md 16.6)", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const launch = (dir: string, options: Record<string, unknown>) => {
+      seen.push(options);
+      return chromium.launchPersistentContext(dir, options as Parameters<typeof chromium.launchPersistentContext>[1]);
+    };
+    const dir = await makeTempDir();
+    dirs.push(dir);
+    const plain = createBrowserSession(makeConfig(dir), { launch });
+    try {
+      await plain.release(await plain.acquire());
+    } finally {
+      await plain.close();
+    }
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).not.toHaveProperty("channel");
+    expect(seen[0]).toMatchObject({ headless: true, viewport: { width: 1366, height: 768 } });
+
+    // A channel is passed through as is; whether that browser exists is Playwright's problem, so the launcher only records here.
+    const recording = (_dir: string, options: Record<string, unknown>) => {
+      seen.push(options);
+      return Promise.reject(new Error("not launched in this test"));
+    };
+    const chrome = createBrowserSession(makeConfig(dir, { channel: "chrome" }), { launch: recording });
+    await expect(chrome.acquire()).rejects.toThrow(/failed to launch chrome .*BROWSER_CHANNEL=chrome needs that browser installed/);
+    expect(seen[1]).toMatchObject({ channel: "chrome" });
+    await chrome.close();
+  });
+
   it("gives each caller a fresh page sharing one context", async () => {
     const { session } = await newSession();
     try {

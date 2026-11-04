@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Register the webrunner MCP server with Claude Code, user scope (every project).
 #
-#   scripts/install-claude-code.sh [--dry-run] [--no-env] [--skip-build]
+#   scripts/install-claude-code.sh [--dry-run] [--no-env] [--skip-build] [--cdp]
 #
 # What it does:
 #   1. checks for node 22+, npm and the claude CLI
 #   2. builds this checkout (npm ci && npm run build)
 #   3. removes an existing user-scope "webrunner" server, then adds it again with
 #      `claude mcp add`, passing through the webrunner variables that are set in
-#      this shell as --env flags
+#      this shell as --env flags; with --cdp, BROWSER_CDP_URL=http://127.0.0.1:9222
+#      too, so webrunner attaches to your own Chrome (the recommended setup), and
+#      the command that starts Chrome with remote debugging is printed
 #
 # Safe to run again: the old registration is replaced, never duplicated.
 #
@@ -61,6 +63,8 @@ ENV_NAMES=(
 DRY_RUN=0
 PASS_ENV=1
 SKIP_BUILD=0
+CDP=0
+CDP_URL="http://127.0.0.1:9222"
 
 usage() {
   sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -70,15 +74,42 @@ Options:
   --dry-run     print what would run; build nothing, change nothing, never run claude
   --no-env      do not pass any environment variables to the server
   --skip-build  do not run npm ci / npm run build (dist/index.js must already exist)
+  --cdp         attach webrunner to your own Chrome: pass BROWSER_CDP_URL=http://127.0.0.1:9222
+                (unless BROWSER_CDP_URL is already set) and print the command that starts Chrome
+                with remote debugging on this OS
   -h, --help    show this help
 EOF
 }
+
+# The command that starts the owner's Chrome with remote debugging on a dedicated
+# profile, for this OS. Recent Chrome versions ignore --remote-debugging-port on
+# the default profile directory, hence --user-data-dir.
+chrome_command() {
+  case "$(uname -s 2>/dev/null)" in
+    Darwin) printf '%s\n' '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug"' ;;
+    MINGW* | MSYS* | CYGWIN*) printf '%s\n' '"/c/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="$LOCALAPPDATA/webrunner/chrome-debug" &' ;;
+    *) printf '%s\n' 'google-chrome --remote-debugging-port=9222 --user-data-dir="$HOME/.config/webrunner/chrome-debug" &' ;;
+  esac
+}
+
+print_chrome_hint() {
+  cat <<EOF
+
+webrunner will attach to your own Chrome at $CDP_URL (BROWSER_CDP_URL).
+Start Chrome with remote debugging on a dedicated profile, and log into your sites there once:
+  $(chrome_command)
+Chrome keeps running when the server exits; webrunner only opens and closes its own tabs.
+Port 9222 gives any local program full control of that browser: never expose it beyond 127.0.0.1.
+EOF
+}
+
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --no-env) PASS_ENV=0 ;;
     --skip-build) SKIP_BUILD=1 ;;
+    --cdp) CDP=1 ;;
     -h | --help) usage; exit 0 ;;
     *) echo "error: unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -88,6 +119,17 @@ done
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
+
+if [ "$CDP" -eq 1 ]; then
+  if [ -n "${BROWSER_CDP_URL:-}" ]; then
+    CDP_URL="$BROWSER_CDP_URL"
+  else
+    export BROWSER_CDP_URL="$CDP_URL"
+  fi
+  if [ "$PASS_ENV" -eq 0 ]; then
+    warn "--cdp with --no-env passes nothing: put browser_cdp_url in ~/.config/webrunner/config.json yourself."
+  fi
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTRY="$ROOT/dist/index.js"
@@ -198,6 +240,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
   say "[dry-run] would then run:"
   say "  $(print_command)"
   say "[dry-run] nothing was changed and claude was not run."
+  if [ "$CDP" -eq 1 ]; then print_chrome_hint; fi
   exit 0
 fi
 
@@ -224,3 +267,4 @@ exchange_rate, social_search, search_reviews, accounts, resume and health. Insid
 To change keys or move the checkout, run this script again. To remove it:
   scripts/uninstall.sh
 EOF
+if [ "$CDP" -eq 1 ]; then print_chrome_hint; fi

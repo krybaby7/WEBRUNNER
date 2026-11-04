@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { Config } from "../config.js";
+import { BROWSER_CHANNELS, type Config } from "../config.js";
 import { createAccountsService } from "../core/accounts/index.js";
 import { resolveHeadless } from "../core/browser/session.js";
 import { buildFastFetchers } from "../core/fetch/fast/index.js";
@@ -60,6 +60,8 @@ const HealthOutputSchema = z.object({
       profile_dir: z.string().optional(),
       cdp_url: z.string().optional(),
       headless_default: z.boolean(),
+      /** Persistent mode: the browser it launches (PLAN.md 16.6). */
+      channel: z.enum(BROWSER_CHANNELS).optional(),
     }),
   }),
   browser: BrowserStatsSchema.nullable(),
@@ -115,7 +117,12 @@ function browserConfig(config: Config) {
   const cdpUrl = config.browser.cdp_url;
   return cdpUrl !== undefined
     ? { mode: "cdp" as const, cdp_url: redactCdpUrl(cdpUrl), headless_default: resolveHeadless(config) }
-    : { mode: "persistent" as const, profile_dir: config.browser.profile_dir, headless_default: resolveHeadless(config) };
+    : {
+        mode: "persistent" as const,
+        profile_dir: config.browser.profile_dir,
+        headless_default: resolveHeadless(config),
+        channel: config.browser.channel ?? "chromium",
+      };
 }
 
 /**

@@ -223,21 +223,27 @@ class PlaywrightBrowserSession implements BrowserSession {
     const profileDir = this.config.browser.profile_dir;
     await mkdir(profileDir, { recursive: true });
     const intl = Intl.DateTimeFormat().resolvedOptions();
+    // PLAN.md 16.6: `browser_channel` picks the Google Chrome or Microsoft Edge installed on the machine
+    // instead of Playwright's Chromium. A real browser the owner has; no flag or fingerprint is changed.
+    const channel = this.config.browser.channel;
+    const launch = this.opts.launch ?? ((dir, options) => chromium.launchPersistentContext(dir, options));
     try {
-      const ctx = await chromium.launchPersistentContext(profileDir, {
+      const ctx = await launch(profileDir, {
         headless: this.headless,
         viewport: { ...VIEWPORT },
         locale: intl.locale,
         timezoneId: intl.timeZone,
+        ...(channel !== undefined && { channel }),
         ...(this.opts.executablePath !== undefined && { executablePath: this.opts.executablePath }),
       });
       this.mode = "persistent";
-      log.info("browser launched", { mode: "persistent", headless: this.headless, profile_dir: profileDir });
+      log.info("browser launched", { mode: "persistent", headless: this.headless, profile_dir: profileDir, channel: channel ?? "chromium" });
       return ctx;
     } catch (err) {
       throw new Error(
-        `failed to launch Chromium with profile ${profileDir}: ${errorMessage(err)}. ` +
-          "If another instance is using this profile, close it or set WEBRUNNER_BROWSER_PROFILE_DIR.",
+        `failed to launch ${channel ?? "Chromium"} with profile ${profileDir}: ${errorMessage(err)}. ` +
+          "If another instance is using this profile, close it or set WEBRUNNER_BROWSER_PROFILE_DIR." +
+          (channel !== undefined ? ` BROWSER_CHANNEL=${channel} needs that browser installed; unset it to use Playwright's Chromium.` : ""),
         { cause: err },
       );
     }
