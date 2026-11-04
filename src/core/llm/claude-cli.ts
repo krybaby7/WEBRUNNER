@@ -92,7 +92,8 @@ export function createClaudeCliClient(config: Config, opts: ClaudeCliOptions): C
     const defaults = ROLE_DEFAULTS[req.role];
     const effort = req.effort ?? defaults.effort;
     const maxTokens = req.maxTokens ?? defaults.maxTokens;
-    const schema = req.schema !== undefined ? JSON.stringify(zodOutputFormat(req.schema).schema) : undefined;
+    const tool = req.schema !== undefined ? toolSchema(zodOutputFormat(req.schema).schema as Json) : undefined;
+    const schema = tool !== undefined ? JSON.stringify(tool.schema) : undefined;
     if (schema !== undefined && schema.length > MAX_SCHEMA_CHARS) {
       throw new LlmError("internal", "schema", `The output schema is ${schema.length} characters as JSON Schema, more than the ${MAX_SCHEMA_CHARS} the claude command line allows`, {
         retryable: false,
@@ -180,7 +181,7 @@ export function createClaudeCliClient(config: Config, opts: ClaudeCliOptions): C
     }
     const text = typeof final.result === "string" && final.result !== "" ? final.result : undefined;
     const response: LlmResponse = { usage, costUsd, model: servedBy, stopReason, ...(text !== undefined && { text }) };
-    if (req.schema !== undefined) response.parsed = parseStructured(req.schema, final.structured_output, text);
+    if (req.schema !== undefined) response.parsed = parseStructured(req.schema, final.structured_output, text, tool?.wrapped ?? false);
     return response;
   }
 
@@ -318,7 +319,34 @@ function servingModel(result: ResultEvent): string | undefined {
   return best;
 }
 
-function parseStructured(schema: NonNullable<LlmRequest["schema"]>, structured: unknown, text: string | undefined): unknown {
+type Json = Record<string, unknown>;
+
+/**
+ * The schema `--json-schema` gets. Claude Code turns it into a tool, and the API
+ * requires a tool's `input_schema` to be an object (`type: "object"`); a schema
+ * whose top level is a union (`anyOf`) or an array is refused with HTTP 400,
+ * which is how the browse agent's action schema failed on 2026-11-04. Such a
+ * schema is wrapped as the `value` property of an object, with any `$defs`
+ * kept at the root so `$ref`s still resolve; `parseStructured` unwraps it.
+ */
+export function toolSchema(schema: Json): { schema: Json; wrapped: boolean } {
+  if (schema["type"] === "object") return { schema, wrapped: false };
+  const { $schema, $defs, definitions, ...body } = schema;
+  return {
+    schema: {
+      ...($schema !== undefined && { $schema }),
+      ...($defs !== undefined && { $defs }),
+      ...(definitions !== undefined && { definitions }),
+      type: "object",
+      properties: { value: body },
+      required: ["value"],
+      additionalProperties: false,
+    },
+    wrapped: true,
+  };
+}
+
+function parseStructured(schema: NonNullable<LlmRequest["schema"]>, structured: unknown, text: string | undefined, wrapped: boolean): unknown {
   let value = structured;
   if (value === undefined && text !== undefined) {
     try {
@@ -330,6 +358,7 @@ function parseStructured(schema: NonNullable<LlmRequest["schema"]>, structured: 
   if (value === undefined) {
     throw new LlmError("provider", "schema", "Structured output was empty", { retryable: false });
   }
+  if (wrapped && typeof value === "object" && value !== null && "value" in value) value = (value as { value: unknown }).value;
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
     const issues = parsed.error.issues.slice(0, 5).map((i) => ({ path: i.path.join("."), message: i.message }));

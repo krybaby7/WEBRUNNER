@@ -1589,6 +1589,8 @@ All flags were checked against Codex CLI 0.164.0; the behaviours below were chec
 
 ### 15.7 Decision log, phase 6
 
+- **2026-11-04, WP48 (`claude-cli`: non-object output schemas)**: the first `browse_task` run through the subscription backend failed with HTTP 400 "tools.1.custom.input_schema.type: Field required". `claude -p --json-schema` turns the schema into a tool, and the API requires a tool's `input_schema` to be an object; the browse agent's action schema is a discriminated union (`anyOf` at the top), and a recipe's extraction schema is often an array. The backend now wraps such a schema as the `value` property of an object (`$defs` kept at the root so `$ref`s resolve) and unwraps the structured output, as the Codex backend has done since WP35. Object schemas are passed unchanged. Live before the fix: `search_flights` read its 9 offers without the model (the label probe) and `search_reviews` read deterministically, so nothing else had hit it.
+
 - **2026-10-27, WP35 (`codex-cli` fallback)**:
   - **Isolation.** Codex 0.164 added `--ignore-user-config`, which solves 15.4's open question without a separate `CODEX_HOME` (which would have meant copying sign-in files) or a per-server list that goes stale. A live run of the gated integration test watches every process below the test while Codex answers and allows only Codex's own.
   - **The model is always passed.** `codex_model` defaults to `gpt-6.1-sol`, Codex's default, instead of being left unset: Codex's events do not name the model, and the cost needs it. One model serves every role, at the role's effort.
