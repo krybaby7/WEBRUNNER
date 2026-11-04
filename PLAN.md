@@ -1336,6 +1336,8 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the Section 7 protocol 
 
 ### 14.10 Decision log, phase 5
 
+- **2026-11-04, WP49 (Google Hotels prices from the owner's Chrome)**. The first `search_hotels` run through the owner's signed-in Chrome returned 10 hotels and no price: the organic cards' price labels read "Prices starting from EGP 3,238, ..." (the account's currency, a non-breaking space after the ISO code) although the URL asked for `curr=USD`, and `labelPriceText` stopped at the first space. It now reads up to the first comma followed by a space; a caveat says when the page's currency is not the requested one, and that `max_price_per_night` (compared in the requested currency) would hide such rows. Also seen: "Next" paginates from a home IP (three pages read; every cloud run had found it inert), 18 of 40 cards read "View prices" with no price, and the labels take 6 to 8 s to appear. Recorded as `google-hotels-results-egp-live.html`.
+
 - **2026-11-04**: the login, CAPTCHA and checkpoint walls of the social and review recipes, Google Flights and Google Hotels are human handoffs since section 16 (WP46); `accounts connect` is one too. The `needs_login` rules below still describe what a hidden window gets.
 
 - **2026-10-28, WP43 (Reddit search reads www.reddit.com first)**. The owner compared old.reddit's search (webrunner's only Reddit search since WP18b) with www.reddit.com's on four everyday questions: "Galaxy S26 battery life", "Sharm El Sheikh best snorkeling spots", "Claude Code vs Cursor" and "cost of living in Cairo as an expat". The checks ran through the logged-in profile from the home IP.

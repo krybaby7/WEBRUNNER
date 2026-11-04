@@ -29,6 +29,7 @@ export interface HotelsServer {
 /**
  * Local stand-in for Google Hotels.
  *   /results       the results fixture built from the live DOM (consent dialog, 3 pages behind "Next")
+ *   /egp           the 2026-11-04 live page from the owner's Chrome: prices as "EGP 3,238" although curr=USD
  *   /rated         the 2026-10-21 live Rome page: organic cards with guest ratings, an inert "Next"
  *   /unstructured  the same hotels without the card structure (forces the LLM path)
  *   /blocked       the unusual-traffic interstitial
@@ -44,6 +45,7 @@ export async function startHotelsServer(): Promise<HotelsServer> {
     };
     if (path === "/results") html(readFixture("google-hotels-results.html"));
     else if (path === "/rated") html(readFixture("google-hotels-results-rated-live.html"));
+    else if (path === "/egp") html(readFixture("google-hotels-results-egp-live.html"));
     else if (path === "/unstructured") html(readFixture("google-hotels-unstructured.html"));
     else if (path === "/blocked") html(readFixture("google-hotels-blocked.html"));
     else if (path === "/empty") html(readFixture("google-hotels-empty.html"));

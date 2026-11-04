@@ -123,6 +123,11 @@ describe("text parsers", () => {
   it("reads the price label, entity url, short dates and ids", () => {
     expect(labelPriceText("Prices starting from $83, Best Western Hôtel DEAL 18% less than usual")).toBe("$83");
     expect(labelPriceText("View prices for X")).toBeUndefined();
+    // The 2026-11-04 live page: an ISO code, a non-breaking space, a thousands separator, then the name.
+    expect(labelPriceText("Prices starting from EGP\u00a03,238, The People Belleville GREAT DEAL 28% less than usual")).toBe("EGP 3,238");
+    expect(labelPriceText("Prices starting from €1,319, Hôtel Lutetia, Paris")).toBe("€1,319");
+    expect(labelPriceText("Prices starting from 1 200 kr, Hotel Oslo")).toBe("1 200 kr");
+    expect(parseMoney(labelPriceText("Prices starting from EGP\u00a03,238, X"), "USD")).toEqual({ amount: 3238, currency: "EGP" });
     expect(entityUrl("/travel/hotels/entity/ChoI7I7dwpH68_zKARoNL2cvMTFiN3J4azV6OBAB/prices?q=x&ei=y")).toBe(
       "https://www.google.com/travel/hotels/entity/ChoI7I7dwpH68_zKARoNL2cvMTFiN3J4azV6OBAB",
     );
@@ -458,6 +463,23 @@ describe.skipIf(!probe.available)(`google-hotels recipe in Chromium${probe.avail
     // "Next" was inert live and is inert here: the recipe says only the first page was read.
     expect(r.caveats.some((c) => /"Next" page button did not load more results/.test(c) && /Showing results 1 - 18 of 8,084/.test(c))).toBe(true);
     expect(r.caveats.some((c) => /not applied/.test(c))).toBe(false);
+  });
+
+  it("reads prices printed in the account's currency (EGP 3,238) from the 2026-11-04 live page, and says the currency is not the requested one", async () => {
+    const llm = forbiddenLlm();
+    const r = await runRecipe("/egp", PARIS, llm);
+    expect(r.error).toBeUndefined();
+    expect(llm.calls).toHaveLength(0);
+    const hotels = r.hotels!;
+    for (const h of hotels) expect(HotelResultSchema.safeParse(h).success).toBe(true);
+    const organic = hotels.filter((h) => !h.tags.includes("Sponsored"));
+    expect(organic.length).toBeGreaterThanOrEqual(18);
+    const priced = organic.filter((h) => h.price_per_night !== undefined);
+    expect(priced.length).toBeGreaterThanOrEqual(18);
+    expect(priced.every((h) => h.price_per_night?.currency === "EGP" && h.price_per_night.amount > 100)).toBe(true);
+    expect(hotels.find((h) => h.name === "The People Belleville")?.price_per_night).toEqual({ amount: 3238, currency: "EGP" });
+    expect(r.caveats.some((c) => /printed its prices in EGP, not the requested USD/.test(c))).toBe(true);
+    expect(r.caveats.some((c) => /showed no price/.test(c))).toBe(false);
   });
 
   it("applies the contract's filters in code and says what they hid", async () => {

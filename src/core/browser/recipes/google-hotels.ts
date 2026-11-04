@@ -65,6 +65,23 @@ import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
  *     and the page sends NO network request and keeps the same 18 cards (checked
  *     for 15 s). So the result is one page of 18; the caveat says how many exist.
  *
+ * Re-checked live on 2026-11-04 from the owner's own Chrome over CDP (a home IP
+ * in Egypt, signed in to a Google account whose currency is EGP; Paris, 36 days
+ * out, 2 adults; also curr=EGP and no curr, same page):
+ *   - Organic cards print the price in the ACCOUNT's currency whatever `curr`
+ *     says, with a non-breaking space after the ISO code, in the price link's
+ *     label: "Prices starting from EGP 3,238, The People Belleville GREAT DEAL
+ *     28% less than usual". `labelPriceText` used to stop at the first
+ *     non-space run, so every such card lost its price ("showed no price");
+ *     it now reads up to the first comma that is followed by a space. The
+ *     recipe caveats when the page's currency is not the requested one.
+ *     Recorded as test/fixtures/hotels/google-hotels-results-egp-live.html.
+ *   - 18 of the 40 price links read "View prices for <name>" and the card has
+ *     no price; those stay unpriced with availability "unknown".
+ *   - "Next" DOES paginate from this IP: three pages were read ("Showing
+ *     results 37 - 56 of 15,000"), unlike every cloud run.
+ *   - The page needs 6 to 8 s before the price labels are present.
+ *
  * Before 2026-10-21, guest ratings and review counts were ABSENT from every organic card in every
  * run (Paris and Lisbon, gl=ZZ and gl=us, headless and regular user agent).
  * Only the "Sponsored" list (`li` with an `/aclk` ad link) showed them, as
@@ -232,11 +249,17 @@ function dedupe(items: readonly string[]): string[] {
   return out;
 }
 
-/** The price a "Prices starting from $83, Name DEAL 18% less than usual" label states, as printed. */
+/**
+ * The price a "Prices starting from $83, Name DEAL 18% less than usual" label
+ * states, as printed. The price may carry its currency as an ISO code and a
+ * (non-breaking) space, "EGP 3,238", as the 2026-11-04 live page did: the
+ * price ends at the first comma followed by a space, so a thousands separator
+ * (followed by a digit) is kept.
+ */
 export function labelPriceText(label: string | null | undefined): string | undefined {
   if (label === null || label === undefined) return undefined;
-  const m = /^Prices starting from\s+(\S+?),/i.exec(label);
-  return m?.[1];
+  const m = /^Prices starting from\s+(.+?),\s/i.exec(label);
+  return m?.[1]?.replace(/\u00a0/g, " ").trim();
 }
 
 const STAR_TYPE_RE = /\b([1-5])-star\s+([a-z][a-z &-]*?)(?=[\s,.·|]|$)/i;
@@ -934,6 +957,16 @@ async function extract(
   }
   if (cards.some((c) => c.kind === "sponsored") && hotels.some((h) => h.tags.includes("Sponsored"))) {
     caveat('Rows tagged "Sponsored" are ads shown above the results; their prices may be in the advertiser\'s currency.');
+  }
+  // A signed-in Google account's currency wins over the URL's curr parameter (seen live on 2026-11-04: EGP with curr=USD).
+  const organicCurrencies = new Set(
+    hotels.filter((h) => !h.tags.includes("Sponsored") && h.price_per_night !== undefined).map((h) => (h.price_per_night as Money).currency),
+  );
+  const pageCurrency = organicCurrencies.size === 1 ? [...organicCurrencies][0] : undefined;
+  if (pageCurrency !== undefined && pageCurrency !== q.currency) {
+    caveat(
+      `Google Hotels printed its prices in ${pageCurrency}, not the requested ${q.currency}: a signed-in Google account's currency wins over the page's currency setting. price_per_night and total_price are in ${pageCurrency}; max_price_per_night is compared in ${q.currency}, so it would hide them.`,
+    );
   }
   if (hotels.length === 0) {
     throw new RecipeError("provider", `Google Hotels showed ${cards.length} results but none could be turned into a valid hotel`, {
