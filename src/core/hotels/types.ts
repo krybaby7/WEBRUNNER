@@ -1,5 +1,6 @@
 import type { HotelResult, HotelSource, NormalizedHotelsQuery } from "../../schemas/hotels.js";
 import type { CostMeter } from "../llm/cost.js";
+import type { HandoffHooks } from "../browser/types.js";
 
 export type { HotelResult, HotelSource, NormalizedHotelsQuery };
 
@@ -11,6 +12,8 @@ export type { HotelResult, HotelSource, NormalizedHotelsQuery };
 export interface HotelSearchHooks {
   caveats?: string[];
   meter?: CostMeter;
+  /** Human handoff (PLAN.md 16.4): park the page at a wall the owner can clear. Absent when the host cannot pause. */
+  handoff?: HandoffHooks;
 }
 
 /**

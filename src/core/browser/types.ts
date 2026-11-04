@@ -1,4 +1,7 @@
 import type { Locator, Page } from "playwright";
+import type { Handoff, HandoffReason } from "../../schemas/handoff.js";
+
+export type { Handoff, HandoffReason };
 
 /**
  * Browser engine types, PLAN.md sections 4.3 and 4.4.
@@ -86,4 +89,72 @@ export interface SnapshotOptions {
   screenshot?: boolean;
   /** Directory for PNG screenshots. Created if missing. */
   screenshotDir?: string;
+}
+
+// -- human handoff (PLAN.md section 16) ------------------------------------------------
+
+/** What a tool-side host hands to providers so a recipe can park its page (PLAN.md 16.4). */
+export interface HandoffHooks {
+  /** The parked page to continue on, for this site only; the provider uses it instead of acquiring one. */
+  parked?: { site: string; page: Page };
+  /**
+   * Park `page` (or re-park it) with `reason` and `whatToDo`, then wait up to the host's budget for
+   * the wall to clear. "cleared" means re-probe and continue; "timeout" means throw the wall as a
+   * `blocked` error carrying `wall: reason`. In the original tool call the budget is 0.
+   */
+  pause(page: Page, site: string, reason: HandoffReason, whatToDo: string, step: string): Promise<"cleared" | "timeout">;
+  /** True when `page` is held by the store: the provider must not release it. */
+  isParked(page: Page): boolean;
+}
+
+/** What a tool parks (PLAN.md 16.3). */
+export interface ParkRequest {
+  page: Page;
+  tool: string;
+  site: string;
+  url: string;
+  reason: HandoffReason;
+  whatToDo: string;
+  step: string;
+  /** Is the wall gone? Default: the generic wall classifier on the page. */
+  cleared?: (page: Page) => Promise<boolean>;
+  /** Run the work again with the page handed to its site. Resolves to the tool's normal output object. */
+  continue: (hooks: HandoffHooks) => Promise<Record<string, unknown>>;
+}
+
+export interface HandoffRecord extends ParkRequest {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  /** The `paused` result's `handoff` field for this record. */
+  toHandoff(): Handoff;
+}
+
+export type ResumeOutcome =
+  | { kind: "finished"; output: Record<string, unknown> }
+  /** Still walled after the wait, or re-parked by the continuation. */
+  | { kind: "paused"; handoff: Handoff }
+  | { kind: "unknown" }
+  | { kind: "expired" }
+  | { kind: "cancelled" };
+
+/**
+ * Parked runs, one store per server (PLAN.md 16.3): at most three pages the
+ * owner is clearing a wall on, each with the work to run again once the wall
+ * is gone. Expired or cancelled parks close their page; `close()` closes all.
+ */
+export interface HandoffStore {
+  /** True when a human can see the browser window: headful persistent mode, or CDP mode. */
+  canPause(): boolean;
+  /** Park a page. Throws `HandoffError` with code `provider` when three are already parked. */
+  park(req: ParkRequest): HandoffRecord;
+  get(id: string): HandoffRecord | undefined;
+  /** For `health`: what is parked, by name. Never a URL. */
+  list(): Array<{ id: string; tool: string; site: string; reason: HandoffReason; expires_at: string }>;
+  /** Re-probe every 2 s for up to `waitSeconds`, then continue the run or report it still paused. */
+  resume(id: string, waitSeconds: number): Promise<ResumeOutcome>;
+  /** Close the page and forget the record. False when the id is unknown. */
+  cancel(id: string): Promise<boolean>;
+  /** Close every parked page. Idempotent. */
+  close(): Promise<void>;
 }

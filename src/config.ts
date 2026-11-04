@@ -80,7 +80,11 @@ export interface Config {
     /** Undefined means "headful when a display exists, headless otherwise". */
     headless?: boolean;
     profile_dir: string;
+    /** Browser the persistent mode launches (PLAN.md 16.6): Playwright's Chromium (also when absent), or an installed Chrome or Edge. */
+    channel?: BrowserChannel;
   };
+  /** How long a page parked for the owner stays open, in milliseconds (PLAN.md 16.3). Default 600000 (10 minutes), minimum 60000. */
+  handoff_ttl_ms: number;
   /** Default hard cost cap per deep_research call, in USD. */
   research_max_cost_usd: number;
   /** Wall-clock cap for one deep_research call, in milliseconds. Default 900000 (15 minutes). */
@@ -98,6 +102,12 @@ export interface Config {
   currency: string;
   models: ModelRoles;
 }
+
+export const BROWSER_CHANNELS = ["chromium", "chrome", "msedge"] as const;
+export type BrowserChannel = (typeof BROWSER_CHANNELS)[number];
+
+export const DEFAULT_HANDOFF_TTL_MS = 10 * 60_000;
+export const MIN_HANDOFF_TTL_MS = 60_000;
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -123,6 +133,8 @@ const ENV_VARS = {
   finnhub_api_key: "FINNHUB_API_KEY",
   browser_cdp_url: "BROWSER_CDP_URL",
   browser_headless: "BROWSER_HEADLESS",
+  browser_channel: "BROWSER_CHANNEL",
+  handoff_ttl_ms: "WEBRUNNER_HANDOFF_TTL_MS",
   research_max_cost_usd: "RESEARCH_MAX_COST_USD",
   research_max_ms: "WEBRUNNER_RESEARCH_MAX_MS",
   daily_cost_cap_usd: "WEBRUNNER_DAILY_COST_CAP_USD",
@@ -237,6 +249,14 @@ const ResolvedSchema = z.object({
     })
     .optional(),
   browser_headless: booleanLike.optional(),
+  browser_channel: oneOf(BROWSER_CHANNELS).default("chromium"),
+  handoff_ttl_ms: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? Number(v) : v),
+    z
+      .number({ error: "must be a number of milliseconds, for example 600000" })
+      .int({ error: "must be a whole number of milliseconds" })
+      .min(MIN_HANDOFF_TTL_MS, { error: `must be at least ${MIN_HANDOFF_TTL_MS} (one minute)` }),
+  ).default(DEFAULT_HANDOFF_TTL_MS),
   research_max_cost_usd: positiveNumber.default(3),
   research_max_ms: durationMs.default(15 * 60_000),
   daily_cost_cap_usd: positiveNumber.optional(),
@@ -386,7 +406,9 @@ export function loadConfig(options: LoadConfigOptions = {}): Config {
       ...(r.browser_cdp_url !== undefined && { cdp_url: r.browser_cdp_url }),
       ...(r.browser_headless !== undefined && { headless: r.browser_headless }),
       profile_dir: profileDir,
+      ...(r.browser_channel !== "chromium" && { channel: r.browser_channel }),
     },
+    handoff_ttl_ms: r.handoff_ttl_ms,
     research_max_cost_usd: r.research_max_cost_usd,
     research_max_ms: r.research_max_ms,
     ...(r.daily_cost_cap_usd !== undefined && { daily_cost_cap_usd: r.daily_cost_cap_usd }),

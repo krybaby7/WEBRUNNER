@@ -191,6 +191,37 @@ describe("loadConfig", () => {
     expect(() => load({ [name]: value })).toThrow(message);
   });
 
+  it("parses the handoff keys (PLAN.md 16.6) from the environment and the file, with their defaults", () => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    const defaults = load({});
+    expect(defaults.handoff_ttl_ms).toBe(600_000);
+    expect(defaults.browser.channel).toBeUndefined();
+    expect("channel" in defaults.browser).toBe(false);
+
+    const fromEnv = load({ WEBRUNNER_HANDOFF_TTL_MS: "120000", BROWSER_CHANNEL: " Chrome " });
+    expect(fromEnv.handoff_ttl_ms).toBe(120_000);
+    expect(fromEnv.browser.channel).toBe("chrome");
+
+    writeConfigFile({ handoff_ttl_ms: 90000, browser_channel: "msedge" });
+    const fromFile = load({});
+    expect(fromFile.handoff_ttl_ms).toBe(90_000);
+    expect(fromFile.browser.channel).toBe("msedge");
+    expect(load({ WEBRUNNER_HANDOFF_TTL_MS: "60000", BROWSER_CHANNEL: "chromium" })).toMatchObject({ handoff_ttl_ms: 60_000 });
+    expect(load({ BROWSER_CHANNEL: "chromium" }).browser.channel).toBeUndefined();
+  });
+
+  it.each([
+    ["WEBRUNNER_HANDOFF_TTL_MS", "59999", /at least 60000/],
+    ["WEBRUNNER_HANDOFF_TTL_MS", "abc", /milliseconds/],
+    ["WEBRUNNER_HANDOFF_TTL_MS", "60000.5", /whole number/],
+    ["BROWSER_CHANNEL", "firefox", /one of: chromium, chrome, msedge/],
+  ])("rejects %s=%s naming the variable", (name, value, message) => {
+    vi.spyOn(log, "warn").mockImplementation(() => {});
+    expect(() => load({ [name]: value })).toThrow(ConfigError);
+    expect(() => load({ [name]: value })).toThrow(message);
+    expect(() => load({ [name]: value })).toThrow(new RegExp(name));
+  });
+
   it("does not warn about a provider whose key is set", () => {
     const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
     load({ BRAVE_API_KEY: "b", ANTHROPIC_API_KEY: "a" });

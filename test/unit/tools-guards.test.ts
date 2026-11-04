@@ -76,6 +76,7 @@ describe("wall-clock helpers", () => {
       social_search: 180_000,
       search_reviews: 180_000,
       accounts: 330_000,
+      resume: 330_000,
     });
   });
 

@@ -27,6 +27,7 @@ import { toolError } from "../schemas/error.js";
  *   social_search   60 s per browser platform in parallel plus the summary call (14.5).
  *   search_reviews  60 s per browser source in parallel plus the summary call (14.6).
  *   accounts        a login wait of up to 300 s plus margin (14.7).
+ *   resume          a wait of up to 300 s for the owner to clear a wall, plus margin (16.2).
  */
 export const TOOL_WALL_CLOCK_MS = {
   web_search: 30_000,
@@ -40,6 +41,7 @@ export const TOOL_WALL_CLOCK_MS = {
   social_search: 180_000,
   search_reviews: 180_000,
   accounts: 330_000,
+  resume: 330_000,
 } as const;
 
 /** Thrown by `withWallClock` when the cap is reached. */

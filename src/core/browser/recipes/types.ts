@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import type { z } from "zod";
 import type { Logger } from "../../../log.js";
+import type { HandoffReason } from "../../../schemas/handoff.js";
 import type { CostMeter } from "../../llm/cost.js";
 import type { LlmClient } from "../../llm/types.js";
 
@@ -36,6 +37,15 @@ export interface RecipeContext {
    * short plain-English sentences; the caller dedupes and surfaces them.
    */
   caveats?: string[];
+  /**
+   * Hand the page to the owner (PLAN.md 16.4). Present only when the hosting tool supports
+   * handoff and a human can see the window. Parks the page with `reason` and `whatToDo`, then
+   * waits up to the host's budget for the wall to clear: "cleared" means navigate again and
+   * re-probe; "timeout" means throw the wall as `RecipeError("blocked", ..., { wall: reason })`.
+   * In the original tool call the budget is 0, so the recipe sees "timeout" and the tool
+   * returns `paused` instead of `blocked`. `step` names where the recipe stopped.
+   */
+  pause?(reason: HandoffReason, whatToDo: string, step: string): Promise<"cleared" | "timeout">;
 }
 
 export type RecipeErrorCode = "blocked" | "timeout" | "provider" | "invalid_input" | "config";
@@ -44,6 +54,8 @@ export interface RecipeErrorOptions {
   retryable?: boolean;
   /** The site wants a logged-in session (PLAN.md 14.8). The owning tool reports `needs_login` and names the `accounts` tool. */
   needsLogin?: boolean;
+  /** What kind of wall a `blocked` error is, when a human could clear it (PLAN.md 16.4). Absent for IP-level refusals. */
+  wall?: HandoffReason;
   cause?: unknown;
 }
 
@@ -52,6 +64,7 @@ export class RecipeError extends Error {
   readonly code: RecipeErrorCode;
   readonly retryable: boolean;
   readonly needsLogin: boolean;
+  readonly wall: HandoffReason | undefined;
 
   constructor(code: RecipeErrorCode, message: string, options: RecipeErrorOptions = {}) {
     super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
@@ -59,5 +72,6 @@ export class RecipeError extends Error {
     this.code = code;
     this.retryable = options.retryable ?? (code === "timeout" || code === "provider");
     this.needsLogin = options.needsLogin ?? false;
+    this.wall = options.wall;
   }
 }
