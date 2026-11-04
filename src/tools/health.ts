@@ -65,6 +65,8 @@ const HealthOutputSchema = z.object({
   browser: BrowserStatsSchema.nullable(),
   /** Platforms whose session cookies are present, read only from a browser that is already open; null when none is. */
   accounts: z.object({ connected: z.array(AccountPlatformSchema).nullable() }),
+  /** Pages parked for the owner (PLAN.md 16.3): how many and which sites, nothing else. */
+  handoffs: z.object({ parked: z.number().int().nonnegative(), sites: z.array(z.string()) }),
   cache: z.object({ dir: z.string(), entries: z.number(), bytes: z.number() }),
   tools: z.array(z.string()),
 });
@@ -181,6 +183,7 @@ export function registerHealthTool(server: McpServer, deps: Deps, toolNames: rea
           },
           browser: browser === undefined ? null : { ...browser.stats(), is_open: browser.isOpen() },
           accounts: { connected: await connectedAccounts(deps) },
+          handoffs: { parked: deps.handoffs?.list().length ?? 0, sites: deps.handoffs?.list().map((h) => h.site) ?? [] },
           cache: { dir: config.cache_dir, ...cacheStats },
           tools: [...toolNames],
         });

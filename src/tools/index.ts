@@ -6,6 +6,7 @@ import { registerDeepResearchTool } from "./deep_research.js";
 import { registerExchangeRateTool } from "./exchange_rate.js";
 import { registerHealthTool } from "./health.js";
 import { registerPingTool } from "./ping.js";
+import { registerResumeTool } from "./resume.js";
 import { registerFetchPageTool } from "./fetch_page.js";
 import { registerMarketQuoteTool } from "./market_quote.js";
 import { registerSearchFlightsTool } from "./search_flights.js";
@@ -34,6 +35,7 @@ export const TOOL_NAMES = [
   "exchange_rate",
   "deep_research",
   "accounts",
+  "resume",
   "health",
 ] as const;
 
@@ -52,5 +54,6 @@ export function registerTools(server: McpServer, deps: Deps): void {
   registerExchangeRateTool(server, deps);
   registerDeepResearchTool(server, deps);
   registerAccountsTool(server, deps);
+  registerResumeTool(server, deps);
   registerHealthTool(server, deps, TOOL_NAMES);
 }

@@ -100,6 +100,7 @@ interface Health {
   };
   browser: Record<string, unknown> | null;
   accounts: { connected: string[] | null };
+  handoffs: { parked: number; sites: string[] };
   cache: { dir: string; entries: number; bytes: number };
   tools: string[];
 }
@@ -182,9 +183,37 @@ describe("health tool", () => {
     expect(health.config.review_sources).toEqual(expect.arrayContaining(["app_store", "trustpilot"]));
     expect(health.browser).toMatchObject({ mode: "persistent", open: true, is_open: true, headless: true, activePages: 0, maxPages: 3 });
     expect(health.accounts).toEqual({ connected: ["reddit", "x"] });
+    expect(health.handoffs).toEqual({ parked: 0, sites: [] });
     expect(health.cache).toEqual({ dir: cacheDir, entries: 2, bytes: 15 });
     expect(health.tools).toEqual([...TOOL_NAMES]);
     expect(health.tools).toContain("health");
+  });
+
+  it("reports parked handoffs by count and site only, never their URLs (PLAN.md 16.3)", async () => {
+    const config = makeConfig({ cache_dir: tempDir() });
+    const parkedUrl = "https://x.com/search?q=SECRET-query-0017";
+    const deps = makeDeps(config, {
+      handoffs: {
+        canPause: () => true,
+        park: () => {
+          throw new Error("not in this test");
+        },
+        get: () => undefined,
+        list: () => [
+          { id: "h_1", tool: "social_search", site: "x", reason: "login_required", expires_at: "2030-01-01T00:00:00.000Z" },
+          { id: "h_2", tool: "browse_task", site: "www.example.com", reason: "captcha", expires_at: "2030-01-01T00:00:00.000Z" },
+        ],
+        resume: () => Promise.reject(new Error("not in this test")),
+        cancel: () => Promise.resolve(false),
+        close: () => Promise.resolve(),
+      },
+    });
+    const { client } = await connect(deps);
+    const result = await callTool(client, "health");
+    const health = result.structuredContent as Health;
+    expect(health.handoffs).toEqual({ parked: 2, sites: ["x", "www.example.com"] });
+    expect(JSON.stringify(health)).not.toContain(parkedUrl);
+    expect(JSON.stringify(health)).not.toContain("h_1");
   });
 
   it("never includes a configured key value or a cookie value anywhere in the result", async () => {

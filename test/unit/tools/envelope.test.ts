@@ -11,6 +11,7 @@ import { registerFetchPageTool } from "../../../src/tools/fetch_page.js";
 import { registerHealthTool } from "../../../src/tools/health.js";
 import { registerTools, TOOL_NAMES } from "../../../src/tools/index.js";
 import { registerPingTool } from "../../../src/tools/ping.js";
+import { registerResumeTool } from "../../../src/tools/resume.js";
 import { registerSearchFlightsTool } from "../../../src/tools/search_flights.js";
 import { registerSocialSearchTool } from "../../../src/tools/social_search.js";
 import { registerSearchHotelsTool } from "../../../src/tools/search_hotels.js";
@@ -168,6 +169,25 @@ const CASES: Record<(typeof TOOL_NAMES)[number], Case | "cannot-fail"> = {
           throw boom();
         },
       }),
+  },
+  resume: {
+    args: { handoff_id: "h_00000000" },
+    // The store throws from resume: only the catch-all can turn it into an envelope.
+    register: (server, deps) => registerResumeTool(server, deps),
+    deps: (deps) => ({
+      ...deps,
+      handoffs: {
+        canPause: () => true,
+        park: () => {
+          throw boom();
+        },
+        get: () => undefined,
+        list: () => [],
+        resume: () => Promise.reject(boom()),
+        cancel: () => Promise.reject(boom()),
+        close: () => Promise.resolve(),
+      },
+    }),
   },
   health: {
     args: {},

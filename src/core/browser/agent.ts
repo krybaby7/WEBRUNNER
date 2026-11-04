@@ -13,6 +13,7 @@ import {
   type BrowseTaskInput,
   type BrowseTaskOutput,
 } from "../../schemas/browse_task.js";
+import type { HandoffReason } from "../../schemas/handoff.js";
 import { detectBotWall, type PageProbe } from "../fetch/browser.js";
 import { CostMeter } from "../llm/cost.js";
 import { LlmError, type LlmClient } from "../llm/types.js";
@@ -28,7 +29,8 @@ import {
 } from "./actions.js";
 import { isObjectSchema, jsonSchemaToZod } from "./json-schema.js";
 import { takeSnapshot } from "./snapshot.js";
-import type { BrowserSession, Snapshot } from "./types.js";
+import type { BrowserSession, HandoffHooks, Snapshot } from "./types.js";
+import { classifyWall, HEADLESS_HINT, IP_REFUSED_HINT, WALL_PROBE_JS, whatToDoFor, windowHidden, windowName, type WallProbe } from "./walls.js";
 
 /**
  * Generic browse agent, PLAN.md 3.4 and WP10.
@@ -49,6 +51,15 @@ export interface BrowseAgentDeps {
   now?: () => number;
   /** Where screenshots are written when `config.save_screenshots` is on. Default `<cache_dir>/runs/<run id>`. */
   screenshotDir?: string;
+  /** Human handoff (PLAN.md 16.5): park the page at a wall the owner can clear. Absent when the host cannot pause. */
+  handoff?: HandoffHooks;
+  /** Where a paused run leaves its loop state, and where a continued run reads it from. One holder per tool call. */
+  resume?: BrowseResumeHolder;
+}
+
+/** Carries a paused run's state from the call that parked the page to the call that continues it. */
+export interface BrowseResumeHolder {
+  current?: BrowseRunState;
 }
 
 export type BrowseTaskRunner = (input: BrowseTaskInput, deps: BrowseAgentDeps) => Promise<BrowseTaskOutput>;
@@ -145,52 +156,52 @@ export function buildStepPrompt(p: StepPromptInput): string {
 
 // -- block detection -------------------------------------------------------------------------------------------
 
+/** What the in-page probe returns. `url` and `codeFields` are optional so older callers and tests keep working. */
 interface Probe extends PageProbe {
   captchaWidgets: number;
   passwordFields: number;
+  url?: string;
+  codeFields?: number;
 }
 
 export interface Block {
   reason: Extract<BlockedReason, "captcha" | "login_required" | "bot_wall">;
+  /** Set when a human could clear the wall in the window (PLAN.md 16.4); absent for an IP-level refusal. */
+  handoff?: HandoffReason;
   detail: string;
 }
 
-/** Runs in the page. Counts visible CAPTCHA widgets (invisible reCAPTCHA badges and buttons do not count) and visible password fields. */
-const PROBE_JS = `(() => {
-  const text = document.body ? (document.body.innerText || "") : "";
-  const visible = (el) => {
-    const r = el.getBoundingClientRect();
-    const s = getComputedStyle(el);
-    return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none";
-  };
-  const widgets = Array.from(document.querySelectorAll(
-    '.g-recaptcha, .h-captcha, .cf-turnstile, iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"]'
-  )).filter((el) => visible(el) && !el.closest(".grecaptcha-badge") && el.getAttribute("data-size") !== "invisible" && el.tagName !== "BUTTON" && el.tagName !== "INPUT");
-  const passwords = Array.from(document.querySelectorAll('input[type="password"]')).filter(visible);
-  return { title: document.title || "", text: text.slice(0, 4000), textLength: text.length, captchaWidgets: widgets.length, passwordFields: passwords.length };
-})()`;
-
-const SHORT_PAGE_CHARS = 3000;
-/** A login form on a page this long is more likely a header widget than a login wall. */
-const LOGIN_WALL_MAX_CHARS = 4000;
-const CAPTCHA_TEXT_RE = /\b(recaptcha|hcaptcha|captcha|cf-turnstile)\b|verify (that )?you are (a )?human|not a robot/i;
 const LOGIN_GOAL_RE = /\b(log ?in|sign ?in|sign ?on|logging in|signing in|authenticate|password)\b/i;
 /** Interstitials that usually clear on their own within seconds in a real browser. */
 const SELF_CLEARING_WALLS = new Set(["cloudflare-challenge-title", "cloudflare-attention-title", "cloudflare-checking-browser"]);
 
-/** Classify a probed page. CAPTCHA first, then bot wall, then login wall (skipped when the goal is about logging in). */
+/**
+ * Classify a probed page with the shared wall table (`walls.ts`). CAPTCHA first,
+ * then checkpoint and bot wall, then a one-time code or a login form (skipped
+ * when the goal is about logging in). A consent dialog is not a block for the
+ * agent: it can click "Reject all" itself.
+ */
 export function detectBlock(probe: Probe, goal: string): Block | undefined {
-  const shortPage = probe.textLength < SHORT_PAGE_CHARS;
-  if (probe.captchaWidgets > 0) return { reason: "captcha", detail: "a CAPTCHA widget is shown on the page" };
-  if (CAPTCHA_TEXT_RE.test(probe.title) || (shortPage && CAPTCHA_TEXT_RE.test(probe.text))) {
-    return { reason: "captcha", detail: "the page asks the visitor to complete a CAPTCHA or prove they are human" };
+  const wall = classifyWall(
+    { ...probe, url: probe.url ?? "", codeFields: probe.codeFields ?? 0 },
+    { loginIsWall: !LOGIN_GOAL_RE.test(goal) },
+  );
+  if (wall === undefined) return undefined;
+  switch (wall.kind) {
+    case "captcha":
+      return { reason: "captcha", handoff: "captcha", detail: wall.detail };
+    case "checkpoint":
+      return { reason: "bot_wall", handoff: "checkpoint", detail: wall.detail };
+    case "ip_refusal":
+      return { reason: "bot_wall", detail: wall.detail };
+    case "mfa":
+      return { reason: "login_required", handoff: "mfa", detail: wall.detail };
+    case "login_required":
+      return { reason: "login_required", handoff: "login_required", detail: `${wall.detail} and this run never logs in` };
+    case "consent":
+    case "unknown_wall":
+      return undefined;
   }
-  const wall = detectBotWall(probe);
-  if (wall !== undefined) return { reason: "bot_wall", detail: `the site served a bot-protection page (${wall})` };
-  if (probe.passwordFields > 0 && probe.textLength < LOGIN_WALL_MAX_CHARS && !LOGIN_GOAL_RE.test(goal)) {
-    return { reason: "login_required", detail: "the page is a login form and this run never logs in" };
-  }
-  return undefined;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -198,7 +209,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 async function probePage(page: Page): Promise<Probe | undefined> {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await page.evaluate<Probe>(PROBE_JS);
+      return await page.evaluate<WallProbe>(WALL_PROBE_JS);
     } catch {
       // Navigation under us: let it finish, then probe once more.
       await settlePage(page);
@@ -261,12 +272,48 @@ interface Finish {
 const errMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /**
+ * Everything a run keeps between steps. When the run parks its page for the
+ * owner (PLAN.md 16.5), the state is handed to `BrowseAgentDeps.resume` so the
+ * continuation re-enters the loop at `nextStep` with the same history, step
+ * count, cost meter and domain policy: the step budget is intact. Opaque to
+ * callers.
+ */
+export interface BrowseRunState {
+  runId: string;
+  history: HistoryEntry[];
+  steps: number;
+  nextStep: number;
+  meter: CostMeter;
+  policy: DomainPolicy;
+  guards: PageGuards;
+  savedShots: string[];
+  shotDir: string;
+  tempShotDir: string | undefined;
+  wantScreenshot: boolean;
+  lastUrl: string;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname || url;
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Run one goal-directed browsing session. Acquires a single page from
  * `deps.browser`, always releases it, and returns the output of PLAN.md 3.4.
  * Throws only for problems the tool maps to an error envelope: a
  * `JsonSchemaError` for an unsupported `extract_schema`, an `LlmError` with
  * code `config` or `provider`/`timeout`, or an unexpected bug. Budget
  * exhaustion is a `partial` result, not an error.
+ *
+ * With `deps.handoff` (PLAN.md 16.5), a CAPTCHA, checkpoint, one-time code or
+ * login wall parks the page instead of ending the run: the page is kept, the
+ * loop state goes to `deps.resume`, and the hosting tool returns `paused`.
+ * Called again with `deps.handoff.parked` and that state, the run continues
+ * on the parked page at the step it stopped on.
  */
 export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgentDeps): Promise<BrowseTaskOutput> {
   const input = BrowseTaskInputSchema.parse(rawInput);
@@ -282,25 +329,53 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
     extractZod = wrapped ? z.object({ result: inner }) : inner;
   }
 
-  const meter = new CostMeter({ maxCostUsd: input.max_cost_usd });
   const startedAt = now();
-  const runId = `${new Date(startedAt).toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
   const saveShots = config.save_screenshots;
-  const savedShots: string[] = [];
-  const tempShotDir = saveShots ? undefined : await mkdtemp(join(tmpdir(), "webrunner-shots-"));
-  const shotDir = tempShotDir ?? deps.screenshotDir ?? join(config.cache_dir, "runs", runId);
 
-  const page = await deps.browser.acquire();
-  let steps = 0;
-  let lastUrl = "";
-  try {
-    page.setDefaultTimeout(10_000);
+  // A continued run: the parked page and the state the paused run left behind.
+  const parked = deps.handoff?.parked;
+  const resumed = parked !== undefined ? deps.resume?.current : undefined;
+  if (parked !== undefined && resumed === undefined) {
+    throw new Error("browse_task was asked to continue a parked page without the run's state");
+  }
+
+  let state: BrowseRunState;
+  let page: Page;
+  if (resumed !== undefined && parked !== undefined) {
+    state = resumed;
+    page = parked.page;
+    log.info("browse_task continuing a parked run", { run_id: state.runId, step: state.nextStep, steps_taken: state.steps });
+  } else {
+    const runId = `${new Date(startedAt).toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
+    const tempShotDir = saveShots ? undefined : await mkdtemp(join(tmpdir(), "webrunner-shots-"));
+    page = await deps.browser.acquire();
     const policy = new DomainPolicy(input.allow_navigation_off_domain);
-    const guards = new PageGuards(page, policy, log);
-    await guards.install();
+    state = {
+      runId,
+      history: [],
+      steps: 0,
+      nextStep: 1,
+      meter: new CostMeter({ maxCostUsd: input.max_cost_usd }),
+      policy,
+      guards: new PageGuards(page, policy, log),
+      savedShots: [],
+      shotDir: tempShotDir ?? deps.screenshotDir ?? join(config.cache_dir, "runs", runId),
+      tempShotDir,
+      wantScreenshot: false,
+      lastUrl: "",
+    };
+  }
+  const { meter, policy, guards, history, savedShots, shotDir } = state;
+  const isParked = (): boolean => deps.handoff?.isParked(page) === true;
+
+  try {
+    if (resumed === undefined) {
+      page.setDefaultTimeout(10_000);
+      await guards.install();
+    }
 
     const finish = (f: Finish): BrowseTaskOutput => {
-      let finalUrl = lastUrl;
+      let finalUrl = state.lastUrl;
       try {
         finalUrl = page.url();
       } catch {
@@ -309,10 +384,11 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
       log.info("browse_task finished", {
         outcome: f.outcome,
         blocked_reason: f.blocked_reason,
-        steps_taken: steps,
+        steps_taken: state.steps,
         cost_usd: Number(meter.totalCostUsd.toFixed(4)),
         llm_calls: meter.calls,
-        run_id: runId,
+        run_id: state.runId,
+        ...(isParked() && { paused: true }),
       });
       return {
         goal: input.goal,
@@ -320,7 +396,7 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
         summary: f.summary,
         ...(f.extracted !== undefined && { extracted: f.extracted }),
         final_url: finalUrl,
-        steps_taken: steps,
+        steps_taken: state.steps,
         ...(f.blocked_reason !== undefined && { blocked_reason: f.blocked_reason }),
         ...(saveShots && savedShots.length > 0 && { screenshots: [...savedShots] }),
       };
@@ -329,11 +405,41 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
     const budgetFinish = (what: string): BrowseTaskOutput =>
       finish({
         outcome: "partial",
-        summary: `Stopped before ${what}: the cost cap of $${input.max_cost_usd.toFixed(2)} was reached (spent $${meter.totalCostUsd.toFixed(4)}) after ${steps} step${steps === 1 ? "" : "s"}.`,
+        summary: `Stopped before ${what}: the cost cap of $${input.max_cost_usd.toFixed(2)} was reached (spent $${meter.totalCostUsd.toFixed(4)}) after ${state.steps} step${state.steps === 1 ? "" : "s"}.`,
       });
 
+    /** The `blocked` result for a wall, with the sentence that says what would have let a human clear it. */
+    const blockedFinish = (block: Block): BrowseTaskOutput => {
+      let hint = "";
+      if (block.handoff !== undefined && deps.handoff === undefined && windowHidden(config)) hint = ` ${HEADLESS_HINT}`;
+      else if (block.handoff === undefined && block.reason === "bot_wall") hint = ` ${IP_REFUSED_HINT}`;
+      log.warn("browse_task blocked", { reason: block.reason, url: page.url() });
+      return finish({ outcome: "blocked", blocked_reason: block.reason, summary: `Stopped at ${page.url()}: ${block.detail}.${hint}` });
+    };
+
+    /**
+     * Park the page for the owner when the wall is one a human can clear and the host supports it.
+     * "paused" means the run is parked and must return now; "cleared" means the wall went away
+     * while waiting; "no" means carry on with the block as it is.
+     */
+    const tryPause = async (block: Block, step: number): Promise<"paused" | "cleared" | "no"> => {
+      if (block.handoff === undefined || deps.handoff === undefined) return "no";
+      const site = hostOf(page.url());
+      const outcome = await deps.handoff.pause(
+        page,
+        site,
+        block.handoff,
+        whatToDoFor(block.handoff, site, windowName(config)),
+        `step ${step} of ${input.max_steps}`,
+      );
+      if (outcome === "cleared") return "cleared";
+      state.nextStep = step;
+      if (deps.resume !== undefined) deps.resume.current = state;
+      return "paused";
+    };
+
     // 1. Open the start page.
-    if (input.start_url !== undefined) {
+    if (resumed === undefined && input.start_url !== undefined) {
       try {
         await page.goto(input.start_url, { waitUntil: "domcontentloaded", timeout: START_URL_TIMEOUT_MS });
         await settlePage(page);
@@ -414,38 +520,35 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
     };
 
     // 2. The step loop.
-    const history: HistoryEntry[] = [];
-    let wantScreenshot = false;
-
-    for (let step = 1; step <= input.max_steps; step++) {
+    for (let step = state.nextStep; step <= input.max_steps; step++) {
       if (now() - startedAt > MAX_RUN_MS) {
         return finish({
           outcome: "partial",
           blocked_reason: "timeout",
-          summary: `Stopped after ${Math.round(MAX_RUN_MS / 60_000)} minutes without finishing; ${steps} step${steps === 1 ? "" : "s"} were taken.`,
+          summary: `Stopped after ${Math.round(MAX_RUN_MS / 60_000)} minutes without finishing; ${state.steps} step${state.steps === 1 ? "" : "s"} were taken.`,
         });
       }
 
       if (meter.exhausted) return budgetFinish("finishing the task");
 
-      const block = await checkBlocked(page, input.goal);
+      let block = await checkBlocked(page, input.goal);
       if (block !== undefined) {
-        log.warn("browse_task blocked", { reason: block.reason, url: page.url() });
-        return finish({
-          outcome: "blocked",
-          blocked_reason: block.reason,
-          summary: `Stopped at ${page.url()}: ${block.detail}.`,
-        });
+        const paused = await tryPause(block, step);
+        if (paused === "paused") {
+          return finish({ outcome: "blocked", blocked_reason: block.reason, summary: `Paused at ${page.url()}: ${block.detail}.` });
+        }
+        if (paused === "cleared") block = await checkBlocked(page, input.goal);
+        if (block !== undefined) return blockedFinish(block);
       }
 
       let snapshot: Snapshot;
       try {
-        snapshot = await takeSnapshotRetrying(page, wantScreenshot, shotDir);
+        snapshot = await takeSnapshotRetrying(page, state.wantScreenshot, shotDir);
       } catch (err) {
         return finish({ outcome: "partial", summary: `The page could not be read: ${clip(errMessage(err), 200)}` });
       }
-      lastUrl = snapshot.url;
-      wantScreenshot = false;
+      state.lastUrl = snapshot.url;
+      state.wantScreenshot = false;
 
       const content: Anthropic.ContentBlockParam[] = [];
       if (snapshot.screenshotPath !== undefined) {
@@ -507,7 +610,7 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
           return await finishWithExtraction({ outcome: "completed", summary: action.summary }, action.summary, false);
         case "extract":
           return await finishWithExtraction(
-            { outcome: "completed", summary: `Read the data from ${snapshot.url} after ${steps} step${steps === 1 ? "" : "s"}.` },
+            { outcome: "completed", summary: `Read the data from ${snapshot.url} after ${state.steps} step${state.steps === 1 ? "" : "s"}.` },
             undefined,
             true,
           );
@@ -520,12 +623,12 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
           });
         }
         case "screenshot":
-          wantScreenshot = true;
+          state.wantScreenshot = true;
           history.push({ step, action: label, status: "ok", message: "a screenshot will be attached to the next step" });
           continue;
         default: {
           const outcome = await executeAction(action as PageAction, { page, snapshot, policy, guards, log });
-          if (outcome.executed) steps++;
+          if (outcome.executed) state.steps++;
           history.push({ step, action: label, status: outcome.status, message: outcome.message });
         }
       }
@@ -533,9 +636,7 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
 
     // 3. Step limit reached without done.
     const block = await checkBlocked(page, input.goal);
-    if (block !== undefined) {
-      return finish({ outcome: "blocked", blocked_reason: block.reason, summary: `Stopped at ${page.url()}: ${block.detail}.` });
-    }
+    if (block !== undefined) return blockedFinish(block);
     return await finishWithExtraction(
       {
         outcome: "partial",
@@ -551,15 +652,18 @@ export async function runBrowseTask(rawInput: BrowseTaskInput, deps: BrowseAgent
       return {
         goal: input.goal,
         outcome: "partial",
-        summary: `Stopped: the cost cap of $${input.max_cost_usd.toFixed(2)} was reached after ${steps} steps.`,
-        final_url: safeUrl(page, lastUrl),
-        steps_taken: steps,
+        summary: `Stopped: the cost cap of $${input.max_cost_usd.toFixed(2)} was reached after ${state.steps} steps.`,
+        final_url: safeUrl(page, state.lastUrl),
+        steps_taken: state.steps,
       };
     }
     throw err;
   } finally {
-    await deps.browser.release(page);
-    if (tempShotDir !== undefined) await rm(tempShotDir, { recursive: true, force: true }).catch(() => undefined);
+    // A parked page stays open for the owner (the store closes it later); everything else is released now.
+    if (!isParked()) {
+      await deps.browser.release(page);
+      if (state.tempShotDir !== undefined) await rm(state.tempShotDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 }
 
