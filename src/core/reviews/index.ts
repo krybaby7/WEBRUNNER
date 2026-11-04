@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Logger } from "../../log.js";
+import type { HandoffHooks } from "../browser/types.js";
 import type { ErrorCode } from "../../schemas/error.js";
 import {
   ReviewSchema,
@@ -89,7 +90,7 @@ export interface ReviewsService {
    * when nothing could be searched; a source that fails while others answer
    * is reported in `sources_failed`.
    */
-  search(input: ParsedSearchReviewsInput, signal?: AbortSignal): Promise<SearchReviewsOutput>;
+  search(input: ParsedSearchReviewsInput, signal?: AbortSignal, handoff?: HandoffHooks): Promise<SearchReviewsOutput>;
 }
 
 interface Failure extends FailedSource {
@@ -198,6 +199,7 @@ export function createReviewsService(deps: ReviewsServiceDeps): ReviewsService {
     meter: CostMeter,
     caveats: string[],
     outer: AbortSignal | undefined,
+    handoff?: HandoffHooks,
   ): Promise<ReviewSearchResult> {
     const key = cacheKey(provider.name, q);
     const stored = await cache.get<unknown>(key);
@@ -213,7 +215,10 @@ export function createReviewsService(deps: ReviewsServiceDeps): ReviewsService {
     const signals = [AbortSignal.timeout(timeoutMs), ...(outer !== undefined ? [outer] : [])];
     const signal = AbortSignal.any(signals);
     const started = now();
-    const found = tidy(provider.name, await raceAbort(provider.search(q, signal, { caveats, meter }), signal, provider.name, timeoutMs));
+    const found = tidy(
+      provider.name,
+      await raceAbort(provider.search(q, signal, { caveats, meter, ...(handoff !== undefined && { handoff }) }), signal, provider.name, timeoutMs),
+    );
     const checked = CachedResultSchema.safeParse(found);
     if (!checked.success) {
       const detail = checked.error.issues
@@ -232,7 +237,7 @@ export function createReviewsService(deps: ReviewsServiceDeps): ReviewsService {
     return checked.data;
   }
 
-  async function search(input: ParsedSearchReviewsInput, signal?: AbortSignal): Promise<SearchReviewsOutput> {
+  async function search(input: ParsedSearchReviewsInput, signal?: AbortSignal, handoff?: HandoffHooks): Promise<SearchReviewsOutput> {
     const all = deps.sources;
     const configured = all.filter((s) => s.isConfigured());
     if (input.sources === undefined && configured.length === 0) {
@@ -256,7 +261,7 @@ export function createReviewsService(deps: ReviewsServiceDeps): ReviewsService {
           return;
         }
         try {
-          results.push({ source, result: await runSource(provider, query, meter, sourceCaveats, signal) });
+          results.push({ source, result: await runSource(provider, query, meter, sourceCaveats, signal, handoff) });
         } catch (err) {
           const f = classify(err, source);
           log.warn("review source failed", { source, code: f.code, needs_login: f.needs_login, error: f.error });

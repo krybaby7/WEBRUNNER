@@ -395,6 +395,7 @@ describe.skipIf(!probe.available)(`google-flights recipe in Chromium${probe.avai
     expect((r.error as RecipeError).code).toBe("blocked");
     expect((r.error as RecipeError).message).toMatch(/unusual traffic|bot/i);
     expect((r.error as RecipeError).retryable).toBe(false);
+    expect((r.error as RecipeError).wall).toBe("checkpoint");
     expect(llm.calls).toHaveLength(0);
   });
 
@@ -433,6 +434,7 @@ describe.skipIf(!probe.available)(`google-flights recipe in Chromium${probe.avai
     const r = await runRecipe("/consent", ROUND_TRIP, llm, { grace: 600 });
     expect((r.error as RecipeError).code).toBe("blocked");
     expect((r.error as RecipeError).message).toMatch(/cookie consent page that could not be dismissed/);
+    expect((r.error as RecipeError).wall).toBe("consent");
     expect((r.error as RecipeError).retryable).toBe(false);
     expect(llm.calls).toHaveLength(0);
   });
@@ -441,6 +443,7 @@ describe.skipIf(!probe.available)(`google-flights recipe in Chromium${probe.avai
     const r = await runRecipe("/away", ROUND_TRIP, scriptedLlm(() => canned), { grace: 600 });
     expect((r.error as RecipeError).code).toBe("blocked");
     expect((r.error as RecipeError).message).toMatch(/interstitial on localhost/);
+    expect((r.error as RecipeError).wall).toBe("unknown_wall");
   });
 
   it("looks again when the labels it saw are gone by extraction time, and reads them once they are back", async () => {

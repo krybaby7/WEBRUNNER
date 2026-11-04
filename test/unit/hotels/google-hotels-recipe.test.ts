@@ -538,6 +538,7 @@ describe.skipIf(!probe.available)(`google-hotels recipe in Chromium${probe.avail
     expect((r.error as RecipeError).code).toBe("blocked");
     expect((r.error as RecipeError).message).toMatch(/unusual traffic|bot/i);
     expect((r.error as RecipeError).retryable).toBe(false);
+    expect((r.error as RecipeError).wall).toBe("checkpoint");
     expect(llm.calls).toHaveLength(0);
   });
 

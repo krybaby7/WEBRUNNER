@@ -341,6 +341,7 @@ describe.skipIf(!probe.available)(`facebook-search recipe in Chromium${probe.ava
     const err = r.error as RecipeError;
     expect(err.code).toBe("blocked");
     expect(err.needsLogin).toBe(false);
+    expect(err.wall).toBe("checkpoint");
     expect(err.message).toMatch(/checkpoint/);
   });
 

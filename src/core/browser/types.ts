@@ -119,6 +119,7 @@ export interface ParkRequest {
   site: string;
   url: string;
   reason: HandoffReason;
+  /** What the owner should do; empty means "the default sentence for the reason". */
   whatToDo: string;
   step: string;
   /** Is the wall gone? Default: the generic wall classifier on the page. */

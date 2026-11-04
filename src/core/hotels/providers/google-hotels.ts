@@ -1,4 +1,5 @@
 import { googleHotelsRecipe, missingLlmClient } from "../../browser/recipes/google-hotels.js";
+import { runRecipeWithPause } from "../../browser/recipes/pause.js";
 import { RecipeError, type Recipe } from "../../browser/recipes/types.js";
 import type { BrowserSession } from "../../browser/types.js";
 import type { CostMeter } from "../../llm/cost.js";
@@ -58,9 +59,11 @@ export class GoogleHotelsProvider implements HotelProvider {
     }
     if (signal.aborted) throw this.error("Google Hotels search aborted before it started", "timeout", true);
 
+    // A page the owner cleared a wall on continues here instead of a fresh one (PLAN.md 16.4).
+    const parked = hooks.handoff?.parked;
     let page;
     try {
-      page = await browser.acquire();
+      page = parked !== undefined && parked.site === this.name ? parked.page : await browser.acquire();
     } catch (err) {
       throw this.error(`could not open a browser page: ${message(err)}`, "provider", true, err);
     }
@@ -77,14 +80,21 @@ export class GoogleHotelsProvider implements HotelProvider {
       if (hooks.caveats !== undefined) for (const c of caveats) if (!hooks.caveats.includes(c)) hooks.caveats.push(c);
     };
     try {
-      const hotels = await this.recipe.run(acquired, query, {
-        llm: this.llm ?? missingLlmClient(),
-        log: this.logger,
-        deadline: Date.now() + this.timeoutMs,
-        signal,
-        caveats,
-        ...(meter !== undefined && { meter }),
-      });
+      const hotels = await runRecipeWithPause(
+        this.recipe,
+        acquired,
+        query,
+        {
+          llm: this.llm ?? missingLlmClient(),
+          log: this.logger,
+          deadline: Date.now() + this.timeoutMs,
+          signal,
+          caveats,
+          ...(meter !== undefined && { meter }),
+        },
+        hooks.handoff,
+        this.name,
+      );
       pass();
       // Page order is kept (the tool sorts); the contract caps a provider at max_results.
       return hotels.slice(0, query.max_results);
@@ -98,7 +108,8 @@ export class GoogleHotelsProvider implements HotelProvider {
       throw this.error(`Google Hotels search failed: ${message(err)}`, "provider", false, err);
     } finally {
       signal.removeEventListener("abort", onAbort);
-      await browser.release(acquired);
+      // A parked page stays open for the owner; the handoff store closes it later.
+      if (hooks.handoff?.isParked(acquired) !== true) await browser.release(acquired);
     }
   }
 

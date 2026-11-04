@@ -139,7 +139,7 @@ describe("accounts tool", () => {
     const tool = (await client.listTools()).tools.find((t) => t.name === "accounts");
     expect(tool?.outputSchema).toMatchObject({ type: "object" });
     expect(Object.keys((tool?.outputSchema as { properties: Record<string, unknown> }).properties).sort()).toEqual(
-      ["accounts", "action", "caveats", "cookies_cleared", "instructions", "login_url", "mode", "platform", "profile_dir", "status", "waited_s"],
+      ["accounts", "action", "caveats", "cookies_cleared", "handoff_id", "instructions", "login_url", "mode", "platform", "profile_dir", "status", "waited_s"],
     );
     expect(AccountsOutputObjectSchema.safeParse(LIST).success).toBe(true);
     // A disconnect carrying a connect-only status is rejected by both.

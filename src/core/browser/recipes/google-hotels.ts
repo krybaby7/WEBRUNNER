@@ -12,6 +12,7 @@ import {
 import { detectBotWall } from "../../fetch/browser.js";
 import { filterAndSortHotels } from "../../hotels/normalize.js";
 import { LlmError, type LlmClient } from "../../llm/types.js";
+import { wallOfBotCheck } from "./pause.js";
 import { RecipeError, type Recipe, type RecipeContext } from "./types.js";
 
 /**
@@ -740,6 +741,7 @@ export function createGoogleHotelsRecipe(options: GoogleHotelsRecipeOptions = {}
         if (wall !== undefined) {
           throw new RecipeError("blocked", `Google Hotels served a bot check (${wall}) at ${probe.url}; no results were returned`, {
             retryable: false,
+            ...(wallOfBotCheck(wall) !== undefined && { wall: wallOfBotCheck(wall) }),
           });
         }
         if (NO_RESULTS_RE.test(probe.text) && probe.resultsCount === null) return { kind: "empty", probe };

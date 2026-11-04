@@ -2,6 +2,7 @@ import { errors as playwrightErrors, type Page } from "playwright";
 import { z } from "zod";
 import { log as defaultLog, type Logger } from "../../../log.js";
 import { ReviewSchema, ReviewSubjectSchema, type NormalizedReviewsQuery, type Review, type ReviewKind, type ReviewSource, type ReviewSubject } from "../../../schemas/reviews.js";
+import { runRecipeWithPause } from "../../browser/recipes/pause.js";
 import { RecipeError, type Recipe, type RecipeContext } from "../../browser/recipes/types.js";
 import type { BrowserSession } from "../../browser/types.js";
 import { detectBotWall } from "../../fetch/browser.js";
@@ -594,9 +595,11 @@ export abstract class BrowserReviewSourceBase implements ReviewSourceProvider {
     if (browser === undefined) throw this.error("no browser session is available", "config", false);
     if (signal.aborted) throw this.error(`${this.site} search aborted before it started`, "timeout", true);
 
+    // A page the owner cleared a wall on continues here instead of a fresh one (PLAN.md 16.4).
+    const parked = hooks.handoff?.parked;
     let page: Page;
     try {
-      page = await browser.acquire();
+      page = parked !== undefined && parked.site === this.name ? parked.page : await browser.acquire();
     } catch (err) {
       throw this.error(`could not open a browser page: ${errMsg(err)}`, "provider", true, err);
     }
@@ -611,14 +614,21 @@ export abstract class BrowserReviewSourceBase implements ReviewSourceProvider {
       if (hooks.caveats !== undefined) for (const c of caveats) if (!hooks.caveats.includes(c)) hooks.caveats.push(c);
     };
     try {
-      const result = await this.recipe.run(acquired, q, {
-        llm: this.llm ?? missingLlmClient(this.site),
-        log: this.logger,
-        deadline: Date.now() + this.timeoutMs,
-        signal,
-        caveats,
-        ...(hooks.meter !== undefined && { meter: hooks.meter }),
-      });
+      const result = await runRecipeWithPause(
+        this.recipe,
+        acquired,
+        q,
+        {
+          llm: this.llm ?? missingLlmClient(this.site),
+          log: this.logger,
+          deadline: Date.now() + this.timeoutMs,
+          signal,
+          caveats,
+          ...(hooks.meter !== undefined && { meter: hooks.meter }),
+        },
+        hooks.handoff,
+        this.name,
+      );
       surface();
       const checked = ReviewSearchResultSchema.safeParse(result);
       if (!checked.success) {
@@ -633,7 +643,8 @@ export abstract class BrowserReviewSourceBase implements ReviewSourceProvider {
       throw this.mapError(err, signal);
     } finally {
       signal.removeEventListener("abort", onAbort);
-      await browser.release(acquired);
+      // A parked page stays open for the owner; the handoff store closes it later.
+      if (hooks.handoff?.isParked(acquired) !== true) await browser.release(acquired);
     }
   }
 

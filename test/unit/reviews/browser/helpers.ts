@@ -45,6 +45,8 @@ export interface ReviewsFixtureServer {
   /** Every request as "METHOD path?query", in order. */
   requests: string[];
   close(): Promise<void>;
+  /** Sources whose gated fixture still shows its wall; delete one to "log in". */
+  walled: Set<string>;
 }
 
 /**
@@ -73,9 +75,11 @@ export interface ReviewsFixtureServer {
  *                                        B0CAPTCHA0 the CAPTCHA page; B0STALLED0; B0UNSTRUCT (no review hooks);
  *                                        B0NOREVIEW (product info, "No customer reviews"); B0STATUS50 (HTTP 503)
  *                 /amazon/ap/signin      the recorded sign-in interstitial
+ *                 B0GATE0000             302 to /amazon/ap/signin while `walled` has "amazon", the reviews once it is deleted
  */
 export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
   const requests: string[] = [];
+  const walled = new Set<string>(["amazon"]);
   const server: Server = createServer((req, res) => {
     const u = new URL(req.url ?? "/", "http://localhost");
     requests.push(`${req.method ?? "GET"} ${u.pathname}${u.search}`);
@@ -126,7 +130,7 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
       else html(readFixture("amazon-search.html"));
     } else if (path.startsWith("/amazon/product-reviews/")) {
       const asin = path.split("/")[3] ?? "";
-      if (asin === "B0SIGNIN00" || asin === "B0MEDLEY00") {
+      if (asin === "B0SIGNIN00" || asin === "B0MEDLEY00" || (asin === "B0GATE0000" && walled.has("amazon"))) {
         res
           .writeHead(302, { location: `/amazon/ap/signin?openid.return_to=${encodeURIComponent(`http://localhost${path}${u.search}`)}&openid.mode=checkid_setup` })
           .end();
@@ -156,6 +160,7 @@ export async function startReviewsServer(): Promise<ReviewsFixtureServer> {
   return {
     url: `http://127.0.0.1:${port}`,
     requests,
+    walled,
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();

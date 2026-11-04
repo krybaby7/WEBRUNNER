@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { Logger } from "../../log.js";
+import type { HandoffHooks } from "../browser/types.js";
 import type { ErrorCode } from "../../schemas/error.js";
 import {
   SOCIAL_PLATFORMS,
@@ -78,6 +79,8 @@ export interface SocialServiceDeps {
 export interface SocialSearchOptions {
   /** The tool's wall clock; aborts every platform call. */
   signal?: AbortSignal;
+  /** Human handoff (PLAN.md 16.4), passed to every browser platform. */
+  handoff?: HandoffHooks;
 }
 
 export interface SocialService {
@@ -334,7 +337,7 @@ export function createSocialService(deps: SocialServiceDeps): SocialService {
   async function search(input: ParsedSocialSearchInput, opts: SocialSearchOptions = {}): Promise<SocialSearchOutput> {
     const { query, toRun, failed, caveats } = normalizeSocialInput(input, deps.platforms);
     const meter = new CostMeter({ maxCostUsd: input.max_cost_usd });
-    const hooks: SocialHooks = { caveats: [], meter };
+    const hooks: SocialHooks = { caveats: [], meter, ...(opts.handoff !== undefined && { handoff: opts.handoff }) };
 
     const outcomes = await Promise.all(toRun.map((p) => runPlatform(p, query, opts.signal, hooks)));
     const used: SocialPlatform[] = [];

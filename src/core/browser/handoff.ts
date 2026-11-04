@@ -5,7 +5,7 @@ import type { Logger } from "../../log.js";
 import type { ErrorCode } from "../../schemas/error.js";
 import type { Handoff, HandoffReason } from "../../schemas/handoff.js";
 import type { BrowserSession, HandoffHooks, HandoffRecord, HandoffStore, ParkRequest, ResumeOutcome } from "./types.js";
-import { classifyWall, probeWall, windowHidden } from "./walls.js";
+import { classifyWall, probeWall, whatToDoFor, windowHidden, windowName } from "./walls.js";
 
 /**
  * Parked runs, PLAN.md 16.3. At most three pages the owner is clearing a wall
@@ -96,6 +96,7 @@ class DefaultHandoffStore implements HandoffStore {
 
   park(req: ParkRequest): HandoffRecord {
     if (this.closed) throw new HandoffError("provider", "the handoff store is closed");
+    const whatToDo = req.whatToDo !== "" ? req.whatToDo : whatToDoFor(req.reason, req.site, windowName(this.config));
     const existing = this.byPage.get(req.page);
     if (existing !== undefined) {
       // The continuation met a wall again on the same page: same id, fresh expiry and instructions.
@@ -103,7 +104,7 @@ class DefaultHandoffStore implements HandoffStore {
         site: req.site,
         url: req.url,
         reason: req.reason,
-        whatToDo: req.whatToDo,
+        whatToDo,
         step: req.step,
         cleared: req.cleared,
         continue: req.continue,
@@ -126,6 +127,7 @@ class DefaultHandoffStore implements HandoffStore {
     const createdAt = this.now();
     const record: Record_ = {
       ...req,
+      whatToDo,
       id,
       createdAt: new Date(createdAt).toISOString(),
       expiresAt: new Date(createdAt + this.config.handoff_ttl_ms).toISOString(),
@@ -191,7 +193,9 @@ class DefaultHandoffStore implements HandoffStore {
     try {
       output = await record.continue(bound.hooks);
     } catch (err) {
-      if (!record.reparked) await this.forget(record, "continuation failed");
+      // The work met the wall again and parked the page before failing: that is a pause, not a failure.
+      if (record.reparked) return { kind: "paused", handoff: this.toHandoff(record) };
+      await this.forget(record, "continuation failed");
       throw err;
     }
     if (record.reparked) return { kind: "paused", handoff: this.toHandoff(record) };

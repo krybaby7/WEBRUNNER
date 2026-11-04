@@ -1,18 +1,22 @@
-import type { Page } from "playwright";
 import type { Config } from "../../config.js";
 import type { Logger } from "../../log.js";
 import type { ErrorCode } from "../../schemas/error.js";
 import type { AccountPlatform, AccountStatus, AccountsOutput } from "../../schemas/accounts.js";
-import { cookieDomainMatches, resolveHeadless } from "../browser/session.js";
-import type { BrowserCookie, BrowserSession } from "../browser/types.js";
+import { createHandoffStore } from "../browser/handoff.js";
+import { cookieDomainMatches } from "../browser/session.js";
+import type { BrowserCookie, BrowserSession, HandoffStore } from "../browser/types.js";
 import { ACCOUNT_PLATFORM_TABLE, platformsInOrder, type AccountPlatformSpec, type AccountPlatformTable } from "./platforms.js";
 
 /**
- * The `accounts` service, PLAN.md 14.7: see which platforms the browser
- * profile is logged into, open a login page for the owner to log in by hand,
- * and clear a platform's cookies. It reads cookies only through
+ * The `accounts` service, PLAN.md 14.7 and 16.5: see which platforms the
+ * browser profile is logged into, open a login page for the owner to log in
+ * by hand, and clear a platform's cookies. It reads cookies only through
  * `BrowserSession.cookies()`, which carries no values, so nothing in here
  * can log or return one. It never types into a page.
+ *
+ * Since section 16 a login window is a handoff: the page is parked in the
+ * `HandoffStore` with the platform's session cookies as its "cleared" check,
+ * so `resume` works on it, `health` lists it, and the store's TTL closes it.
  */
 
 export type AccountsListOutput = Extract<AccountsOutput, { action: "list" }>;
@@ -36,6 +40,8 @@ export interface AccountsServiceDeps {
   browser: BrowserSession;
   config: Config;
   log: Logger;
+  /** The server's handoff store (PLAN.md 16.3). Without one the service keeps a store of its own. */
+  handoffs?: HandoffStore;
   /** Replaces the real platform table. Tests point a platform at a fixture domain. */
   platforms?: AccountPlatformTable;
   /** Clock in ms since the epoch. */
@@ -46,7 +52,7 @@ export interface AccountsServiceDeps {
   assumeDisplay?: boolean;
   /** Interval between cookie polls during `connect`. Default 2 s. */
   pollMs?: number;
-  /** How long a `pending` login page stays open before it is closed automatically. Default 10 minutes. */
+  /** How long a `pending` login page stays open before it is closed automatically. Default: the handoff TTL (10 minutes). */
   pendingPageTtlMs?: number;
 }
 
@@ -68,11 +74,6 @@ export const PENDING_PAGE_TTL_MS = 10 * 60_000;
 const LOGIN_GOTO_TIMEOUT_MS = 30_000;
 
 const NEVER_VALUES = "Cookie values are never returned or logged; only cookie names are checked.";
-
-interface PendingLogin {
-  page: Page;
-  timer: NodeJS.Timeout;
-}
 
 /** The outcome of checking one platform's session cookies. */
 export interface SessionCheck {
@@ -104,14 +105,13 @@ class DefaultAccountsService implements AccountsService {
   private readonly browser: BrowserSession;
   private readonly config: Config;
   private readonly log: Logger;
+  private readonly store: HandoffStore;
   private readonly table: AccountPlatformTable;
   private readonly now: () => number;
-  private readonly sleep: (ms: number) => Promise<void>;
   private readonly assumeDisplay: boolean;
-  private readonly pollMs: number;
-  private readonly pendingTtlMs: number;
-  /** Login pages left open by `connect` that returned `pending`, one per platform. */
-  private readonly pending = new Map<AccountPlatform, PendingLogin>();
+  private readonly ttlMs: number;
+  /** The handoff id of the login page left open by a `pending` connect, one per platform. */
+  private readonly pending = new Map<AccountPlatform, string>();
 
   constructor(deps: AccountsServiceDeps) {
     this.browser = deps.browser;
@@ -119,10 +119,19 @@ class DefaultAccountsService implements AccountsService {
     this.log = deps.log;
     this.table = deps.platforms ?? ACCOUNT_PLATFORM_TABLE;
     this.now = deps.now ?? (() => Date.now());
-    this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.assumeDisplay = deps.assumeDisplay ?? false;
-    this.pollMs = deps.pollMs ?? CONNECT_POLL_MS;
-    this.pendingTtlMs = deps.pendingPageTtlMs ?? PENDING_PAGE_TTL_MS;
+    this.ttlMs = deps.pendingPageTtlMs ?? (deps.handoffs !== undefined ? deps.config.handoff_ttl_ms : PENDING_PAGE_TTL_MS);
+    this.store =
+      deps.handoffs ??
+      createHandoffStore({
+        browser: deps.browser,
+        config: { ...deps.config, handoff_ttl_ms: this.ttlMs },
+        log: deps.log,
+        ...(deps.now !== undefined && { now: deps.now }),
+        ...(deps.sleep !== undefined && { sleep: deps.sleep }),
+        pollMs: deps.pollMs ?? CONNECT_POLL_MS,
+        assumeDisplay: this.assumeDisplay,
+      });
   }
 
   private get mode(): "persistent" | "cdp" {
@@ -153,8 +162,9 @@ class DefaultAccountsService implements AccountsService {
     } else {
       caveats.push("These are the logins of webrunner's own browser profile, not of your everyday browser. Use connect to log in there.");
     }
-    if (this.pending.size > 0) {
-      caveats.push(`A login page is still open for: ${[...this.pending.keys()].join(", ")}. Finish logging in there, then call connect again.`);
+    const open = [...this.pending.entries()].filter(([, id]) => this.store.get(id) !== undefined).map(([platform]) => platform);
+    if (open.length > 0) {
+      caveats.push(`A login page is still open for: ${open.join(", ")}. Finish logging in there, then call connect again or resume with its handoff id.`);
     }
     return {
       action: "list",
@@ -176,18 +186,19 @@ class DefaultAccountsService implements AccountsService {
 
   async connect(platform: AccountPlatform, waitSeconds: number): Promise<AccountsConnectOutput> {
     const spec = this.table[platform];
-    if (this.mode === "persistent" && !this.assumeDisplay && resolveHeadless(this.config)) {
+    if (!this.store.canPause()) {
       throw new AccountsError(
         "config",
         `connect needs a browser window you can see, and the persistent browser is headless here. Two ways out: run webrunner where a display exists with BROWSER_HEADLESS=false, or set BROWSER_CDP_URL (for example http://127.0.0.1:9222) to attach to your own Chrome started with --remote-debugging-port=9222 and log in there.`,
       );
     }
     const caveats = this.connectCaveats(platform);
+    const started = this.now();
 
-    if (checkSession(spec, await this.browser.cookies(), this.now()).connected) {
+    if (await this.isConnected(spec)) {
       // A login finished in the page a previous `pending` connect left open completes that flow: `connected`.
       // With no such page the session was simply there already.
-      const finishedPending = this.pending.has(platform);
+      const finishedPending = this.pendingId(platform) !== undefined;
       await this.forgetPending(platform, finishedPending ? "login finished" : "already connected");
       if (finishedPending) this.log.info("account connected", { platform, waited_s: 0 });
       return {
@@ -203,57 +214,46 @@ class DefaultAccountsService implements AccountsService {
       };
     }
 
-    const started = this.now();
-    const page = await this.loginPage(platform, spec.loginUrl);
-    const deadline = started + Math.max(0, waitSeconds) * 1000;
-    // Poll until the session cookies appear. The owner types; we only read cookie names.
-    for (;;) {
-      if (page.isClosed()) break;
-      if (checkSession(spec, await this.browser.cookies(), this.now()).connected) {
-        await this.forgetPending(platform, "login finished");
-        await this.browser.release(page);
-        const waited = this.waited(started);
+    // Reuse the login page a previous `pending` left open (the owner may be halfway through), or open a fresh one and park it.
+    const id = this.pendingId(platform) ?? (await this.parkLoginPage(platform, spec));
+    const outcome = await this.store.resume(id, Math.max(0, waitSeconds));
+    const waited = this.waited(started);
+    switch (outcome.kind) {
+      case "finished":
+        this.pending.delete(platform);
         this.log.info("account connected", { platform, waited_s: waited });
+        return {
+          ...(outcome.output as AccountsConnectOutput),
+          waited_s: waited,
+          caveats,
+        };
+      case "paused":
         return {
           action: "connect",
           platform,
-          status: "connected",
+          status: "pending",
           login_url: spec.loginUrl,
           waited_s: waited,
-          instructions: `${platform} is connected. Tools that read through it: ${usedByText(spec)}.`,
+          handoff_id: id,
+          instructions:
+            `The login page for ${platform} is open in the ${this.mode === "cdp" ? "Chrome you attached" : "webrunner browser window"} and stays open for ${Math.round(this.ttlMs / 60_000)} minutes. ` +
+            `Log in there yourself (webrunner never types credentials), then call accounts with action "connect" and platform "${platform}" again, or resume with handoff_id "${id}"; either answers connected as soon as the session cookies are present.`,
           caveats,
         };
-      }
-      const remaining = deadline - this.now();
-      if (remaining <= 0) break;
-      await this.sleep(Math.min(this.pollMs, remaining));
+      case "cancelled":
+      case "expired":
+      case "unknown":
+        this.pending.delete(platform);
+        return {
+          action: "connect",
+          platform,
+          status: "pending",
+          login_url: spec.loginUrl,
+          waited_s: waited,
+          instructions: `The login page for ${platform} was closed before the login finished. Call connect again to open it once more, log in there, then call connect again to confirm.`,
+          caveats,
+        };
     }
-
-    const waited = this.waited(started);
-    if (page.isClosed()) {
-      await this.forgetPending(platform, "page closed");
-      return {
-        action: "connect",
-        platform,
-        status: "pending",
-        login_url: spec.loginUrl,
-        waited_s: waited,
-        instructions: `The login page for ${platform} was closed before the login finished. Call connect again to open it once more, log in there, then call connect again to confirm.`,
-        caveats,
-      };
-    }
-    this.rememberPending(platform, page);
-    return {
-      action: "connect",
-      platform,
-      status: "pending",
-      login_url: spec.loginUrl,
-      waited_s: waited,
-      instructions:
-        `The login page for ${platform} is open in the ${this.mode === "cdp" ? "Chrome you attached" : "webrunner browser window"} and stays open for ${Math.round(this.pendingTtlMs / 60_000)} minutes. ` +
-        `Log in there yourself (webrunner never types credentials), then call accounts with action "connect" and platform "${platform}" again; it answers connected as soon as the session cookies are present.`,
-      caveats,
-    };
   }
 
   async disconnect(platform: AccountPlatform): Promise<AccountsDisconnectOutput> {
@@ -284,8 +284,21 @@ class DefaultAccountsService implements AccountsService {
 
   // -- helpers --------------------------------------------------------------
 
+  private async isConnected(spec: AccountPlatformSpec): Promise<boolean> {
+    return checkSession(spec, await this.browser.cookies(), this.now()).connected;
+  }
+
   private waited(startedMs: number): number {
     return Math.max(0, Math.round((this.now() - startedMs) / 1000));
+  }
+
+  /** The handoff id of this platform's open login page, or undefined when the store no longer has it. */
+  private pendingId(platform: AccountPlatform): string | undefined {
+    const id = this.pending.get(platform);
+    if (id === undefined) return undefined;
+    if (this.store.get(id) !== undefined) return id;
+    this.pending.delete(platform);
+    return undefined;
   }
 
   private connectCaveats(platform: AccountPlatform): string[] {
@@ -304,51 +317,61 @@ class DefaultAccountsService implements AccountsService {
     return out;
   }
 
-  /** Reuse the login page a previous `pending` left open, or open a fresh unpooled page on the login URL. */
-  private async loginPage(platform: AccountPlatform, loginUrl: string): Promise<Page> {
-    const existing = this.pending.get(platform);
-    if (existing !== undefined && !existing.page.isClosed()) {
-      // Do not navigate: the owner may be halfway through a login flow on it.
-      clearTimeout(existing.timer);
-      this.pending.delete(platform);
-      return existing.page;
-    }
+  /** Open the login URL on an unpooled page and park it as a login handoff. Returns the handoff id. */
+  private async parkLoginPage(platform: AccountPlatform, spec: AccountPlatformSpec): Promise<string> {
     const page = await this.browser.openUnpooledPage();
     try {
-      await page.goto(loginUrl, { waitUntil: "domcontentloaded", timeout: LOGIN_GOTO_TIMEOUT_MS });
+      await page.goto(spec.loginUrl, { waitUntil: "domcontentloaded", timeout: LOGIN_GOTO_TIMEOUT_MS });
     } catch (err) {
       await this.browser.release(page);
       const message = err instanceof Error ? err.message.split("\n")[0] : String(err);
-      throw new AccountsError("provider", `could not open the ${platform} login page ${loginUrl}: ${message}`, true);
+      throw new AccountsError("provider", `could not open the ${platform} login page ${spec.loginUrl}: ${message}`, true);
     }
-    return page;
+    const window = this.mode === "cdp" ? "Chrome you attached" : "webrunner browser window";
+    let record;
+    try {
+      record = this.store.park({
+        page,
+        tool: "accounts",
+        site: platform,
+        url: spec.loginUrl,
+        reason: "login_required",
+        whatToDo: `Sign in to ${platform} in the ${window}; webrunner never types credentials. Then call accounts connect ${platform} again, or resume.`,
+        step: "login",
+        cleared: () => this.isConnected(spec),
+        continue: () => this.connectedOutput(platform, spec),
+      });
+    } catch (err) {
+      await this.browser.release(page);
+      const message = err instanceof Error ? err.message : String(err);
+      throw new AccountsError("provider", `could not keep the ${platform} login page open: ${message}`, false);
+    }
+    this.pending.set(platform, record.id);
+    return record.id;
   }
 
-  private rememberPending(platform: AccountPlatform, page: Page): void {
-    const timer = setTimeout(() => {
-      this.pending.delete(platform);
-      this.log.info("closing login page left open", { platform, after_ms: this.pendingTtlMs });
-      void this.browser.release(page);
-    }, this.pendingTtlMs);
-    // Never keep the server alive for a login window nobody is using.
-    timer.unref();
-    page.once("close", () => {
-      if (this.pending.get(platform)?.page === page) {
-        clearTimeout(timer);
-        this.pending.delete(platform);
-      }
-    });
-    this.pending.set(platform, { page, timer });
+  /** The continuation of a login handoff: the cookies are there, so the page can go. */
+  private connectedOutput(platform: AccountPlatform, spec: AccountPlatformSpec): Promise<Record<string, unknown>> {
+    this.pending.delete(platform);
+    const output: AccountsConnectOutput = {
+      action: "connect",
+      platform,
+      status: "connected",
+      login_url: spec.loginUrl,
+      waited_s: 0,
+      instructions: `${platform} is connected. Tools that read through it: ${usedByText(spec)}.`,
+      caveats: this.connectCaveats(platform),
+    };
+    return Promise.resolve(output);
   }
 
   /** Close and forget the pending login page for `platform`, if any. */
   private async forgetPending(platform: AccountPlatform, reason: string): Promise<void> {
-    const entry = this.pending.get(platform);
-    if (entry === undefined) return;
-    clearTimeout(entry.timer);
+    const id = this.pendingId(platform);
+    if (id === undefined) return;
     this.pending.delete(platform);
     this.log.debug("closing pending login page", { platform, reason });
-    await this.browser.release(entry.page);
+    await this.store.cancel(id);
   }
 }
 
@@ -359,3 +382,4 @@ function usedByText(spec: AccountPlatformSpec): string {
 export function createAccountsService(deps: AccountsServiceDeps): AccountsService {
   return new DefaultAccountsService(deps);
 }
+

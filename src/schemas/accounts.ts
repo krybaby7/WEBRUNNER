@@ -54,6 +54,8 @@ export const AccountsConnectOutputSchema = z.object({
   login_url: z.string().url(),
   waited_s: z.number().nonnegative(),
   instructions: z.string().min(1),
+  /** PLAN.md 16.5: the handoff of a `pending` login page, so `resume` can continue it. */
+  handoff_id: z.string().min(1).optional(),
   caveats: z.array(z.string()),
 });
 

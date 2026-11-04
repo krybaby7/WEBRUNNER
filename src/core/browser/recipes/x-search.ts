@@ -435,6 +435,7 @@ export function createXSearchRecipe(options: SocialRecipeOptions = {}): SocialRe
           throw new RecipeError("blocked", "X showed a login prompt instead of posts; run accounts connect x", {
             retryable: false,
             needsLogin: true,
+            wall: "login_required",
           });
         }
         throw new RecipeError("timeout", `no posts appeared on X within ${Math.round(budget / 1000)}s (page: ${last?.title ?? "unknown"})`);
