@@ -1,0 +1,11 @@
+{
+  "_note": "Recorded live on 2026-11-05 from the owner's machine (a home IP) with the owner's own Finnhub key: GET /quote?symbol=AAPL (after the 2026-11-04 close); secrets redacted. The provider mapping was checked against this response.",
+  "c": 349.51,
+  "d": 17.61,
+  "dp": 5.3058,
+  "h": 354.5,
+  "l": 340.99,
+  "o": 341.565,
+  "pc": 331.9,
+  "t": 1793826000
+}

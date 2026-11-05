@@ -279,3 +279,44 @@ describe("reddit: URLs", () => {
     await expect(p.search(query({ query: undefined }), signal())).rejects.toMatchObject({ code: "invalid_input" });
   });
 });
+
+describe("reddit: the 2026-11-05 live responses (the owner's script app, a home IP)", () => {
+  const liveSearch = loadFixture("reddit-search-live");
+  const liveThread = (loadFixture("reddit-thread-live") as { listings: unknown }).listings;
+  const liveToken = loadFixture("reddit-token-live");
+  const POST = "https://www.reddit.com/r/samsunggalaxy/comments/1w4mwh6/battery_life_new_s26/";
+  function live(): ReturnType<typeof fakeFetch> {
+    return fakeFetch((_call, url) => {
+      if (url.pathname === "/api/v1/access_token") return jsonResponse(liveToken);
+      if (/^\/comments\//.test(url.pathname)) return jsonResponse(liveThread);
+      if (/\/search(\.json)?$/.test(url.pathname)) return jsonResponse(liveSearch);
+      return jsonResponse({ error: "unknown" }, 404);
+    });
+  }
+
+  it("maps the live search listing to posts with ids, scores, comment counts and dates", async () => {
+    const f = live();
+    const out = await make(f, { keys: true }).search(query({ kind: "posts", per_platform: 10 }), signal());
+    expect(new URL(f.calls[0]?.url ?? "").pathname).toBe("/api/v1/access_token");
+    expect(out.length).toBeGreaterThanOrEqual(8);
+    for (const i of out) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    expect(out.find((i) => i.id === "reddit:1w4mwh6")).toMatchObject({
+      kind: "post",
+      community: "samsunggalaxy",
+      score: 6,
+      replies: 14,
+      title: "Battery life new S26",
+      url: POST,
+      created_at: new Date(1788291816 * 1000).toISOString(),
+    });
+    expect(out.find((i) => i.id === "reddit:1s5tkei")).toMatchObject({ score: 393, replies: 77 });
+  });
+
+  it("maps the live thread to the post, then its top-level comments in the listing's order", async () => {
+    const out = await make(live(), { keys: true }).thread(POST, query({ per_platform: 10 }), signal());
+    expect(out[0]).toMatchObject({ id: "reddit:1w4mwh6", kind: "post", title: "Battery life new S26" });
+    expect(out.slice(1).map((i) => i.id)).toEqual(["reddit:p78qo8g", "reddit:p78y2wt", "reddit:p78qx7p", "reddit:p78xhl1", "reddit:pcseqga"]);
+    expect(out[1]).toMatchObject({ kind: "comment", author: "Negative-Pass1981", score: 2, parent_url: POST });
+    for (const i of out) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+  });
+});

@@ -1,0 +1,238 @@
+{
+  "_note": "Recorded live on 2026-11-05 from the owner's machine (a home IP) with the owner's own YouTube Data API v3 key: search.list q=Claude Code vs Cursor, type=video, maxResults=5; secrets redacted. The provider mapping was checked against this response.",
+  "kind": "youtube#searchListResponse",
+  "etag": "1h5iJ7EyZHJwPaynEAltf0Wx9sU",
+  "nextPageToken": "CAUQAA",
+  "regionCode": "EG",
+  "pageInfo": {
+    "totalResults": 1000000,
+    "resultsPerPage": 5
+  },
+  "items": [
+    {
+      "kind": "youtube#searchResult",
+      "etag": "8giqssP3MqOT3KNjvKHxbuoJYq8",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "HIHxDqGauJU"
+      },
+      "snippet": {
+        "publishedAt": "2025-08-15T08:58:14Z",
+        "channelId": "UC4T5jZX7MX9Oc_27p8gyiVA",
+        "title": "The biggest difference between Claude Code and Cursor #ai #claudecode #cursor #claude",
+        "description": "",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Rich Kuo",
+        "liveBroadcastContent": "none",
+        "publishTime": "2025-08-15T08:58:14Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "7IDB2EWaJOaKg0lHA1PsG4JSQUM",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "OSBo9qcpRfw"
+      },
+      "snippet": {
+        "publishedAt": "2025-09-04T06:15:03Z",
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "title": "Cursor vs Claude Code | The Ultimate Comparison Guide",
+        "description": "70% off Warp Pro - https://go.warp.dev/codev Coupon code: CODEV Read the full blog post ...",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Codevolution",
+        "liveBroadcastContent": "none",
+        "publishTime": "2025-09-04T06:15:03Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "PAknmYNk9v6KJw6d-V0jGqeRlyI",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "KW35wHNU7pY"
+      },
+      "snippet": {
+        "publishedAt": "2026-02-01T22:02:55Z",
+        "channelId": "UCJIfeSCssxSC_Dhc5s7woww",
+        "title": "Cursor vs Claude Code: Which is best for programming? | Lex Fridman Podcast",
+        "description": "Lex Fridman Podcast full episode: https://www.youtube.com/watch?v=EV7WhVT270Q Thank you for listening ❤ Check out our ...",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Lex Clips",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-02-01T22:02:55Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "mg1-ebqdOIH2PgKj7p778nFr0bQ",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "sNswNybkrtw"
+      },
+      "snippet": {
+        "publishedAt": "2026-01-08T04:59:38Z",
+        "channelId": "UCa6W5sNp-M8zjCYWayj9s3g",
+        "title": "Claude Code vs Cursor… Which One BUILDS THE BETTER APP? 🚨",
+        "description": "",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "SinaGPT",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-01-08T04:59:38Z"
+      }
+    },
+    {
+      "kind": "youtube#searchResult",
+      "etag": "rkymzWeiA6WQqjnECFE5RyfWHzA",
+      "id": {
+        "kind": "youtube#video",
+        "videoId": "4v-J367oPKw"
+      },
+      "snippet": {
+        "publishedAt": "2026-09-23T12:13:53Z",
+        "channelId": "UCE9dQn9SfrXZtQSLZlGTeXQ",
+        "title": "Cursor AI vs Claude Code 2026 | Which Coding AI Is Better (2026 Honest Review)",
+        "description": "In today's video, we cover, Cursor AI vs Claude Code 2026 | Which Coding AI Is Better.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          },
+          "fhd": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/fhddefault.jpg",
+            "width": 1920,
+            "height": 1080
+          }
+        },
+        "channelTitle": "Tutorialytics",
+        "liveBroadcastContent": "none",
+        "publishTime": "2026-09-23T12:13:53Z"
+      }
+    }
+  ]
+}

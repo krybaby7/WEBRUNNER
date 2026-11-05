@@ -1,0 +1,302 @@
+{
+  "_note": "Recorded live on 2026-11-05 from the owner's machine (a home IP) with the owner's own YouTube Data API v3 key: videos.list part=snippet,statistics for the five search ids; secrets redacted. The provider mapping was checked against this response.",
+  "kind": "youtube#videoListResponse",
+  "etag": "HFXUf6p09uayLQqkclShVOKChME",
+  "items": [
+    {
+      "kind": "youtube#video",
+      "etag": "eIElLCy0oJG8Do6_PsT_n5ia7d4",
+      "id": "HIHxDqGauJU",
+      "snippet": {
+        "publishedAt": "2025-08-15T08:58:14Z",
+        "channelId": "UC4T5jZX7MX9Oc_27p8gyiVA",
+        "title": "The biggest difference between Claude Code and Cursor #ai #claudecode #cursor #claude",
+        "description": "",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/HIHxDqGauJU/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Rich Kuo",
+        "categoryId": "22",
+        "liveBroadcastContent": "none",
+        "defaultLanguage": "en",
+        "localized": {
+          "title": "The biggest difference between Claude Code and Cursor #ai #claudecode #cursor #claude",
+          "description": ""
+        }
+      },
+      "statistics": {
+        "viewCount": "892539",
+        "likeCount": "6053",
+        "favoriteCount": "0",
+        "commentCount": "311"
+      }
+    },
+    {
+      "kind": "youtube#video",
+      "etag": "DtpWov4t1lhJqzi4MXQgiToHapw",
+      "id": "OSBo9qcpRfw",
+      "snippet": {
+        "publishedAt": "2025-09-04T06:15:03Z",
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "title": "Cursor vs Claude Code | The Ultimate Comparison Guide",
+        "description": "70% off Warp Pro - https://go.warp.dev/codev\nCoupon code: CODEV\n\nRead the full blog post - https://www.builder.io/blog/cursor-vs-claude-code?utm_source=youtube&utm_content=vg\nCursor vs Claude code - The ultimate guide to help you choose an AI coding assistant\n\nIn this in-depth comparison, I break down the real-world pros and cons of Cursor and Claude Code after weeks of hands-on testing.\n\nDiscover how each tool handles code generation, editing, model access, advanced features, pricing, and integration with your workflow. I’ll walk you through the user experience, hidden costs, and which tool excels at autonomous development versus rapid code editing.\n\nWhether you’re a developer looking to boost productivity or just want to stay ahead of the curve, this guide will help you make the best choice for your coding needs.\n\nBecome a Fullstack Developer with Scrimba - https://scrimba.com/fullstack-path-c0fullstack?via=Codevolution\n\n00:00 - Cursor or Claude Code\n00:27 - UI and Workflow\n01:15 - Code Generation\n02:12 - Code Editing\n02:53 - Model Access\n03:43 - Advanced Features\n04:40 - Pricing & Hidden Costs\n07:58 - Codebase Discovery\n08:40 - Customizing AI Behavior\n09:45 - MCP Support\n10:30 - Which Tool Should You Use?\n\nDiscord - https://discord.gg/KNjSW92EG\nX - https://x.com/CodevolutionWeb\nBusiness - codevolution.business@gmail.com",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/OSBo9qcpRfw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Codevolution",
+        "tags": [
+          "Codevolution",
+          "Cursor",
+          "Claude Code",
+          "Cursor vs Claude Code",
+          "Cursor vs Claude Code Pros and Cons",
+          "Cursor vs Claude Code Comparison",
+          "The Ultimate Comparison Guide",
+          "Cursor vs Claude Code | The Ultimate Comparison Guide"
+        ],
+        "categoryId": "28",
+        "liveBroadcastContent": "none",
+        "defaultLanguage": "en",
+        "localized": {
+          "title": "Cursor vs Claude Code | The Ultimate Comparison Guide",
+          "description": "70% off Warp Pro - https://go.warp.dev/codev\nCoupon code: CODEV\n\nRead the full blog post - https://www.builder.io/blog/cursor-vs-claude-code?utm_source=youtube&utm_content=vg\nCursor vs Claude code - The ultimate guide to help you choose an AI coding assistant\n\nIn this in-depth comparison, I break down the real-world pros and cons of Cursor and Claude Code after weeks of hands-on testing.\n\nDiscover how each tool handles code generation, editing, model access, advanced features, pricing, and integration with your workflow. I’ll walk you through the user experience, hidden costs, and which tool excels at autonomous development versus rapid code editing.\n\nWhether you’re a developer looking to boost productivity or just want to stay ahead of the curve, this guide will help you make the best choice for your coding needs.\n\nBecome a Fullstack Developer with Scrimba - https://scrimba.com/fullstack-path-c0fullstack?via=Codevolution\n\n00:00 - Cursor or Claude Code\n00:27 - UI and Workflow\n01:15 - Code Generation\n02:12 - Code Editing\n02:53 - Model Access\n03:43 - Advanced Features\n04:40 - Pricing & Hidden Costs\n07:58 - Codebase Discovery\n08:40 - Customizing AI Behavior\n09:45 - MCP Support\n10:30 - Which Tool Should You Use?\n\nDiscord - https://discord.gg/KNjSW92EG\nX - https://x.com/CodevolutionWeb\nBusiness - codevolution.business@gmail.com"
+        },
+        "defaultAudioLanguage": "en"
+      },
+      "statistics": {
+        "viewCount": "157743",
+        "likeCount": "2081",
+        "favoriteCount": "0",
+        "commentCount": "77"
+      }
+    },
+    {
+      "kind": "youtube#video",
+      "etag": "mXfrFjz-7PqPpUlI0LrGG9-t7ew",
+      "id": "KW35wHNU7pY",
+      "snippet": {
+        "publishedAt": "2026-02-01T22:02:55Z",
+        "channelId": "UCJIfeSCssxSC_Dhc5s7woww",
+        "title": "Cursor vs Claude Code: Which is best for programming? | Lex Fridman Podcast",
+        "description": "Lex Fridman Podcast full episode: https://www.youtube.com/watch?v=EV7WhVT270Q\nThank you for listening ❤ Check out our sponsors: https://lexfridman.com/sponsors/cv9596-sb\nSee below for guest bio, links, and to give feedback, submit questions, contact Lex, etc.\n\n*GUEST BIO:*\nNathan Lambert and Sebastian Raschka are machine learning researchers, engineers, and educators. Nathan is the post-training lead at the Allen Institute for AI (Ai2) and the author of The RLHF Book. Sebastian Raschka is the author of Build a Large Language Model (From Scratch) and Build a Reasoning Model (From Scratch).\n\n*CONTACT LEX:*\n*Feedback* - give feedback to Lex: https://lexfridman.com/survey\n*AMA* - submit questions, videos or call-in: https://lexfridman.com/ama\n*Hiring* - join our team: https://lexfridman.com/hiring\n*Other* - other ways to get in touch: https://lexfridman.com/contact\n\n*EPISODE LINKS:*\nNathan's X: https://x.com/natolambert\nNathan's Blog: https://interconnects.ai\nNathan's Website: https://natolambert.com\nNathan's YouTube: https://youtube.com/@natolambert\nNathan's GitHub: https://github.com/natolambert\nNathan's Book: https://rlhfbook.com\nSebastian's X: https://x.com/rasbt\nSebastian's Blog: https://magazine.sebastianraschka.com\nSebastian's Website: https://sebastianraschka.com\nSebastian's YouTube: https://youtube.com/@SebastianRaschka\nSebastian's GitHub: https://github.com/rasbt\nSebastian's Books:\nBuild a Large Language Model (From Scratch): https://manning.com/books/build-a-large-language-model-from-scratch\nBuild a Reasoning Model (From Scratch): https://manning.com/books/build-a-reasoning-model-from-scratch\n\n*SPONSORS:*\nTo support this podcast, check out our sponsors & get discounts:\n*Box:* Intelligent content management platform.\nGo to https://lexfridman.com/s/box-cv9596-sb\n*Quo:* Phone system (calls, texts, contacts) for businesses.\nGo to https://lexfridman.com/s/quo-cv9596-sb\n*UPLIFT Desk:* Standing desks and office ergonomics.\nGo to https://lexfridman.com/s/uplift_desk-cv9596-sb\n*Fin:* AI agent for customer service.\nGo to https://lexfridman.com/s/fin-cv9596-sb\n*Shopify:* Sell stuff online.\nGo to https://lexfridman.com/s/shopify-cv9596-sb\n*CodeRabbit:* AI-powered code reviews.\nGo to https://lexfridman.com/s/coderabbit-cv9596-sb\n*LMNT:* Zero-sugar electrolyte drink mix.\nGo to https://lexfridman.com/s/lmnt-cv9596-sb\n*Perplexity:* AI-powered answer engine.\nGo to https://lexfridman.com/s/perplexity-cv9596-sb\n\n*PODCAST LINKS:*\n- Podcast Website: https://lexfridman.com/podcast\n- Apple Podcasts: https://apple.co/2lwqZIr\n- Spotify: https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL\n- RSS: https://lexfridman.com/feed/podcast/\n- Podcast Playlist: https://www.youtube.com/playlist?list=PLrAXtmErZgOdP_8GztsuKi9nrraNbKKp4\n- Clips Channel: https://www.youtube.com/lexclips\n\n*SOCIAL LINKS:*\n- X: https://x.com/lexfridman\n- Instagram: https://instagram.com/lexfridman\n- TikTok: https://tiktok.com/@lexfridman\n- LinkedIn: https://linkedin.com/in/lexfridman\n- Facebook: https://facebook.com/lexfridman\n- Patreon: https://patreon.com/lexfridman\n- Telegram: https://t.me/lexfridman\n- Reddit: https://reddit.com/r/lexfridman",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/KW35wHNU7pY/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "Lex Clips",
+        "tags": [
+          "alex friedman",
+          "lex ai",
+          "lex clips",
+          "lex debate",
+          "lex freedman",
+          "lex fridman",
+          "lex friedman",
+          "lex interview",
+          "lex lecture",
+          "lex mit",
+          "lex podcast",
+          "lex transcript"
+        ],
+        "categoryId": "28",
+        "liveBroadcastContent": "none",
+        "defaultLanguage": "en",
+        "localized": {
+          "title": "Cursor vs Claude Code: Which is best for programming? | Lex Fridman Podcast",
+          "description": "Lex Fridman Podcast full episode: https://www.youtube.com/watch?v=EV7WhVT270Q\nThank you for listening ❤ Check out our sponsors: https://lexfridman.com/sponsors/cv9596-sb\nSee below for guest bio, links, and to give feedback, submit questions, contact Lex, etc.\n\n*GUEST BIO:*\nNathan Lambert and Sebastian Raschka are machine learning researchers, engineers, and educators. Nathan is the post-training lead at the Allen Institute for AI (Ai2) and the author of The RLHF Book. Sebastian Raschka is the author of Build a Large Language Model (From Scratch) and Build a Reasoning Model (From Scratch).\n\n*CONTACT LEX:*\n*Feedback* - give feedback to Lex: https://lexfridman.com/survey\n*AMA* - submit questions, videos or call-in: https://lexfridman.com/ama\n*Hiring* - join our team: https://lexfridman.com/hiring\n*Other* - other ways to get in touch: https://lexfridman.com/contact\n\n*EPISODE LINKS:*\nNathan's X: https://x.com/natolambert\nNathan's Blog: https://interconnects.ai\nNathan's Website: https://natolambert.com\nNathan's YouTube: https://youtube.com/@natolambert\nNathan's GitHub: https://github.com/natolambert\nNathan's Book: https://rlhfbook.com\nSebastian's X: https://x.com/rasbt\nSebastian's Blog: https://magazine.sebastianraschka.com\nSebastian's Website: https://sebastianraschka.com\nSebastian's YouTube: https://youtube.com/@SebastianRaschka\nSebastian's GitHub: https://github.com/rasbt\nSebastian's Books:\nBuild a Large Language Model (From Scratch): https://manning.com/books/build-a-large-language-model-from-scratch\nBuild a Reasoning Model (From Scratch): https://manning.com/books/build-a-reasoning-model-from-scratch\n\n*SPONSORS:*\nTo support this podcast, check out our sponsors & get discounts:\n*Box:* Intelligent content management platform.\nGo to https://lexfridman.com/s/box-cv9596-sb\n*Quo:* Phone system (calls, texts, contacts) for businesses.\nGo to https://lexfridman.com/s/quo-cv9596-sb\n*UPLIFT Desk:* Standing desks and office ergonomics.\nGo to https://lexfridman.com/s/uplift_desk-cv9596-sb\n*Fin:* AI agent for customer service.\nGo to https://lexfridman.com/s/fin-cv9596-sb\n*Shopify:* Sell stuff online.\nGo to https://lexfridman.com/s/shopify-cv9596-sb\n*CodeRabbit:* AI-powered code reviews.\nGo to https://lexfridman.com/s/coderabbit-cv9596-sb\n*LMNT:* Zero-sugar electrolyte drink mix.\nGo to https://lexfridman.com/s/lmnt-cv9596-sb\n*Perplexity:* AI-powered answer engine.\nGo to https://lexfridman.com/s/perplexity-cv9596-sb\n\n*PODCAST LINKS:*\n- Podcast Website: https://lexfridman.com/podcast\n- Apple Podcasts: https://apple.co/2lwqZIr\n- Spotify: https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL\n- RSS: https://lexfridman.com/feed/podcast/\n- Podcast Playlist: https://www.youtube.com/playlist?list=PLrAXtmErZgOdP_8GztsuKi9nrraNbKKp4\n- Clips Channel: https://www.youtube.com/lexclips\n\n*SOCIAL LINKS:*\n- X: https://x.com/lexfridman\n- Instagram: https://instagram.com/lexfridman\n- TikTok: https://tiktok.com/@lexfridman\n- LinkedIn: https://linkedin.com/in/lexfridman\n- Facebook: https://facebook.com/lexfridman\n- Patreon: https://patreon.com/lexfridman\n- Telegram: https://t.me/lexfridman\n- Reddit: https://reddit.com/r/lexfridman"
+        },
+        "defaultAudioLanguage": "en-US"
+      },
+      "statistics": {
+        "viewCount": "89860",
+        "likeCount": "742",
+        "favoriteCount": "0",
+        "commentCount": "55"
+      }
+    },
+    {
+      "kind": "youtube#video",
+      "etag": "H-qqLAGrJOu4NSHidk7i8KbaDgg",
+      "id": "sNswNybkrtw",
+      "snippet": {
+        "publishedAt": "2026-01-08T04:59:38Z",
+        "channelId": "UCa6W5sNp-M8zjCYWayj9s3g",
+        "title": "Claude Code vs Cursor… Which One BUILDS THE BETTER APP? 🚨",
+        "description": "",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/sNswNybkrtw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          }
+        },
+        "channelTitle": "SinaGPT",
+        "categoryId": "28",
+        "liveBroadcastContent": "none",
+        "defaultLanguage": "en",
+        "localized": {
+          "title": "Claude Code vs Cursor… Which One BUILDS THE BETTER APP? 🚨",
+          "description": ""
+        }
+      },
+      "statistics": {
+        "viewCount": "92297",
+        "likeCount": "1711",
+        "favoriteCount": "0",
+        "commentCount": "38"
+      }
+    },
+    {
+      "kind": "youtube#video",
+      "etag": "dmdCD3Op3XX-NpEXXaB5AthB5WM",
+      "id": "4v-J367oPKw",
+      "snippet": {
+        "publishedAt": "2026-09-23T12:13:53Z",
+        "channelId": "UCE9dQn9SfrXZtQSLZlGTeXQ",
+        "title": "Cursor AI vs Claude Code 2026 | Which Coding AI Is Better (2026 Honest Review)",
+        "description": "In today's video, we cover, Cursor AI vs Claude Code 2026 | Which Coding AI Is Better.",
+        "thumbnails": {
+          "default": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/default.jpg",
+            "width": 120,
+            "height": 90
+          },
+          "medium": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/mqdefault.jpg",
+            "width": 320,
+            "height": 180
+          },
+          "high": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/hqdefault.jpg",
+            "width": 480,
+            "height": 360
+          },
+          "standard": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/sddefault.jpg",
+            "width": 640,
+            "height": 480
+          },
+          "maxres": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/maxresdefault.jpg",
+            "width": 1280,
+            "height": 720
+          },
+          "fhd": {
+            "url": "https://i.ytimg.com/vi/4v-J367oPKw/fhddefault.jpg",
+            "width": 1920,
+            "height": 1080
+          }
+        },
+        "channelTitle": "Tutorialytics",
+        "categoryId": "22",
+        "liveBroadcastContent": "none",
+        "defaultLanguage": "en",
+        "localized": {
+          "title": "Cursor AI vs Claude Code 2026 | Which Coding AI Is Better (2026 Honest Review)",
+          "description": "In today's video, we cover, Cursor AI vs Claude Code 2026 | Which Coding AI Is Better."
+        }
+      },
+      "statistics": {
+        "viewCount": "9940",
+        "likeCount": "30",
+        "favoriteCount": "0",
+        "commentCount": "2"
+      }
+    }
+  ],
+  "pageInfo": {
+    "totalResults": 5,
+    "resultsPerPage": 5
+  }
+}
