@@ -7,7 +7,7 @@ import type { Candidate, Note } from "./types.js";
  * compared across prompt versions. The engine logs it at run start. It is not
  * part of any cache key.
  */
-export const PROMPT_VERSION = "2026-10-18.1";
+export const PROMPT_VERSION = "2026-11-05.1";
 
 export interface Prompt {
   /** Stable across calls of the same kind, so it can be cached. */
@@ -198,7 +198,11 @@ export const ExtractSchema = z.object({
   claims: z.array(
     z.object({
       text: z.string().describe("A self-contained factual statement supported by the page."),
-      quote: z.string().describe("A verbatim passage from the page that supports the claim, at most 300 characters."),
+      quote: z
+        .string()
+        .describe(
+          "A verbatim passage from the page that supports the claim, at most 300 characters, or an empty string when no passage can be copied.",
+        ),
       confidence: z.enum(CONFIDENCE_LEVELS),
     }),
   ),
@@ -209,7 +213,7 @@ export const EXTRACTOR_SYSTEM = `You extract research notes from one web page. Y
 
 Rules:
 - "claims": factual statements from the page that help answer the question. Each claim must be atomic, self-contained (name the subject, do not say "it" or "the company") and specific: keep numbers, units, dates, versions and names exactly as the page gives them. Return at most 10 claims, most useful first. Do not pad.
-- "quote": for every claim, copy one passage from the page verbatim that supports it. It must be a contiguous span of the page text, copied character for character, at most 300 characters. No ellipses, no paraphrase, no stitched fragments. If you cannot find a verbatim passage, drop the claim.
+- "quote": for every claim, copy one passage from the page verbatim that supports it. It must be a contiguous span of the page text, copied character for character, at most 300 characters. No ellipses, no paraphrase, no stitched fragments. If you are confident the page supports a claim but cannot copy a passage for it, keep the claim and set "quote" to an empty string: a claim without a quote is recorded as low confidence. Never invent or reword a quote to fill the field.
 - "confidence": "high" when the page states the claim explicitly and the page is an authoritative source for it; "medium" when the page states it but the source is secondary, indirect or unsourced; "low" when the page hedges, speculates, gives an opinion, or the claim is a weak inference.
 - Only record what the page says. Never add outside knowledge, never infer beyond the text, never fill gaps from memory.
 - "published_at": the publication or last-updated date if the page states one, as ISO 8601 UTC (for example 2026-03-14T00:00:00.000Z). Use null when the page states no date. Do not guess a date from context.
@@ -228,6 +232,15 @@ export interface ExtractorPromptArgs {
   truncated?: boolean | undefined;
 }
 
+/**
+ * The page text exactly as the extractor sees it between the <page> markers.
+ * The engine checks extractor quotes against this same text, so if the prompt
+ * ever cuts the page, a quote from beyond the cut stays unverified.
+ */
+export function extractorPageText(args: Pick<ExtractorPromptArgs, "markdown">): string {
+  return args.markdown;
+}
+
 export function extractorPrompt(args: ExtractorPromptArgs): Prompt {
   const user = [
     "## Question",
@@ -238,7 +251,7 @@ export function extractorPrompt(args: ExtractorPromptArgs): Prompt {
     `Title: ${args.title}`,
     args.truncated === true ? "Note: the page text below was cut off before the end." : "",
     "<page>",
-    args.markdown,
+    extractorPageText(args),
     "</page>",
     "",
     "Extract the notes now.",

@@ -15,12 +15,14 @@ import {
   fakeSearch,
   makeRig,
   pageByQuery,
+  pageMarkdown,
   pageResult,
   pageUrl,
   plan,
   scoreWith,
   searchPool,
   userText,
+  type LogLine,
   type PoolResult,
 } from "./helpers.js";
 
@@ -651,7 +653,11 @@ describe("runResearch: what is asked of the models", () => {
           return { ...base, claims: base.claims.map((c) => ({ ...c, quote: long })) };
         },
       },
-      { search: fakeSearch(pageByQuery) },
+      {
+        search: fakeSearch(pageByQuery),
+        // The long passage is on the page, so the quote check keeps it.
+        fetch: fakeFetch({ page: (url) => (url === pageUrl(1) ? { markdown: `${pageMarkdown(1)}\n${long}\n` } : undefined) }),
+      },
     );
     const result = await runResearch({ question: QUESTION }, rig.deps);
     const quotes = result.findings.map((f) => f.quote).filter((q): q is string => q !== undefined);
@@ -685,6 +691,174 @@ describe("runResearch: what is asked of the models", () => {
     const result = await runResearch({ question: QUESTION }, rig.deps);
     expect(result.findings[0]?.quote).toBeUndefined();
     expect(result.findings[1]?.quote).toBe("the seat of its federal parliament");
+  });
+});
+
+describe("runResearch: extractor quotes are checked against the page", () => {
+  const RSQUO = String.fromCodePoint(0x2019);
+  const LDQUO = String.fromCodePoint(0x201c);
+  const RDQUO = String.fromCodePoint(0x201d);
+  const writerFails = (role: string): Error | undefined =>
+    role === "writer" ? new LlmError("provider", "api", "boom", { retryable: true }) : undefined;
+  type ExtractedClaim = { text: string; quote: string; confidence: "high" | "medium" | "low" };
+  /** The default extractor's claims for the page plus `extra`. */
+  const withClaims =
+    (...extra: ExtractedClaim[]) =>
+    (req: Parameters<typeof defaultExtractor>[0], n: number): unknown => {
+      const base = defaultExtractor(req, n) as { claims: ExtractedClaim[] };
+      return { ...base, claims: [...base.claims, ...extra] };
+    };
+  const quoteLine = (lines: LogLine[]): LogLine[] => lines.filter((l) => l.msg === "research quote check");
+
+  it("keeps a claim whose quote is not on the page, with an empty quote and low confidence", async () => {
+    const rig = makeRig(
+      {
+        planner: [plan(["q-1"]), plan([], { stop: true, gaps: [] })],
+        extractor: withClaims(
+          {
+            text: "Canberra was designed by Walter Burley Griffin.",
+            quote: "Griffin won the 1912 international design competition for the city.",
+            confidence: "high",
+          },
+          { text: "Canberra hosts the national parliament.", quote: "", confidence: "high" },
+        ),
+        failures: writerFails,
+      },
+      { search: fakeSearch(pageByQuery) },
+    );
+    const result = await runResearch({ question: QUESTION }, rig.deps);
+    // The fallback report lists every claim: none was dropped.
+    expect(result.findings).toHaveLength(5);
+    const invented = result.findings.find((f) => f.claim === "Canberra was designed by Walter Burley Griffin.");
+    expect(invented).toMatchObject({ confidence: "low", source_ids: [1] });
+    expect(invented?.quote).toBeUndefined();
+    const unquoted = result.findings.find((f) => f.claim === "Canberra hosts the national parliament.");
+    expect(unquoted).toMatchObject({ confidence: "low" });
+    expect(unquoted?.quote).toBeUndefined();
+    const real = result.findings.find((f) => f.claim.startsWith("Canberra was selected"));
+    expect(real).toMatchObject({
+      confidence: "high",
+      quote: "Canberra was selected as the site of the national capital in 1908.",
+    });
+    expect(JSON.stringify(result)).not.toContain("Griffin won");
+    expect(quoteLine(rig.lines)[0]?.fields).toMatchObject({ quotes_checked: 4, matched_exact: 3, unverified: 1, no_quote: 1 });
+  });
+
+  it("keeps lenient matches as the extractor wrote them", async () => {
+    const lenient = `Canberra${RSQUO}s population was about 456 000 at the 2021 census.`;
+    const rig = makeRig(
+      {
+        planner: [plan(["q-1"]), plan([], { stop: true, gaps: [] })],
+        extractor: () => ({
+          relevance: 8,
+          published_at: null,
+          claims: [
+            { text: "Canberra had about 456,000 people in 2021.", quote: lenient, confidence: "high" },
+            {
+              text: "Canberra was chosen as the capital in 1908.",
+              // "the" dropped before "national".
+              quote: "Canberra was selected as the site of national capital in 1908.",
+              confidence: "medium",
+            },
+          ],
+        }),
+      },
+      { search: fakeSearch(pageByQuery) },
+    );
+    await runResearch({ question: QUESTION }, rig.deps);
+    const writerText = userText(rig.llm.byRole("writer")[0]!);
+    expect(writerText).toContain(`Claim 1 (high): Canberra had about 456,000 people in 2021.\n  Quote: "${lenient}"`);
+    expect(writerText).toContain("Claim 2 (medium)");
+    expect(quoteLine(rig.lines)[0]?.fields).toMatchObject({
+      quotes_checked: 2,
+      matched_exact: 0,
+      matched_lenient: 2,
+      matched_fuzzy: 1,
+      unverified: 0,
+      no_quote: 0,
+    });
+  });
+
+  it("checks quotes against the text the extractor was shown: a quote from beyond the cut is unverified", async () => {
+    // The fetch service cut the page at max_chars; this sentence came after the cut.
+    const beyondCut = "The federal parliament first sat in Canberra on 9 May 1927.";
+    const rig = makeRig(
+      {
+        planner: [plan(["q-1"]), plan([], { stop: true, gaps: [] })],
+        extractor: withClaims({ text: "Parliament first sat in Canberra in 1927.", quote: beyondCut, confidence: "high" }),
+      },
+      {
+        search: fakeSearch(pageByQuery),
+        fetch: fakeFetch({ page: (url) => (url === pageUrl(1) ? { markdown: pageMarkdown(1), truncated: true } : undefined) }),
+      },
+    );
+    await runResearch({ question: QUESTION }, rig.deps);
+    expect(userText(rig.llm.byRole("extractor")[0]!)).toContain("cut off");
+    const writerText = userText(rig.llm.byRole("writer")[0]!);
+    expect(writerText).toContain('Claim 4 (low): Parliament first sat in Canberra in 1927.\n  Quote: ""');
+    expect(writerText).not.toContain(beyondCut);
+    expect(writerText).toContain("Claim 1 (high)");
+    expect(quoteLine(rig.lines)[0]?.fields).toMatchObject({ quotes_checked: 4, matched_exact: 3, unverified: 1 });
+  });
+
+  it("accepts a writer quote with curly quotes against the extractor's straight ones", async () => {
+    const curly = `Canberra${RSQUO}s population was about 456,000`;
+    const wrapped = `${LDQUO}Canberra was selected as the site of the national capital${RDQUO}`;
+    const rig = makeRig(
+      {
+        planner: [plan(["q-1"]), plan([], { stop: true, gaps: [] })],
+        writer: [
+          {
+            report_markdown: "# R\n\nCanberra had about 456,000 people. [1]\n\n## Gaps\n\n- None.\n",
+            findings: [
+              { claim: "Canberra had about 456,000 people.", confidence: "high", source_ids: [1], quote: curly },
+              { claim: "Canberra was picked in 1908.", confidence: "high", source_ids: [1], quote: wrapped },
+            ],
+            source_notes: [{ source_id: 1, used_for: "Population." }],
+            gaps: [],
+          },
+        ],
+      },
+      { search: fakeSearch(pageByQuery) },
+    );
+    const result = await runResearch({ question: QUESTION }, rig.deps);
+    expect(result.findings[0]?.quote).toBe(curly);
+    expect(result.findings[1]?.quote).toBe(wrapped);
+  });
+
+  it("drops a writer quote that matches only an extractor quote the page check rejected", async () => {
+    const invented = "Griffin won the 1912 international design competition for the city.";
+    const rig = makeRig(
+      {
+        planner: [plan(["q-1"]), plan([], { stop: true, gaps: [] })],
+        extractor: withClaims({ text: "Griffin designed Canberra.", quote: invented, confidence: "high" }),
+        writer: [
+          {
+            report_markdown: "# R\n\nGriffin designed Canberra. [1]\n\n## Gaps\n\n- None.\n",
+            findings: [{ claim: "Griffin designed Canberra.", confidence: "low", source_ids: [1], quote: invented }],
+            source_notes: [{ source_id: 1, used_for: "Design." }],
+            gaps: [],
+          },
+        ],
+      },
+      { search: fakeSearch(pageByQuery) },
+    );
+    const result = await runResearch({ question: QUESTION }, rig.deps);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.quote).toBeUndefined();
+  });
+
+  it("logs one quote-check line per run, with counts only", async () => {
+    const rig = makeRig({ planner: [plan(["q-1"]), plan(["q-2"]), plan(["q-3"])] }, { search: fakeSearch(pageByQuery) });
+    await runResearch({ question: QUESTION, depth: "standard" }, rig.deps);
+    const lines = quoteLine(rig.lines);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.level).toBe("info");
+    for (const v of Object.values(lines[0]?.fields ?? {})) expect(typeof v).toBe("number");
+    const f = lines[0]?.fields ?? {};
+    expect(f["quotes_checked"]).toBeGreaterThan(0);
+    expect(f["matched_exact"]).toBe(f["quotes_checked"]);
+    expect(f["unverified"]).toBe(0);
   });
 });
 

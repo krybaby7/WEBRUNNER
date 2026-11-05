@@ -25,6 +25,7 @@ import {
   PlanSchema,
   ScoreSchema,
   WriterSchema,
+  extractorPageText,
   extractorPrompt,
   plannerPrompt,
   scorerPrompt,
@@ -34,6 +35,7 @@ import {
   type Prompt,
   type WriterOutput,
 } from "./prompts.js";
+import { checkClaimQuotes, emptyQuoteTally, normalizeForMatch, quoteNeedle } from "./quotes.js";
 import { makeRedactor } from "./redact.js";
 import {
   addGapLines,
@@ -112,6 +114,8 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
   let pagesFailed = 0;
   let iterations = 0;
   const notes: Note[] = [];
+  /** How the extractor's quotes fared against their pages, logged once per run. */
+  const quoteTally = emptyQuoteTally();
   let nextSourceId = 1;
   /** Every canonical URL ever seen as a candidate or read: nothing is scored or read twice. */
   const seen = new Set<string>();
@@ -301,7 +305,15 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
 
   type ReadOutcome =
     | { kind: "failed" }
-    | { kind: "read"; page: FetchPageOutput; candidate: Candidate; extraction?: Extraction; budgetError?: LlmError };
+    | {
+        kind: "read";
+        page: FetchPageOutput;
+        candidate: Candidate;
+        extraction?: Extraction;
+        /** The title and page text the extractor was shown: its quotes are checked against this. */
+        shown?: string;
+        budgetError?: LlmError;
+      };
 
   async function readAndExtract(candidate: Candidate): Promise<ReadOutcome> {
     let page: FetchPageOutput;
@@ -316,20 +328,20 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
       return { kind: "failed" };
     }
     if (page.markdown.trim() === "") return { kind: "read", page, candidate };
+    const promptArgs = {
+      question: req.question,
+      url: page.final_url,
+      title: page.title || candidate.title,
+      markdown: page.markdown,
+      truncated: page.truncated,
+    };
     try {
-      const extraction = await ask(
-        "extractor",
-        extractorPrompt({
-          question: req.question,
-          url: page.final_url,
-          title: page.title || candidate.title,
-          markdown: page.markdown,
-          truncated: page.truncated,
-        }),
-        ExtractSchema,
-        { effort: "medium", maxTokens: EXTRACTOR_MAX_TOKENS },
-      );
-      return { kind: "read", page, candidate, extraction };
+      const extraction = await ask("extractor", extractorPrompt(promptArgs), ExtractSchema, {
+        effort: "medium",
+        maxTokens: EXTRACTOR_MAX_TOKENS,
+      });
+      const shown = `${promptArgs.title}\n${extractorPageText(promptArgs)}`;
+      return { kind: "read", page, candidate, extraction, shown };
     } catch (err) {
       if (isBudgetError(err)) return { kind: "read", page, candidate, budgetError: err };
       log.warn("research extraction failed, skipping the page", {
@@ -341,14 +353,20 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
   }
 
   function toNote(outcome: Extract<ReadOutcome, { kind: "read" }>): Note | undefined {
-    const { page, candidate, extraction } = outcome;
-    if (extraction === undefined) return undefined;
+    const { page, candidate, extraction, shown } = outcome;
+    if (extraction === undefined || shown === undefined) return undefined;
     const relevance = clamp(extraction.relevance, 0, 10);
-    const claims = extraction.claims
-      .map((c) => ({ text: c.text.trim(), quote: clipQuote(c.quote), confidence: c.confidence }))
-      .filter((c) => c.text !== "")
-      .slice(0, MAX_CLAIMS_PER_NOTE);
-    if (relevance < MIN_NOTE_RELEVANCE || claims.length === 0) return undefined;
+    if (relevance < MIN_NOTE_RELEVANCE) return undefined;
+    // Every claim is kept: a quote not found on the page becomes "" and its claim low confidence.
+    const claims = checkClaimQuotes(
+      extraction.claims
+        .map((c) => ({ text: c.text.trim(), quote: clipQuote(c.quote), confidence: c.confidence }))
+        .filter((c) => c.text !== "")
+        .slice(0, MAX_CLAIMS_PER_NOTE),
+      shown,
+      quoteTally,
+    );
+    if (claims.length === 0) return undefined;
     const published = normalizePublishedAt(extraction.published_at) ?? normalizePublishedAt(candidate.published_at);
     return {
       source_id: nextSourceId++,
@@ -534,6 +552,16 @@ export async function runResearch(input: DeepResearchInput, deps: ResearchDeps):
     stopNote = `Research stopped because the ${what} limit for this depth was reached, so open gaps may remain.`;
   }
 
+  // Counts only: no page text, no URLs.
+  log.info("research quote check", {
+    quotes_checked: quoteTally.checked,
+    matched_exact: quoteTally.exact,
+    matched_lenient: quoteTally.lenient,
+    matched_fuzzy: quoteTally.fuzzy,
+    unverified: quoteTally.unverified,
+    no_quote: quoteTally.empty,
+  });
+
   // ---- write --------------------------------------------------------------
 
   /** Writes the report, or builds one from the notes when the writer cannot. Ids in the draft are final. */
@@ -691,22 +719,22 @@ function unique(items: string[]): string[] {
   return [...new Set(items)];
 }
 
-function normalizeText(s: string): string {
-  return s.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
 /**
  * The writer's quote, kept only when it is a span of a quote the extractor
- * recorded for one of the cited notes, so a judge can rely on it being verbatim.
+ * recorded for one of the cited notes, so a judge can rely on it being
+ * verbatim. Both sides go through the quote check's normalizer, so curly
+ * quotes, Markdown and spacing do not cost a quote. The extractor's quotes
+ * have been checked against their pages, and an unverified one is empty, so it
+ * cannot vouch for anything.
  */
 function verifiedQuote(quote: string | null, cited: Array<Note | undefined>): string | undefined {
   if (quote === null) return undefined;
-  const wanted = normalizeText(quote);
+  const wanted = quoteNeedle(quote);
   if (wanted === "") return undefined;
   for (const note of cited) {
     if (note === undefined) continue;
     for (const claim of note.claims) {
-      if (normalizeText(claim.quote).includes(wanted)) return clipQuote(quote).slice(0, QUOTE_MAX_CHARS);
+      if (normalizeForMatch(claim.quote).includes(wanted)) return clipQuote(quote).slice(0, QUOTE_MAX_CHARS);
     }
   }
   return undefined;

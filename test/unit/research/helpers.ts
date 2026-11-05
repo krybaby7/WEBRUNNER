@@ -232,24 +232,38 @@ export interface FakeFetch extends FetchService {
   fetchPage: ReturnType<typeof vi.fn<(input: FetchPageInput) => Promise<FetchPageOutput>>>;
 }
 
-/** Serves the fixture pages; any other URL gets a small generic page. */
-export function fakeFetch(opts: { fail?: (url: string) => Error | undefined } = {}): FakeFetch {
+export interface FakePage {
+  markdown: string;
+  truncated?: boolean;
+}
+
+/**
+ * Serves the fixture pages; any other URL gets a small generic page. `page`
+ * may serve its own text for a URL instead, as the fetch service returns it
+ * (already cut to `max_chars` when `truncated`).
+ */
+export function fakeFetch(
+  opts: { fail?: (url: string) => Error | undefined; page?: (url: string) => FakePage | undefined } = {},
+): FakeFetch {
   const calls: FetchPageInput[] = [];
   const fetchPage = vi.fn(async (input: FetchPageInput): Promise<FetchPageOutput> => {
     calls.push(input);
     const failure = opts.fail?.(input.url);
     if (failure !== undefined) throw failure;
     const n = /\/page-(\d+)$/.exec(input.url)?.[1];
+    const custom = opts.page?.(input.url);
     const markdown =
-      n !== undefined
-        ? pageMarkdown(Number(n))
-        : `# Generic page\n\n- First fact about ${input.url}.\n- Second fact about ${input.url}.\n`;
+      custom !== undefined
+        ? custom.markdown
+        : n !== undefined
+          ? pageMarkdown(Number(n))
+          : `# Generic page\n\n- First fact about ${input.url}.\n- Second fact about ${input.url}.\n`;
     return {
       url: input.url,
       final_url: input.url,
       title: /^# (.+)$/m.exec(markdown)?.[1] ?? "Untitled",
       markdown,
-      truncated: false,
+      truncated: custom?.truncated ?? false,
       method: "direct",
       fetched_at: "2026-10-18T09:00:00.000Z",
       cached: false,
