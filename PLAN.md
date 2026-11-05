@@ -1,7 +1,7 @@
 # WEBRUNNER: Implementation Plan
 
 > Repository: github.com/krybaby7/WEBRUNNER (GitHub slugs are case-insensitive). The npm package and all code use lowercase `webrunner`.
-> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) merged into `main` 2026-10-21; phase 6 (section 15, model calls through the owner's Claude and Codex subscriptions) planned 2026-10-26; phase 7 (section 16, human handoff at CAPTCHAs, checkpoints, consent and login walls) planned 2026-11-04.
+> Status: v0.1 shipped 2026-10-18; v0.2 (section 14) merged into `main` 2026-10-21; phase 6 (section 15, model calls through the owner's Claude and Codex subscriptions) planned 2026-10-26; phase 7 (section 16, human handoff at CAPTCHAs, checkpoints, consent and login walls) planned 2026-11-04; phase 8 (section 17, research good enough to replace Perplexity: a tunable research skill plus sharp tools) planned 2026-11-05.
 > Audience: an orchestrator model (Claude Fable 5.1) that delegates work packages to implementer models (Claude Sonnet 5.5), and the human owner who reviews PRs.
 
 ## 0. How to use this document
@@ -25,6 +25,8 @@ A single MCP server, run locally over stdio, that gives Claude Code and Codex fo
 2. **Page fetching** that turns any URL into clean Markdown, with a real-browser fallback for JavaScript-heavy or logged-in pages.
 3. **Deep research** that runs a plan-search-read-reflect loop server-side and returns a cited report, with depth controlled by the caller. The bar is "better than Perplexity Deep Research for the owner's questions", achieved by more iterations, more sources, and a stronger synthesis model.
 4. **Live browsing** for data that only exists behind interactive pages, with a recipe system for sites the owner cares about. The first recipe is Google Flights, exposed as `search_flights` returning exact fares and times.
+
+> 2026-11-05: section 17 restates this goal. The calling agent runs the research; webrunner supplies the method (a tunable research skill), the reach and a checked reader. The bar in item 3 is replaced by the owner's own question set, judged blind against Perplexity. Where this section and section 17 differ, section 17 wins.
 
 ### Non-goals
 
@@ -1819,3 +1821,106 @@ Branch names `wp<N>-<slug>`, one PR each against `main`, the section 7 protocol 
   - **Tests.** On real Chromium: X's gated fixture pauses `social_search` at the login page and `resume` finishes the search after the test opens the gate and moves the page on; the same for Amazon's gated ASIN through `search_reviews`; X's empty 403 stays `blocked` with the IP sentence and parks nothing; a hidden window keeps `needs_login` and adds the headless sentence; `accounts connect` parks a page that `resume`, `list` and `health` all see; the existing wall fixtures (X login, Facebook checkpoint, Reddit network block, Amazon sign-in and CAPTCHA) assert their `wall`. No path types (page spy on every page).
 
 - **2026-11-04, WP44**: numbering: the brief for this phase said "start at wp31" and "section 15", both of which were taken by the time it ran (WP31 to WP43 and section 15 are on `main`), so this is section 16 and WP44 to WP47. The two fail-fast fixes the brief asked for (no silent empty Google Flights list; Google Maps `blocked` at once on a refused script) were done by WP32 on 2026-10-26 and are not repeated. The pause is a re-run, not a suspended call: suspending a recipe's promise across tool calls would have had to freeze every deadline, per-platform timeout and wall clock around it, while re-running from navigation with the kept page needs none of that and matches how every recipe already starts. The suspended-call shape survives only in `pause`'s return type (`"cleared" | "timeout"`), so a resumed call can also wait inside the recipe when a host gives it a budget. `browse_task` keeps its loop state because its budget is per decision and would otherwise be spent twice.
+
+---
+
+## 17. Phase 8: research good enough to replace Perplexity (v0.4)
+
+> Added 2026-11-05. A four-arm benchmark that day (17.6) found that Claude Code using webrunner's `web_search` and `fetch_page` matched bare Claude Code's built-in WebSearch and WebFetch on focused questions while costing 1.3 to 2.2 times as much; that the best answer to a broad current-events question came from the agent's own search loop plus one `deep_research` call; and that `deep_research` called on its own made the fewest wrong claims but covered the least. The owner wants webrunner to let them cancel their Perplexity subscription. This phase restates the goal and reshapes the product around it.
+>
+> 17.0 and 17.1 are DECIDED by the owner. 17.2 and 17.3 list the contract changes this phase expects to make; each is OPEN until its own plan PR writes the contract into section 3. 17.4 says how success is measured, 17.5 is the work breakdown, 17.6 the evidence and 17.7 the decision log.
+
+### 17.0 Goal (DECIDED 2026-11-05)
+
+webrunner makes Claude Code and Codex research the web at least as well as Perplexity. The agent runs the search. webrunner supplies the method (a tunable research skill), the reach (any page, including logged-in and JavaScript pages, across several search indexes) and a checked reader (claims, verbatim quotes, dates) that keeps pages out of the agent's context.
+
+The jobs it must do come from the owner's own use of Perplexity: comparing products and tools; news briefings; deep research reports; what people say on Reddit, X and in reviews; flight and hotel prices; markets, exchange rates and weather; and doing all of it reliably day after day. Quick answers in seconds are not a goal. Being slower than Perplexity is acceptable; being less accurate, less current or less complete is not.
+
+### 17.1 Shape: a skill plus sharp tools (DECIDED 2026-11-05)
+
+Each part of the job goes to the layer that can do it best:
+
+| Job | Done by | Evidence (17.6) |
+|---|---|---|
+| Deciding what to search next and when to stop | The calling agent | On the broad prompt the agent's own loop beat the fixed pipeline, which stopped on a budget rule. |
+| Method: open a page before stating a dated fact, back key claims with two sources, date every time-sensitive claim, hand page reading to a reader | A research skill the owner can tune | Bare Claude Code's stale claims came from never opening a page, a failure of method rather than ability. A skill is cheap to change and can be tested one rule at a time. |
+| Reach: logged-in, bot-walled and JavaScript pages; several search indexes | The MCP server (code) | Instructions cannot get past a 403, a login wall or an empty JavaScript page. |
+| Reading a page without filling the agent's context, with quotes and dates checked | A checked reader in the server, or a reader subagent | Claude Code's built-in reader subagent kept its context at 83k tokens against 192k without one; `deep_research`'s quote and citation checks went with the fewest wrong claims. |
+
+Consequences:
+- **The skill carries the method; it is not a tool.** One source in the repo, installed as a Claude Code skill and a Codex skill. Its rules are settings the owner can change without touching code (17.2). The existing `/research` mode hook becomes the switch that loads it.
+- **Hard guarantees go in tool output, soft ones in the skill.** Anything the agent must not miss (a page's date, a failed read, a truncation) is a field in the tool's result, placed early; the skill only says how to use it.
+- **`deep_research` is demoted, not removed.** It stays as one option: research a sub-question in the background and bring back checked findings. Its checks move into the reader so that every page read benefits. Its known defects (the round budget in 17.6; writing a full report even when an agent called it) are fixed in this phase only if the measurements in 17.4 show it still earns its place.
+- **The live-data tools stay** (flights, hotels, quotes, exchange rates, weather, social, reviews): they are reach for the jobs in 17.0. They are not this phase's focus.
+- **A check never loses true information** (owner's requirement, 2026-11-05). A failed check removes a quote and lowers a confidence; it never drops a claim, a note or a source. This applies to every check this phase adds.
+- **Speed is not optimised.** Accuracy, freshness and the agent's context are.
+
+### 17.2 The research skill (OPEN until WP53)
+
+Expected shape, to be fixed by WP53:
+- One source in the repo, installed by `scripts/install-claude-code.sh` and `scripts/install-codex.sh` into each client's skills location.
+- Settings, each one rule with a default, for example: open the page before stating a dated fact (on); sources per key claim (2); date every time-sensitive claim (on); who reads pages (`subagent`, `tool` or `self`); minimum searches for a broad question (8); prefer primary sources (on). The installer renders the skill text from the settings, so the agent reads plain instructions.
+- Each rule can be switched off on its own, so a test can measure what it adds (17.4).
+
+### 17.3 Sharp tools (OPEN until each plan PR)
+
+Changes to section 3 this phase expects to make; none is in force until its plan PR lands:
+1. **A checked reader.** `fetch_page` gains an optional `question`. With it, the server reads the page with a cheap model and returns only the relevant claims, each with a quote checked against the page text in code (WP52's matcher), the page's published date and the fetch method, instead of the whole page. Without `question` nothing changes.
+2. **Compact, dated search results.** `web_search` puts `published_at` early and trims snippets, aiming at the size of Claude Code's built-in WebSearch result (about 3.5k characters per call, against webrunner's 8k to 11k on 2026-11-05).
+3. **More indexes.** Perplexity's search API and Tavily are already providers (3.1) but have no keys. Whether the owner's Perplexity API key is billed apart from the subscription they want to cancel is OPEN for the owner.
+4. **Compact live-data results.** `search_flights` repeats the same booking URL on every offer; one copy per result is enough.
+5. **A reader subagent definition** for Claude Code (and for Codex if it supports one) that does what Claude Code's built-in `web-fetch` subagent does, with webrunner's tools, so a client that prefers subagents keeps pages out of the main context.
+
+### 17.4 How success is measured
+
+- **Quality.** On the owner's own question set, the owner judges answers blind against Perplexity. webrunner must be as good or better on most questions in every job listed in 17.0.
+- **Reach.** A fixed list of hard URLs (news behind bot walls, Reddit and X threads, JavaScript apps, logged-in pages) is read once with the client's built-in fetch and once with `fetch_page`, and scored opened or not. No model grading.
+- **Freshness.** Every time-sensitive claim in an answer carries a date; stale facts stated as current are counted.
+- **Context.** The calling agent's peak context, and how many tokens research leaves in it.
+- **Real use.** For two weeks the owner's real questions go to both Perplexity and webrunner, and the owner notes which answer was better and why.
+- **Where tests run.** On Codex where possible, to spare the owner's Claude plan. webrunner's own model calls (`deep_research`, the `summarize` options, the checked reader) use the configured backend, which is Claude even when the client is Codex; a test that must spare Claude sets `WEBRUNNER_LLM_BACKEND=codex-cli` for the server or keeps those tools out. A bare-Codex arm must run without the owner's other MCP servers, because Codex's config also holds a Perplexity server.
+
+### 17.5 Work breakdown, phase 8
+
+Branch names `wp<N>-<slug>`, one PR each against `main`; the section 7 protocol applies.
+
+**WP51: plan** (orchestrator)
+- Deliver: this section, the status line and the note in section 1. No code.
+
+**WP52: check the extractor's quotes against the page**
+- Files: `src/core/research/*`, `test/unit/research/*`. No interface change.
+- Accept: each extractor quote is checked against the exact page text the extractor was shown, leniently (Unicode, quote marks, dashes, whitespace, case and Markdown normalised; ellipsis-joined fragments found in order; small copying slips tolerated); a quote that fails every test is emptied and its claim set to low confidence, never dropped; the writer's quote check uses the same normaliser; the extractor prompt no longer tells the model to drop a claim it cannot quote, and `PROMPT_VERSION` changes; tests cover each case, including an invented quote and a quote from beyond the truncation point.
+
+**WP53: plan the research skill** (orchestrator)
+- Deliver: 17.2 made concrete: the skill text, its settings and defaults, where each client installs it, and how `/research` loads it.
+
+**WP54: plan the checked reader and compact outputs** (orchestrator)
+- Deliver: 17.3 items 1, 2, 4 and 5 written into section 3.
+
+**WP55 onward:** the implementations of WP53 and WP54, the reach list and its runner, and the question-set harness for Codex. Numbered when planned.
+
+### 17.6 Evidence: the 2026-11-05 benchmark
+
+Four arms answered three prompts, one run each, in the same hour: A, a fresh `claude -p` with webrunner only (built-in WebSearch and WebFetch disallowed); B, a fresh `claude -p` with no MCP servers; C, Perplexity's research preset through the owner's API key; D, `deep_research` called directly at standard depth. Prompts: (1) current flagship models of three labs with prices and the cost of one request; (2) Brave Search API, Exa and Tavily compared for an agent; (3) a dated world-politics briefing. Grading was blind, against rubrics for 1 and 2 and a 23-item checklist built from live searches for 3, with up to 12 claims per answer checked live. Three prompts and one run each is thin evidence; differences of a few points on prompts 1 and 2 are within noise.
+
+| Prompt | A: Claude Code + webrunner | B: Claude Code alone | C: Perplexity | D: `deep_research` |
+|---|---|---|---|---|
+| 1, grade, time | 21/24, 88 s | 21/24, 85 s | 20/24, 38 s | 21/24, 191 s |
+| 2, grade, time | 18/26, 156 s | 21/26, 189 s | 22/26, 94 s | 22/26, 216 s |
+| 3, grade, time | 42/51, 736 s | 34/51, 305 s | 35/51, 104 s | 19/51, 359 s |
+| Wrong or stale claims (1, 2, 3) | 0, 0, 2 | 0, 1, 5 | 0, 0, 1 | 1 minor, 0, 0 |
+| Cost, API-equivalent (1, 2, 3) | $2.76, $4.64, $4.40 | $1.53, $2.08, $3.29 | not comparable | $1.02, $1.10, $1.66 |
+| Agent's peak context (1, 2, 3) | 125k, 192k, 146k | 92k, 83k, 112k | n/a | n/a |
+
+Findings this phase rests on:
+- **A and B did the same work on prompts 1 and 2**: a few searches, then 5 to 21 page reads, with the same grades. A cost more because webrunner's search results run 8k to 11k characters per call against about 3.5k for the built-in tool, and because B handed page reading to Claude Code's built-in `web-fetch` subagent (two and three times) while A had no equivalent: WebFetch was off and webrunner ships no subagent.
+- **A's lead on prompt 3 came from `deep_research`, not from search.** A-3 opened no page with `fetch_page`; its 27 searches cost about 7 s of wall time in parallel; it waited 407 s on one `deep_research` call (about 166 s of which, judging by D-3's log, is the writer producing a report) and then spent most of its 321 s of model time writing a 24,000-character answer. The briefing was written twice.
+- **B's stale claims came from snippets.** B-3 ran 46 searches, opened no page and stated old facts as current.
+- **`deep_research` at standard depth stops after two of three rounds.** The planner may emit six sub-queries per round (`MAX_STEPS_PER_ROUND`) against a 12-search budget, so round three never runs and 14 of 20 pages are read. Deep depth has the same shape.
+- **What keeping the reading in the server buys.** It saves the agent's context the way a subagent does: A-3's call read 14 pages and returned about 8k tokens, where reading them directly would have left about 55k. It does not save tokens or time: D-3 used 302k input and 51k output tokens for those 14 pages, about five times the raw page text, on the same Claude plan as the client, and took longer than parallel reader subagents. What it adds that a subagent does not is code: cheap models for bulk reading, citations checked against real sources, writer quotes checked against page quotes, and each page's date carried with its claims.
+- **The live-data tools worked** on 2026-11-05 through the owner's Chrome: flights, Reddit and X through the owner's logins, app-store reviews, stock and crypto quotes (Yahoo rate-limited, Finnhub answered), exchange rates and weather. None has been compared yet with bare Claude Code or Perplexity on the same job.
+
+### 17.7 Decision log, phase 8
+
+- **2026-11-05, WP51 (goal and shape)**: the owner chose "a skill plus sharp tools" over two alternatives. `deep_research` as the whole product was rejected: every search would pay for a planner, a scorer, an extractor per page and a writer, each a separate model call; its planner does the agent's job without the conversation's context; and a fixed pipeline needs retuning per kind of question (the round budget is an example). A skill on the built-in tools alone was rejected because instructions cannot add reach and an agent sometimes skips a rule; hence hard guarantees in tool output. Speed is out of scope by the owner's choice.
+- **2026-11-05, the owner's rule for checks**: a check must never lose true information. WP52 is the first application: an extractor quote that cannot be matched to the page loses its quote and its claim drops to low confidence; the claim itself stays.
