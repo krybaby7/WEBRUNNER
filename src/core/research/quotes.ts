@@ -18,9 +18,11 @@ import type { NoteClaim } from "./types.js";
  *    useful length is found, in order.
  * 4. fuzzy: word-level. The quote lines up, in order, with one contiguous
  *    stretch of the page, with edits worth at most 15 percent of its words:
- *    page words the quote left out, and small function words ("the", "of")
- *    the quote added or changed. Every other quote word, numbers included,
- *    must be on the page in that stretch, and no negation may be added or lost.
+ *    page words the quote left out, small function words ("the", "of") the
+ *    quote added or changed, and words changed for a regular inflection of
+ *    the same word ("revenues" for "revenue", "expected" for "expect"). Every
+ *    other quote word, numbers included, must be on the page in that stretch,
+ *    and no negation may be added or lost.
  */
 
 /**
@@ -38,7 +40,8 @@ export const MIN_FRAGMENT_CHARS = 20;
  * The fuzzy tier allows edits worth up to 100 minus this percent of the
  * quote's words: one slip in a 7 to 13 word quote, six or seven in a
  * 300-character one. That covers the copying slips models make (a dropped
- * word or footnote marker, an added or swapped article) while an invented
+ * word or footnote marker, an added or swapped article, a plural or tense
+ * slip such as "revenues" for "revenue") while an invented
  * quote, whose content words are not on the page in order, fails however long
  * it is. Quotes of six words or fewer get no edits: there one slip is already
  * a sixth of the meaning.
@@ -158,8 +161,9 @@ function foundInOrder(haystack: string, needles: readonly string[]): boolean {
 const TOKEN_RE = /\p{N}+(?:[.,]\p{N}+)*|[\p{L}\p{M}]+/gu;
 /**
  * Articles, prepositions, conjunctions and pronouns: the only words a quote
- * may add or change in the fuzzy tier. Verbs are left out on purpose, so "was"
- * for "is" or "will" for "would" is not forgiven.
+ * may add, or change for any other such word, in the fuzzy tier. Verbs are
+ * left out on purpose, so "was" for "is" or "will" for "would" is not
+ * forgiven; a verb may only change for a regular inflection of itself.
  */
 const FUNCTION_WORDS = new Set(
   (
@@ -204,6 +208,65 @@ function tokenize(normalized: string): string[] {
   return normalized.match(TOKEN_RE) ?? [];
 }
 
+/** Only words of three or more letters, no digits, can be read as inflected. */
+const INFLECTABLE_RE = /^\p{L}{3,}$/u;
+const VOWELS = "aeiou";
+
+/**
+ * The word and the base forms it could be a regular English inflection of:
+ * -s, -es, -ies and -ied for -y, -ed and -d, -ing (with a dropped "e"
+ * restored), and a doubled final consonant before -ed or -ing ("stopped",
+ * "stopping" for "stop"). Bases shorter than three letters are not kept, so
+ * "was" and "has" lead nowhere. Undefined for a word that is never read as
+ * inflected: shorter than three letters, holding a digit, or a negation.
+ */
+function inflectionForms(word: string): readonly string[] | undefined {
+  if (!INFLECTABLE_RE.test(word) || NEGATIONS.has(word)) return undefined;
+  const forms = [word];
+  const add = (base: string): void => {
+    if (base.length >= 3) forms.push(base);
+  };
+  if (word.endsWith("ies") || word.endsWith("ied")) add(`${word.slice(0, -3)}y`);
+  if (word.endsWith("es")) add(word.slice(0, -2));
+  if (word.endsWith("s")) add(word.slice(0, -1));
+  if (word.endsWith("ed")) add(word.slice(0, -1));
+  for (const suffix of ["ed", "ing"]) {
+    if (!word.endsWith(suffix)) continue;
+    const stem = word.slice(0, -suffix.length);
+    add(stem);
+    add(`${stem}e`);
+    const last = stem.at(-1) ?? "";
+    if (stem.length >= 4 && last === stem.at(-2) && !VOWELS.includes(last)) add(stem.slice(0, -1));
+  }
+  return forms;
+}
+
+/**
+ * True when two different words share a base form, so one reads as a regular
+ * inflection of the other ("revenues" and "revenue", "expected" and "expect").
+ * Never for numbers, negations or words under three letters, and never for
+ * unrelated or irregular pairs ("Sydney" and "Canberra", "was" and "is").
+ */
+function sameBaseWord(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  return a !== undefined && b !== undefined && a.some((form) => b.includes(form));
+}
+
+/** Page words with their inflection forms, worked out once per page. */
+interface PageWords {
+  words: readonly string[];
+  forms: ReadonlyArray<readonly string[] | undefined>;
+}
+
+function pageWords(normalized: string): PageWords {
+  const words = tokenize(normalized);
+  const cache = new Map<string, readonly string[] | undefined>();
+  const forms = words.map((w) => {
+    if (!cache.has(w)) cache.set(w, inflectionForms(w));
+    return cache.get(w);
+  });
+  return { words, forms };
+}
+
 const BLOCKED = 1 << 20;
 
 /**
@@ -212,26 +275,35 @@ const BLOCKED = 1 << 20;
  * Returns the end (exclusive) of the earliest stretch within `maxEdits`, or -1.
  *
  * One edit each: a page word the quote left out (never a negation); a
- * function word the quote added; a function word changed for another. Any
- * other word of the quote, numbers included, must match a page word: a quote
- * cannot slip in a name, a number or a "not" that the page does not have
- * there. A number on the page that the quote leaves out (a footnote marker,
- * say) costs one edit like any other page word.
+ * function word the quote added; a function word changed for another; a word
+ * changed for a regular inflection of the same word ("revenues" for
+ * "revenue", "expected" for "expect"). Any other word of the quote, numbers
+ * included, must match a page word: a quote cannot slip in a name, a number
+ * or a "not" that the page does not have there. A number on the page that the
+ * quote leaves out (a footnote marker, say) costs one edit like any other
+ * page word.
  */
-function fuzzyFind(quote: readonly string[], page: readonly string[], from: number, maxEdits: number): number {
+function fuzzyFind(quote: readonly string[], page: PageWords, from: number, maxEdits: number): number {
   const m = quote.length;
   const quoteSmall = quote.map((w) => FUNCTION_WORDS.has(w));
+  const quoteForms = quote.map(inflectionForms);
   const addCost = quoteSmall.map((small) => (small ? 1 : BLOCKED));
   let prev = new Int32Array(m + 1);
   let cur = new Int32Array(m + 1);
   for (let i = 1; i <= m; i++) prev[i] = Math.min(BLOCKED, (prev[i - 1] ?? 0) + (addCost[i - 1] ?? BLOCKED));
-  for (let j = from; j < page.length; j++) {
-    const word = page[j] ?? "";
+  for (let j = from; j < page.words.length; j++) {
+    const word = page.words[j] ?? "";
+    const forms = page.forms[j];
     const leaveOutCost = NEGATIONS.has(word) ? BLOCKED : 1;
     const pageSmall = FUNCTION_WORDS.has(word);
     cur[0] = 0;
     for (let i = 1; i <= m; i++) {
-      const change = quote[i - 1] === word ? 0 : pageSmall && quoteSmall[i - 1] === true ? 1 : BLOCKED;
+      const change =
+        quote[i - 1] === word
+          ? 0
+          : (pageSmall && quoteSmall[i - 1] === true) || sameBaseWord(quoteForms[i - 1], forms)
+            ? 1
+            : BLOCKED;
       const best = Math.min(
         (prev[i - 1] ?? 0) + change,
         (prev[i] ?? 0) + leaveOutCost,
@@ -245,7 +317,7 @@ function fuzzyFind(quote: readonly string[], page: readonly string[], from: numb
   return -1;
 }
 
-function fuzzyInOrder(page: readonly string[], needles: readonly string[]): boolean {
+function fuzzyInOrder(page: PageWords, needles: readonly string[]): boolean {
   let from = 0;
   let matched = 0;
   for (const n of needles) {
@@ -279,11 +351,11 @@ function withoutParentheticals(normalized: string): string {
 export function makeQuoteChecker(pageText: string): (quote: string) => QuoteMatch {
   let normalized: string | undefined;
   let bare: string | undefined;
-  let tokens: string[] | undefined;
+  let tokens: PageWords | undefined;
   const normPage = (): string => (normalized ??= normalizeForMatch(pageText));
   /** The page with parentheticals left out: a quote may skip them, never add to them. */
   const barePage = (): string => (bare ??= withoutParentheticals(normPage()));
-  const pageTokens = (): string[] => (tokens ??= tokenize(normPage()));
+  const pageTokens = (): PageWords => (tokens ??= pageWords(normPage()));
 
   return (quote) => {
     const q = quote.trim();

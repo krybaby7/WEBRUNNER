@@ -153,6 +153,11 @@ describe("makeQuoteChecker", () => {
     expect(check("Canberra was selected as the site of the national capital in 1908 by parliament.")).toBe("unverified");
   });
 
+  it("never reads an irregular or unrelated verb as an inflection", () => {
+    // "is" for "was": not a regular inflection, and verbs are not function words.
+    expect(check("Canberra is selected as the site of the national capital in 1908.")).toBe("unverified");
+  });
+
   it("gives a short quote no fuzzy edits", () => {
     expect(Math.floor((6 * (100 - FUZZY_MIN_MATCH_PERCENT)) / 100)).toBe(0);
     expect(check("Canberra was the capital city")).toBe("unverified");
@@ -165,6 +170,45 @@ describe("makeQuoteChecker", () => {
 
   it("uses a fragment threshold of about twenty characters", () => {
     expect(MIN_FRAGMENT_CHARS).toBe(20);
+  });
+});
+
+describe("makeQuoteChecker: plural and tense slips", () => {
+  const page = [
+    "# Q3 results",
+    "",
+    "The company **reported revenue of $1,234 million** in Q3 2026, up 12%.",
+    "",
+    `At the call, the CEO said: ${LDQUO}We expect growth to continue into 2027.${RDQUO}`,
+    "",
+    "Shipments stop at the border whenever the inspectors find a fault.",
+    "The two companies agreed to share the cost of the new rail bridge.",
+    "Engineers plan on continuing the survey through the summer months.",
+    "The board did not approve the merger at its March meeting.",
+  ].join("\n");
+  const checkSlip = makeQuoteChecker(page);
+
+  it("passes a plural slip and a tense slip in a quote of seven or more words", () => {
+    expect(checkSlip("The company reported revenues of $1,234 million in Q3 2026, up 12%")).toBe("fuzzy");
+    expect(checkSlip("the CEO said: We expected growth to continue into 2027")).toBe("fuzzy");
+  });
+
+  it("passes a doubled consonant before -ed, -ies for -y and -ing with its e restored", () => {
+    expect(checkSlip("Shipments stopped at the border whenever the inspectors find a fault.")).toBe("fuzzy");
+    expect(checkSlip("The two company agreed to share the cost of the new rail bridge.")).toBe("fuzzy");
+    expect(checkSlip("Engineers plan on continue the survey through the summer months.")).toBe("fuzzy");
+  });
+
+  it("still fails a changed number, a lost negation, a swapped name and an invented quote", () => {
+    expect(checkSlip("The company reported revenue of $1,334 million in Q3 2026, up 12%")).toBe("unverified");
+    expect(checkSlip("The board did approve the merger at its March meeting.")).toBe("unverified");
+    expect(checkSlip("The firm reported revenue of $1,234 million in Q3 2026, up 12%")).toBe("unverified");
+    expect(checkSlip("Sydney reported revenue of $1,234 million in Q3 2026, up 12%")).toBe("unverified");
+    expect(checkSlip("The company expects revenue to double next year, the CEO said.")).toBe("unverified");
+  });
+
+  it("leaves a plural slip in a quote of six words or fewer unverified: short quotes get no edits", () => {
+    expect(checkSlip("reported revenues of $1,234 million")).toBe("unverified");
   });
 });
 
