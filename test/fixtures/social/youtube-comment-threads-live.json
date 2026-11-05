@@ -1,0 +1,182 @@
+{
+  "_note": "Recorded live on 2026-11-05 from the owner's machine (a home IP) with the owner's own YouTube Data API v3 key: commentThreads.list videoId=OSBo9qcpRfw, order=relevance, maxResults=5; secrets redacted. The provider mapping was checked against this response.",
+  "kind": "youtube#commentThreadListResponse",
+  "etag": "kXSGj8VyHg40R9okCmoYG3fsC84",
+  "nextPageToken": "Z2V0X3JhbmtlZF9zdHJlYW1zLS1Da1VJZ0FRVkY3ZlJPQm83Q2pjSTJGOFFnQVFZQnlJdEZ6LUl0YV9HSjRsbUdtaUhrTEExV0lEVEpUbE9SMjNXNlRSczdxUllPRkFWejdDczEwUWl1NUstaWFBQUVBVVNCUWk3SUJnQUVnY0loU0FRQlJnQkVnVUloeUFZQUJJRkNJZ2dHQUFTQlFpb0lCZ0FFZ1VJaGlBWUFCSUZDTUFnR0FBU0JRaUpJQmdBVUFCWUFR",
+  "pageInfo": {
+    "totalResults": 5,
+    "resultsPerPage": 5
+  },
+  "items": [
+    {
+      "kind": "youtube#commentThread",
+      "etag": "vHBOaHF8WcDquICs0D7BhufmStc",
+      "id": "Ugw6CZYqFwzdIzt0Ii14AaABAg",
+      "snippet": {
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "videoId": "OSBo9qcpRfw",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "RdViMlUFG7i_rHM3J2R9nghfKP0",
+          "id": "Ugw6CZYqFwzdIzt0Ii14AaABAg",
+          "snippet": {
+            "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+            "videoId": "OSBo9qcpRfw",
+            "textDisplay": "\"Claude code builds the house, cursor paints the walls\" - Amazing explanation. Deserves a subscribe",
+            "textOriginal": "\"Claude code builds the house, cursor paints the walls\" - Amazing explanation. Deserves a subscribe",
+            "authorDisplayName": "@usamayousuf3778",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/ytc/AIdro_mapRKBDq8QYdkABIXGmda9Wh50vmtGF5Wr2vigEJ7IgQg=s48-c-k-c0x00ffffff-no-rj",
+            "authorChannelUrl": "http://www.youtube.com/@usamayousuf3778",
+            "authorChannelId": {
+              "value": "UCI-xgTD3ozTydim9vkPkEIg"
+            },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 89,
+            "publishedAt": "2025-10-01T09:56:25Z",
+            "updatedAt": "2025-10-01T09:56:25Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 3,
+        "isPublic": true
+      }
+    },
+    {
+      "kind": "youtube#commentThread",
+      "etag": "4v5uPVcXq3L6gUu6AhPNd5tw36o",
+      "id": "UgweZMiHuMeBi80En2p4AaABAg",
+      "snippet": {
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "videoId": "OSBo9qcpRfw",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "UWkUemZuDRNSucuseJyfOrUX5xA",
+          "id": "UgweZMiHuMeBi80En2p4AaABAg",
+          "snippet": {
+            "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+            "videoId": "OSBo9qcpRfw",
+            "textDisplay": "thank you for sharing. This video explanation is the clearest I can find online. But surprisingly how fast it becomes outdated given the speed of AI development. I wish you do an update version of this comparison",
+            "textOriginal": "thank you for sharing. This video explanation is the clearest I can find online. But surprisingly how fast it becomes outdated given the speed of AI development. I wish you do an update version of this comparison",
+            "authorDisplayName": "@williamwoo1437",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/ytc/AIdro_nZH37UeuZRtDgKkqvNi0mMqyALp_pgUYBEztUbni1fzA=s48-c-k-c0x00ffffff-no-rj",
+            "authorChannelUrl": "http://www.youtube.com/@williamwoo1437",
+            "authorChannelId": {
+              "value": "UClLJaB925J29-I0LoaTgzbg"
+            },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 0,
+            "publishedAt": "2026-10-17T15:42:35Z",
+            "updatedAt": "2026-10-17T15:42:35Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 0,
+        "isPublic": true
+      }
+    },
+    {
+      "kind": "youtube#commentThread",
+      "etag": "-XIPeh2cJ3N_SAhX5COzehjHS50",
+      "id": "UgxuZD6yUvHO_x5pGQl4AaABAg",
+      "snippet": {
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "videoId": "OSBo9qcpRfw",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "ylM1U1uZnKOd2mrGquf5UgbIImk",
+          "id": "UgxuZD6yUvHO_x5pGQl4AaABAg",
+          "snippet": {
+            "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+            "videoId": "OSBo9qcpRfw",
+            "textDisplay": "These kind of conclusion is what I always want from people.",
+            "textOriginal": "These kind of conclusion is what I always want from people.",
+            "authorDisplayName": "@pemessh",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/ytc/AIdro_kzcJChPbmKjeT1-L7OscOh_G43QJG27lhFv0ykNaaxUgVh=s48-c-k-c0x00ffffff-no-rj",
+            "authorChannelUrl": "http://www.youtube.com/@pemessh",
+            "authorChannelId": {
+              "value": "UC0lnDZUYbgV_e5IAR5oPChg"
+            },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 11,
+            "publishedAt": "2025-09-20T12:02:50Z",
+            "updatedAt": "2025-09-20T12:02:50Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 0,
+        "isPublic": true
+      }
+    },
+    {
+      "kind": "youtube#commentThread",
+      "etag": "pcHzgH-LWDQ6FzUBAGj6dJNeRuM",
+      "id": "Ugxto2iJe3412LT-SCJ4AaABAg",
+      "snippet": {
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "videoId": "OSBo9qcpRfw",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "OdCC91f1zUTVhsG1ib09PfyoFaQ",
+          "id": "Ugxto2iJe3412LT-SCJ4AaABAg",
+          "snippet": {
+            "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+            "videoId": "OSBo9qcpRfw",
+            "textDisplay": "cursor v2 has first class support for agents and as on today its plan mode beats CC plan mode. Plus being able to switch models is a huge advantage of cursor.",
+            "textOriginal": "cursor v2 has first class support for agents and as on today its plan mode beats CC plan mode. Plus being able to switch models is a huge advantage of cursor.",
+            "authorDisplayName": "@ikbo",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/ytc/AIdro_mA2AVFV-qavNRylO-8a4Gy-Z6PmCR1F_ZClH9D2RWiGO4aLpoBwvnFubP3fe06ChSeLA=s48-c-k-c0x00ffffff-no-rj",
+            "authorChannelUrl": "http://www.youtube.com/@ikbo",
+            "authorChannelId": {
+              "value": "UCv_5qgRJW6E_w-ce93skkyg"
+            },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 15,
+            "publishedAt": "2026-01-03T22:57:38Z",
+            "updatedAt": "2026-01-03T22:57:38Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 1,
+        "isPublic": true
+      }
+    },
+    {
+      "kind": "youtube#commentThread",
+      "etag": "Nz2PFO56PX5IGIcCJsgLR16-k-4",
+      "id": "UgwMHUSAMfx0eBOELBF4AaABAg",
+      "snippet": {
+        "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+        "videoId": "OSBo9qcpRfw",
+        "topLevelComment": {
+          "kind": "youtube#comment",
+          "etag": "3S2At9z-ZNxDr1-88yM_jAGP0K4",
+          "id": "UgwMHUSAMfx0eBOELBF4AaABAg",
+          "snippet": {
+            "channelId": "UC80PWRj_ZU8Zu0HSMNVwKWw",
+            "videoId": "OSBo9qcpRfw",
+            "textDisplay": "I feel like the better you are at code and development, the better Cursor is than Claude Code",
+            "textOriginal": "I feel like the better you are at code and development, the better Cursor is than Claude Code",
+            "authorDisplayName": "@MatheusLB2009",
+            "authorProfileImageUrl": "https://yt3.ggpht.com/ytc/AIdro_lMuoGNf4LKT3yySAX0GnkrIBiD4pALaVUIAfyx35uk_ze2=s48-c-k-c0x00ffffff-no-rj",
+            "authorChannelUrl": "http://www.youtube.com/@MatheusLB2009",
+            "authorChannelId": {
+              "value": "UCPtdE_fbr0pEvjacniMKNsA"
+            },
+            "canRate": true,
+            "viewerRating": "none",
+            "likeCount": 80,
+            "publishedAt": "2025-09-30T16:17:43Z",
+            "updatedAt": "2025-09-30T16:17:43Z"
+          }
+        },
+        "canReply": true,
+        "totalReplyCount": 7,
+        "isPublic": true
+      }
+    }
+  ]
+}

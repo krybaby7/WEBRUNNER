@@ -180,3 +180,52 @@ describe("youtube: mapping", () => {
     expect(make(routed()).ownsUrl(VIDEO_URL)).toBe(true);
   });
 });
+
+describe("youtube: the 2026-11-05 live responses (the owner's Data API key)", () => {
+  const liveSearch = loadFixture("youtube-search-live");
+  const liveVideos = loadFixture("youtube-videos-live") as { items: Array<{ id: string }> };
+  const liveThreads = loadFixture("youtube-comment-threads-live");
+  const WATCH = "https://www.youtube.com/watch?v=OSBo9qcpRfw";
+  const live = (): ReturnType<typeof fakeFetch> =>
+    routed({
+      search: () => jsonResponse(liveSearch),
+      // videos.list answers only the ids asked for, as the API does.
+      videos: (url) => {
+        const ids = (url.searchParams.get("id") ?? "").split(",");
+        return jsonResponse({ ...liveVideos, items: liveVideos.items.filter((i) => ids.includes(i.id)) });
+      },
+      commentThreads: () => jsonResponse(liveThreads),
+    });
+
+  it("maps the live search and statistics to video posts", async () => {
+    const out = await make(live()).search(query({ kind: "posts", per_platform: 5 }), signal());
+    expect(out).toHaveLength(5);
+    for (const i of out) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+    expect(out.find((i) => i.id === "youtube:OSBo9qcpRfw")).toMatchObject({
+      kind: "post",
+      author: "Codevolution",
+      url: WATCH,
+      score: 2081,
+      replies: 77,
+      created_at: "2025-09-04T06:15:03.000Z",
+      community: "Codevolution",
+    });
+    expect(out.find((i) => i.id === "youtube:HIHxDqGauJU")).toMatchObject({ score: 6053, replies: 311 });
+  });
+
+  it("maps the live comment threads of a video to comments after the video", async () => {
+    const out = await make(live()).thread(WATCH, query({ per_platform: 5 }), signal());
+    expect(out[0]).toMatchObject({ id: "youtube:OSBo9qcpRfw", kind: "post", author: "Codevolution", score: 2081 });
+    expect(out[1]).toMatchObject({
+      id: "youtube:Ugw6CZYqFwzdIzt0Ii14AaABAg",
+      kind: "comment",
+      author: "@usamayousuf3778",
+      score: 89,
+      replies: 3,
+      created_at: "2025-10-01T09:56:25.000Z",
+      parent_url: WATCH,
+    });
+    expect(out.length).toBeGreaterThanOrEqual(3);
+    for (const i of out) expect(SocialItemSchema.safeParse(i).success).toBe(true);
+  });
+});

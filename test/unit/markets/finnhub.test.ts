@@ -9,7 +9,7 @@ const unknown = loadFixture("finnhub-quote-unknown");
 const search = loadFixture("finnhub-search-apple");
 const KEY = "finnhub-test-token-123456";
 
-describe("finnhub (fixtures from docs, unverified live: no key in the dev environment)", () => {
+describe("finnhub (fixtures from docs; the mapping was verified live on 2026-11-05, see the live responses below)", () => {
   it("isConfigured reflects the key and refuses without one", async () => {
     expect(new FinnhubProvider({ apiKey: KEY }).isConfigured()).toBe(true);
     expect(new FinnhubProvider().isConfigured()).toBe(false);
@@ -75,5 +75,38 @@ describe("finnhub (fixtures from docs, unverified live: no key in the dev enviro
     expect(finnhubAssetType("Index")).toBe("index");
     expect(finnhubAssetType("Mutual Fund")).toBe("fund");
     expect(finnhubAssetType("Warrant")).toBe("other");
+  });
+});
+
+describe("finnhub: the 2026-11-05 live responses (the owner's key, after the 2026-11-04 close)", () => {
+  const liveQuote = loadFixture("finnhub-quote-aapl-live");
+  const liveSearch = loadFixture("finnhub-search-apple-live");
+
+  it("maps the live /quote exactly as the documented one", async () => {
+    const f = fakeFetch(() => jsonResponse(liveQuote));
+    const q = await new FinnhubProvider({ apiKey: KEY, fetchImpl: f.fetchImpl }).quote("AAPL", BASE_OPTS, signal());
+    expect(MarketQuoteSchema.safeParse(q).success).toBe(true);
+    expect(q).toMatchObject({
+      symbol: "AAPL",
+      asset_type: "stock",
+      currency: "USD",
+      price: 349.51,
+      previous_close: 331.9,
+      change: 17.61,
+      change_pct: 5.3058,
+      open: 341.565,
+      day_high: 354.5,
+      day_low: 340.99,
+      as_of: "2026-11-04T21:00:00.000Z",
+      source: "finnhub",
+    });
+  });
+
+  it("maps the live /search: AAPL first among the 11 matches, with its name and type", async () => {
+    const f = fakeFetch(() => jsonResponse(liveSearch));
+    const out = await new FinnhubProvider({ apiKey: KEY, fetchImpl: f.fetchImpl }).lookup("Apple", signal());
+    expect(out[0]).toEqual({ symbol: "AAPL", name: "Apple Inc.", asset_type: "stock", source: "finnhub" });
+    expect(out.length).toBeGreaterThanOrEqual(3);
+    expect(out.every((m) => m.source === "finnhub")).toBe(true);
   });
 });

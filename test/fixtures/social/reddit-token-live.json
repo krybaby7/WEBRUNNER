@@ -1,0 +1,7 @@
+{
+  "_note": "Recorded live on 2026-11-05 from the owner's machine (a home IP) with the owner's own Reddit script app (client_credentials); secrets redacted. The provider mapping was checked against this response.",
+  "access_token": "REDACTED-live-token",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "scope": "*"
+}
