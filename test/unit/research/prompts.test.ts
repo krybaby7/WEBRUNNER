@@ -10,6 +10,7 @@ import {
   ScoreSchema,
   WRITER_SYSTEM,
   WriterSchema,
+  extractorPageText,
   extractorPrompt,
   plannerPrompt,
   scorerPrompt,
@@ -107,6 +108,20 @@ describe("prompts", () => {
     expect(EXTRACTOR_SYSTEM).toMatch(/300 characters/);
     expect(EXTRACTOR_SYSTEM).toMatch(/ISO 8601 UTC/);
     expect(EXTRACTOR_SYSTEM).toMatch(/verbatim/);
+  });
+
+  it("extractor: keeps a supported claim it cannot quote, with an empty quote, instead of dropping it", () => {
+    expect(EXTRACTOR_SYSTEM).not.toMatch(/drop the claim/);
+    expect(EXTRACTOR_SYSTEM).toMatch(/keep the claim and set "quote" to an empty string/);
+    expect(EXTRACTOR_SYSTEM).toMatch(/Never invent or reword a quote/);
+    expect(ExtractSchema.parse({ relevance: 5, published_at: null, claims: [{ text: "t", quote: "", confidence: "low" }] }))
+      .toMatchObject({ claims: [{ quote: "" }] });
+  });
+
+  it("extractor: the page text quotes are checked against is the text inside the page markers", () => {
+    const args = { question: "Q?", url: "https://a.org", title: "T", markdown: "# Body\n\nSome text.", truncated: true };
+    expect(extractorPageText(args)).toBe(args.markdown);
+    expect(extractorPrompt(args).user).toContain(`<page>\n${extractorPageText(args)}\n</page>`);
   });
 
   it("writer: keys notes by id, states the output format and requires a Gaps section", () => {
