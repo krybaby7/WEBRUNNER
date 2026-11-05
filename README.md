@@ -774,12 +774,41 @@ Flags:
 
 - `--depth quick|standard|deep|hint`: depth for every question; `hint` uses each question's own depth hint. Default `standard`.
 - `--only id,id`: run only these question ids (an unknown id lists the known ones).
-- `--out path`: also write the full JSON report (rows, judgements, reports) to this path. The repository does not ignore an `eval-results/` directory, so write outside the checkout or do not commit it.
+- `--out path`: also write the full JSON report (rows, judgements, reports) to this path. `eval-results/` in the checkout is git-ignored.
 - `--concurrency n`: questions in flight at once (default 3).
 
 **This costs real money.** Each question is a real `deep_research` call plus judge calls, so a full 20-question run at standard depth is roughly twenty times the per-call figure above, on the order of $10 to $30. It needs `ANTHROPIC_API_KEY` and a search key, and refuses to run unless `RUN_EVALS=1`, which the npm script sets. Run it deliberately, once per prompt change.
 
 **The M2 comparison.** The project's research milestone (PLAN.md section 12) is a score on the eval set at standard depth that you are happy with, plus a side-by-side: put the same 20 questions to Perplexity Deep Research, read each pair of answers without knowing which is which, and count how many questions webrunner wins. The target is 15 of 20. The `--out` report holds the full webrunner reports to paste into that comparison.
+
+### The Codex question set
+
+Phase 8 (PLAN.md section 17) measures webrunner against Perplexity on your own questions, run on Codex to spare your Claude plan. `test/evals/codex/questions.json` holds your questions (U1 to U4) and twelve probes (P1 to P12), each probe testing one ability (stale facts, an official live number, completeness, Reddit, X, Google Flights, reviews, conflicting figures, a false premise, a multi-step sum, quoting a PDF, Arabic sources) with a check you run on the day.
+
+Two Codex arms answer each prompt, typed exactly as written, back to back:
+
+- `alone`: Codex with its own live web search.
+- `webrunner`: Codex's search off; webrunner's reach tools (`web_search`, `fetch_page`, `browse_task`, `social_search`, `search_reviews`, `search_flights`, `search_hotels`, `market_quote`, `exchange_rate`, `weather`), without `deep_research`.
+
+Both ignore your `~/.codex/config.toml`, so your other MCP servers (Perplexity among them) never load, and Codex's own shell, subagents and browser are off, so each arm reaches the web only its own way. The third arm is Perplexity, which you run by hand.
+
+```bash
+npm run eval:codex -- smoke
+npm run eval:codex -- run
+npm run eval:codex -- perplexity
+npm run eval:codex -- blind
+npm run eval:codex -- reveal
+```
+
+1. `smoke` sends one short prompt per arm and checks that `alone` used Codex's search and `webrunner` used webrunner's tools and nothing else.
+2. `run` answers every question in both arms (about 16 × 2 Codex sessions). Results go to `eval-results/codex/<date>/<arm>/`: the answer (`U1.md`), Codex's event stream and a record with the time, tokens and tool calls. If Codex reports its usage limit, the run stops; the same command resumes it later that day, skipping answered questions (on a later day, add `--out eval-results/codex/<the first day>`).
+3. `perplexity` writes an empty file per question under `perplexity/`. Type each prompt into Perplexity in the mode you normally use and paste the whole answer below the comment lines.
+4. `blind` puts each question's answers in one file under `blind/`, labelled A, B and C in a shuffled order, and writes `grades.csv`. Grade each answer from 1 to 5 without opening `key.json`.
+5. `reveal` joins your grades with the key: mean score and questions won per arm, written to `blind/results.md`.
+
+The `webrunner` arm attaches to your own Chrome at `BROWSER_CDP_URL` (default `http://127.0.0.1:9222`, the logins you already have); `run` refuses if nothing listens there, and `--cdp none` lets webrunner start its own browser instead. webrunner's own model calls (the browser recipes' extraction, review and social summaries, `browse_task`) still use your `config.json` backend, the Claude plan; `--server-llm none` keeps Claude out entirely, and those steps then fail. Other flags: `--only U1,P3`, `--arms alone`, `--model` (default `gpt-6-astra`), `--effort` (default `high`), `--timeout-min` (default 30), `--enable <feature>` to leave a Codex feature on, `--force` to rerun answered questions, and `--dry-run` to print each arm's `codex` command without starting it.
+
+**This uses your Codex plan.** `smoke` and `run` refuse unless `RUN_EVALS=1`, which the npm script sets.
 
 ## Troubleshooting
 

@@ -25,7 +25,8 @@
     "pretest": "npm run build",
     "test": "vitest run",
     "dev": "tsc -p tsconfig.json --watch",
-    "eval:research": "RUN_EVALS=1 node --import tsx test/evals/research/cli.ts"
+    "eval:research": "node --env-file=test/evals/evals.env --import tsx test/evals/research/cli.ts",
+    "eval:codex": "node --env-file=test/evals/evals.env --import tsx test/evals/codex/cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

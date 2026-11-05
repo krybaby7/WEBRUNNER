@@ -1878,7 +1878,7 @@ Changes to section 3 this phase expects to make; none is in force until its plan
 - **Freshness.** Every time-sensitive claim in an answer carries a date; stale facts stated as current are counted.
 - **Context.** The calling agent's peak context, and how many tokens research leaves in it.
 - **Real use.** For two weeks the owner's real questions go to both Perplexity and webrunner, and the owner notes which answer was better and why.
-- **Where tests run.** On Codex where possible, to spare the owner's Claude plan. webrunner's own model calls (`deep_research`, the `summarize` options, the checked reader) use the configured backend, which is Claude even when the client is Codex; a test that must spare Claude sets `WEBRUNNER_LLM_BACKEND=codex-cli` for the server or keeps those tools out. A bare-Codex arm must run without the owner's other MCP servers, because Codex's config also holds a Perplexity server.
+- **Where tests run.** On Codex where possible, to spare the owner's Claude plan. webrunner's own model calls (`deep_research`, `browse_task`, the browser recipes' extraction steps, the review and social summaries, the checked reader) use the configured backend, which is Claude even when the client is Codex. `codex-cli` is only a fallback for when Claude's plan is at its limit (15.4), not a backend of its own, so `WEBRUNNER_LLM_BACKEND=codex-cli` is not a valid setting. A test that must spare Claude entirely starts the server with no backend (the Codex runner's `--server-llm none`, WP55) and accepts that those steps fail, or keeps those tools out. A bare-Codex arm must run without the owner's other MCP servers, because Codex's config also holds a Perplexity server.
 
 ### 17.5 Work breakdown, phase 8
 
@@ -1897,7 +1897,12 @@ Branch names `wp<N>-<slug>`, one PR each against `main`; the section 7 protocol 
 **WP54: plan the checked reader and compact outputs** (orchestrator)
 - Deliver: 17.3 items 1, 2, 4 and 5 written into section 3.
 
-**WP55 onward:** the implementations of WP53 and WP54, the reach list and its runner, and the question-set harness for Codex. Numbered when planned.
+**WP55: the question set and its Codex runner**
+- Files: `test/evals/codex/*`, `test/evals/evals.env`, `test/unit/evals/codex.test.ts`, `test/fixtures/evals/codex-*`, the eval scripts in `package.json`, the Evals section of `README.md` and its line in `CLAUDE.md`. No interface change.
+- Deliver: the owner's questions (U1 to U4, graded blind by the owner) and twelve probes (P1 to P12, each testing one ability, with a check the owner runs on the day) in `questions.json`; a CLI (`npm run eval:codex -- <command>`) with `smoke`, `run`, `perplexity`, `blind` and `reveal`. Two Codex arms run each prompt exactly as written, back to back: `alone` (Codex's own live web search) and `webrunner` (Codex's search off, webrunner's ten reach tools, no `deep_research`). Both ignore the owner's `config.toml` and switch Codex's other agent tools off. The Perplexity arm is pasted by hand into templates. `blind` shuffles each question's answers under letters with the key kept apart; `reveal` joins the owner's grades with the key.
+- Accept: `smoke` and `run` refuse without `RUN_EVALS=1` and `--dry-run` spends nothing; a run stopped by Codex's usage limit resumes with the same command, skipping answered questions; every run keeps its answer, its event stream and a record (outcome, time, tokens, tool calls by tool); unit tests cover the arms' flags, the event reader (including a recorded usage-limit stream), resuming, blinding and reveal, and never start a real codex process. The eval npm scripts load `RUN_EVALS=1` with `node --env-file`, so they also run on Windows, where npm runs scripts through cmd.exe.
+
+**WP56 onward:** the implementations of WP53 and WP54, and the reach list and its runner. Numbered when planned.
 
 ### 17.6 Evidence: the 2026-11-05 benchmark
 
@@ -1924,3 +1929,4 @@ Findings this phase rests on:
 
 - **2026-11-05, WP51 (goal and shape)**: the owner chose "a skill plus sharp tools" over two alternatives. `deep_research` as the whole product was rejected: every search would pay for a planner, a scorer, an extractor per page and a writer, each a separate model call; its planner does the agent's job without the conversation's context; and a fixed pipeline needs retuning per kind of question (the round budget is an example). A skill on the built-in tools alone was rejected because instructions cannot add reach and an agent sometimes skips a rule; hence hard guarantees in tool output. Speed is out of scope by the owner's choice.
 - **2026-11-05, the owner's rule for checks**: a check must never lose true information. WP52 is the first application: an extractor quote that cannot be matched to the page loses its quote and its claim drops to low confidence; the claim itself stays.
+- **2026-11-05, WP55 (the Codex runner)**: tests run on Codex to spare the owner's Claude plan. By default the `webrunner` arm's server keeps the owner's model backend (`--server-llm config`, Claude): the browser recipes need a model for flights, hotels, reviews and social posts, and their calls are small next to the agent's own; `--server-llm none` spares Claude entirely at the cost of those steps. Codex's shell is off in both arms, so `alone` cannot fetch pages with `curl` and the arms differ only in their way to the web; `--enable` switches a Codex feature back on for an experiment. Defaults: the owner's own Codex model (`gpt-6-astra`) at `high` effort, below the owner's usual `ultra`, which uses a lot of plan quota.
