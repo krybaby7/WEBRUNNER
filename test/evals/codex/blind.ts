@@ -72,9 +72,66 @@ export function readAnswer(out: string, source: Source, id: string): string | un
   return text !== "" ? text : undefined;
 }
 
-/** The product's name would unblind an answer; nothing else in the text is changed. */
+/** A product's name would unblind an answer; nothing else in the text is changed. */
 export function maskNames(text: string): string {
-  return text.replace(/\bwebrunner\b/gi, "[tool]");
+  return text.replace(/\b(?:webrunner|perplexity)\b/gi, "[tool]");
+}
+
+/** The line that opens a numbered source list: "Citations:", "Sources:" or "References:". */
+const CITATION_HEADER = /^\s*(?:citations|sources|references)\s*:?\s*$/i;
+/** One entry of that list: "[3] https://...". */
+const CITATION_LINE = /^\s*\[(\d+)\]\s+(https?:\/\/.+?)\s*$/;
+/** One marker ("[3]" or "[web:3]") or several side by side, with the spaces before them; not "[3](url)", which is a link. */
+const MARKER_RUN = /[ \t]*(?:\[(?:[a-z]+:)?\d+\][ \t]*)*\[(?:[a-z]+:)?\d+\](?!\()/g;
+const MARKER = /\[(?:[a-z]+:)?(\d+)\]/g;
+
+function citationLink(url: string): string {
+  let label = "source";
+  try {
+    label = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    // keep "source"
+  }
+  const dest = /[\s()<>]/.test(url) ? `<${url.replaceAll("<", "%3C").replaceAll(">", "%3E")}>` : url;
+  return `[${label}](${dest})`;
+}
+
+/**
+ * Numbered citations ("... rate [web:3][web:7]" over a "Citations:" list of
+ * "[3] https://...") mark an answer as Perplexity's at a glance, where the Codex
+ * arms link inside the text. This turns each marker into an inline link named
+ * after its site, drops a link the line already holds, and removes the list.
+ * Text without such a list at its end, or with anything else under the
+ * list's heading, is returned unchanged. Used on the blind sheet only; the
+ * saved answers keep their own form.
+ */
+export function inlineCitations(text: string): string {
+  const lines = text.split("\n");
+  let header = -1;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (CITATION_HEADER.test(lines[i] ?? "")) {
+      header = i;
+      break;
+    }
+  }
+  if (header < 0) return text;
+  const urls = new Map<string, string>();
+  for (const line of lines.slice(header + 1)) {
+    if (line.trim() === "") continue;
+    const m = CITATION_LINE.exec(line);
+    if (m === null) return text;
+    urls.set(m[1] as string, m[2] as string);
+  }
+  if (urls.size === 0) return text;
+  const body = lines.slice(0, header).map((line) =>
+    line.replace(MARKER_RUN, (run: string, offset: number) => {
+      const cited = [...run.matchAll(MARKER)].map((m) => urls.get(m[1] as string));
+      const links = [...new Set(cited.filter((u): u is string => u !== undefined && !line.includes(u)))].map(citationLink);
+      if (links.length === 0) return "";
+      return `${offset === 0 ? "" : " "}${links.join(" · ")}`;
+    }),
+  );
+  return body.join("\n").trimEnd();
 }
 
 /** A small seeded generator (mulberry32), so a shuffle can be repeated from its seed. */
@@ -155,7 +212,7 @@ export function writeBlind(out: string, questions: readonly Question[], seed: nu
     for (const [i, a] of order.entries()) {
       const label = LABELS[i] ?? String(i + 1);
       (key[q.id] as Record<string, Source>)[label] = a.source;
-      parts.push("", "---", "", `## Answer ${label}`, "", maskNames(a.text));
+      parts.push("", "---", "", `## Answer ${label}`, "", maskNames(inlineCitations(a.text)));
       gradeRows.push(`${q.id},${label},,`);
     }
     writeFileSync(join(dir, `${q.id}.md`), parts.join("\n") + "\n", "utf8");

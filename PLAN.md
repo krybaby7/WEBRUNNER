@@ -1902,7 +1902,12 @@ Branch names `wp<N>-<slug>`, one PR each against `main`; the section 7 protocol 
 - Deliver: the owner's questions (U1 to U4, graded blind by the owner) and twelve probes (P1 to P12, each testing one ability, with a check the owner runs on the day) in `questions.json`; a CLI (`npm run eval:codex -- <command>`) with `smoke`, `run`, `perplexity`, `blind` and `reveal`. Two Codex arms run each prompt exactly as written, back to back: `alone` (Codex's own live web search) and `webrunner` (Codex's search off, webrunner's ten reach tools, no `deep_research`). Both ignore the owner's `config.toml` and switch Codex's other agent tools off. The Perplexity arm is pasted by hand into templates. `blind` shuffles each question's answers under letters with the key kept apart; `reveal` joins the owner's grades with the key.
 - Accept: `smoke` and `run` refuse without `RUN_EVALS=1` and `--dry-run` spends nothing; a run stopped by Codex's usage limit resumes with the same command, skipping answered questions; every run keeps its answer, its event stream and a record (outcome, time, tokens, tool calls by tool); unit tests cover the arms' flags, the event reader (including a recorded usage-limit stream), resuming, blinding and reveal, and never start a real codex process. The eval npm scripts load `RUN_EVALS=1` with `node --env-file`, so they also run on Windows, where npm runs scripts through cmd.exe.
 
-**WP56 onward:** the implementations of WP53 and WP54, and the reach list and its runner. Numbered when planned.
+**WP56: citations that do not unblind the grading**
+- Files: `test/evals/codex/blind.ts`, `test/unit/evals/codex.test.ts`, the Codex question set steps in `README.md`. No interface change.
+- Deliver: on the blind sheet, an answer that ends in a numbered source list ("Citations:" then `[n] https://...` lines, as Perplexity gives them) has each marker (`[3]`, `[web:3]`) turned into an inline link named after its site, a link its line already holds dropped, and the list removed, so it looks like the Codex arms' answers, which link inside the text. Perplexity's name is masked like webrunner's. The saved answers keep their own form.
+- Accept: unit tests cover markers side by side, an out-of-order list, a marker with no entry, a link already on the line, a URL with spaces, text left alone (no list, other lines under the heading, `[n](url)` links), and the sheet against the saved answer.
+
+**WP57 onward:** the implementations of WP53 and WP54, and the reach list and its runner. Numbered when planned.
 
 ### 17.6 Evidence: the 2026-11-05 benchmark
 
