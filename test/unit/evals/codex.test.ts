@@ -17,6 +17,7 @@ import {
 import {
   answerText,
   formatReveal,
+  inlineCitations,
   maskNames,
   parseCsv,
   perplexityTemplate,
@@ -476,7 +477,55 @@ describe("writeBlind and reveal", () => {
     expect(parseCsv('a,b\r\n"x, y","say ""hi""\nthere"\n\n')).toEqual([["a", "b"], ["x, y", 'say "hi"\nthere']]);
   });
 
-  it("masks only the product's name", () => {
+  it("masks only the products' names", () => {
     expect(maskNames("Webrunner's fetch_page and WEBRUNNER")).toBe("[tool]'s fetch_page and [tool]");
+    expect(maskNames("Perplexity says so; perplexity.ai")).toBe("[tool] says so; [tool].ai");
+  });
+});
+
+describe("inlineCitations", () => {
+  const list = (...entries: [number, string][]): string => ["", "Citations:", ...entries.map(([n, u]) => `[${n}] ${u}`)].join("\n");
+
+  it("turns markers into inline links named after the site and drops the list", () => {
+    const text = "The rate is **53.87** as of today. [web:2][web:1]\nIt was set on 5 Nov.[web:3]" + list([1, "https://www.cbe.org.eg/en/rates"], [2, "https://news.example.com/a"], [3, "https://cbe.org.eg/b"]);
+    expect(inlineCitations(text)).toBe(
+      "The rate is **53.87** as of today. [news.example.com](https://news.example.com/a) · [cbe.org.eg](https://www.cbe.org.eg/en/rates)\n" +
+        "It was set on 5 Nov. [cbe.org.eg](https://cbe.org.eg/b)",
+    );
+  });
+
+  it("reads a list out of order, plain [n] markers and markers in a table, and drops a marker with no entry", () => {
+    const text = "| Fuel | Price |\n|---|---|\n| 92 | 22.25 [3] |\n\nSummary [web:9] [1]." + list([3, "https://a.example/x"], [1, "https://b.example/y"]);
+    expect(inlineCitations(text)).toBe("| Fuel | Price |\n|---|---|\n| 92 | 22.25 [a.example](https://a.example/x) |\n\nSummary [b.example](https://b.example/y).");
+  });
+
+  it("skips a link the line already holds and repeats none within one run", () => {
+    const text = "[X: @EgxEgyptian](https://x.com/egxegyptian) [web:1] · Facebook [web:2][web:2]" + list([1, "https://x.com/egxegyptian"], [2, "https://facebook.com/egx"]);
+    expect(inlineCitations(text)).toBe("[X: @EgxEgyptian](https://x.com/egxegyptian) · Facebook [facebook.com](https://facebook.com/egx)");
+  });
+
+  it("wraps a URL with spaces or brackets so the link still parses", () => {
+    expect(inlineCitations("See this. [1]" + list([1, "https://e.example/a (b) c"]))).toBe("See this. [e.example](<https://e.example/a (b) c>)");
+  });
+
+  it("leaves text alone without a citation list, with other lines under the heading, or with [n](url) links", () => {
+    expect(inlineCitations("Pasted answer [1].")).toBe("Pasted answer [1].");
+    const notAList = "Answer [1].\n\nSources:\n- [CBE](https://cbe.org.eg)";
+    expect(inlineCitations(notAList)).toBe(notAList);
+    expect(inlineCitations("See [1](https://a.example) and [2]." + list([2, "https://b.example/"]))).toBe(
+      "See [1](https://a.example) and [b.example](https://b.example/).",
+    );
+  });
+
+  it("is used on the blind sheet, where the saved answer keeps its own form", () => {
+    const out = freshDir();
+    const pasted = "<!-- template -->\nThe minister is Ahmed Kouchouk. [web:1]\n\nCitations:\n[1] https://mof.gov.eg/en/about-ministry/minister";
+    writeAnswer(out, "perplexity", "P1", pasted);
+    writeAnswer(out, "alone", "P1", "Ahmed Kouchouk. [Ministry](https://mof.gov.eg/en/about-ministry/minister)");
+    writeBlind(out, QUESTIONS, 3);
+    const sheet = readFileSync(join(out, "blind", "P1.md"), "utf8");
+    expect(sheet).toContain("The minister is Ahmed Kouchouk. [mof.gov.eg](https://mof.gov.eg/en/about-ministry/minister)");
+    expect(sheet).not.toMatch(/Citations:|\[web:/);
+    expect(readAnswer(out, "perplexity", "P1")).toContain("Citations:\n[1] https://mof.gov.eg");
   });
 });
