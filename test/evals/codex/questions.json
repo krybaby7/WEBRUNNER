@@ -1,0 +1,122 @@
+[
+  {
+    "id": "U1",
+    "group": "owner",
+    "prompt": "Which crypto trading platforms have the lowest fees and let an AI agent trade through an API?",
+    "good": "Names platforms with current maker/taker fees taken from each platform's own fee page, with dates; says which have a trading API and any limits (KYC, region, rate limits); flags if a platform is unavailable in Egypt."
+  },
+  {
+    "id": "U2",
+    "group": "owner",
+    "prompt": "Which industries in Egypt make the most money? Rank the best-performing ones.",
+    "good": "Says what \"most money\" is measured by (share of GDP, growth, profits, export earnings) and ranks by it; uses dated official data (CAPMAS, Ministry of Planning, Central Bank of Egypt, World Bank, IMF); says which year the figures are for."
+  },
+  {
+    "id": "U3",
+    "group": "owner",
+    "prompt": "I want to invest in Egyptian stocks. Which social media accounts should I follow?",
+    "good": "Real accounts that exist and posted recently, on X, Facebook, YouTube or Telegram, Arabic ones included; says what each covers; separates official sources (EGX, FRA) from analysts and influencers; no dead or invented handles."
+  },
+  {
+    "id": "U4",
+    "group": "owner",
+    "prompt": "Where can I buy solar panels in Egypt, portable or not? Give me a complete list so I can browse my options.",
+    "good": "Online shops (Amazon.eg, Noon, Jumia, B.TECH and others) and local suppliers or installers, with links and price ranges; covers portable and rooftop; reads Arabic sources; says how complete the list is."
+  },
+  {
+    "id": "P1",
+    "group": "probe",
+    "prompt": "Who is Egypt's Minister of Finance right now?",
+    "probes": "Stale facts: an answer from memory or an old snippet instead of a current source.",
+    "check": "The cabinet's or ministry's own site, or news from the last month.",
+    "good": "Right name, dated source."
+  },
+  {
+    "id": "P2",
+    "group": "probe",
+    "prompt": "What is the Central Bank of Egypt's official USD/EGP rate today?",
+    "probes": "A live number from an official site that is hard to read automatically.",
+    "check": "cbe.org.eg the same hour.",
+    "good": "Matches the day's rate; the source is the Central Bank, not a converter site."
+  },
+  {
+    "id": "P3",
+    "group": "probe",
+    "prompt": "List all the companies in the EGX30 index right now.",
+    "probes": "Completeness: agents often stop at ten.",
+    "check": "The EGX constituents list.",
+    "good": "All 30 constituents, no wrong entries; score is the count out of 30 minus wrong entries."
+  },
+  {
+    "id": "P4",
+    "group": "probe",
+    "prompt": "What are people on r/Egypt talking about this week?",
+    "probes": "Reach: Reddit refuses most automated readers.",
+    "check": "Open r/Egypt, top of the week.",
+    "good": "The posts it names exist, are from this week and are among the top ones."
+  },
+  {
+    "id": "P5",
+    "group": "probe",
+    "prompt": "What are people on X saying this week about the Egyptian pound?",
+    "probes": "Reach: X needs a login.",
+    "check": "Search X yourself.",
+    "good": "The posts it cites exist and are from this week."
+  },
+  {
+    "id": "P6",
+    "group": "probe",
+    "prompt": "What's the cheapest one-way flight from Cairo to Dubai on 15 December 2026?",
+    "probes": "Live prices behind a JavaScript app (Google Flights).",
+    "check": "Same search on Google Flights within the hour.",
+    "good": "Price within about 10 percent; the flight exists."
+  },
+  {
+    "id": "P7",
+    "group": "probe",
+    "prompt": "What do customers say about Jumia Egypt's delivery and returns?",
+    "probes": "Reviews: app stores, Trustpilot, Google Maps.",
+    "check": "Open two of the cited review sources.",
+    "good": "Reviews are real and recent; the summary is balanced."
+  },
+  {
+    "id": "P8",
+    "group": "probe",
+    "prompt": "How many people live in Cairo?",
+    "probes": "Conflicting sources and definitions (city, governorate, Greater Cairo).",
+    "check": "CAPMAS and the UN figures.",
+    "good": "Names the definition behind each number, gives dated sources, doesn't present one figure as the only truth."
+  },
+  {
+    "id": "P9",
+    "group": "probe",
+    "prompt": "When did the Egyptian Exchange launch bitcoin futures trading?",
+    "probes": "A false premise. Confirm on the day that it has not happened.",
+    "check": "EGX and FRA announcements; Egypt's crypto rules.",
+    "good": "Says there is no evidence it happened and explains why (Egypt's crypto rules); invents no date."
+  },
+  {
+    "id": "P10",
+    "group": "probe",
+    "prompt": "If I put 100,000 EGP into a one-year Egyptian treasury bill today, how much would I get back after tax?",
+    "probes": "Several steps: the latest auction yield, the tax rule, then arithmetic.",
+    "check": "The latest one-year T-bill auction on the Central Bank's site and the current tax rate.",
+    "good": "Yield and date right, tax treatment right, sum right."
+  },
+  {
+    "id": "P11",
+    "group": "probe",
+    "prompt": "What does the IMF's latest report on Egypt say about inflation? Quote it.",
+    "probes": "Finding and reading a primary PDF, and quoting it exactly.",
+    "check": "Open the report.",
+    "good": "Right and latest report, the quote is really in it, date given."
+  },
+  {
+    "id": "P12",
+    "group": "probe",
+    "prompt": "What are the current official fuel prices in Egypt?",
+    "probes": "Freshness plus Arabic-language sources: prices change by committee decision every few months.",
+    "check": "The latest fuel pricing committee decision.",
+    "good": "Current prices for petrol 80, 92 and 95 and diesel, with the decision's date."
+  }
+]
